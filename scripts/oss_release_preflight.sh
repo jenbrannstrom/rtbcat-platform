@@ -131,6 +131,19 @@ for pat in "${REQUIRED_IGNORES[@]}"; do
   fi
 done
 
+# ── 7. VERSION format ────────────────────────────────────────────────
+
+info "Validating VERSION format"
+
+VERSION_VALUE="$(tr -d '[:space:]' < "$REPO_ROOT/VERSION" 2>/dev/null || true)"
+if [[ -z "$VERSION_VALUE" ]]; then
+  fail "VERSION file missing or empty"
+elif [[ "$VERSION_VALUE" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  green "  VERSION is valid SemVer: $VERSION_VALUE"
+else
+  fail "VERSION must be SemVer (X.Y.Z), got: $VERSION_VALUE"
+fi
+
 # ── Summary ─────────────────────────────────────────────────────────
 
 echo ""

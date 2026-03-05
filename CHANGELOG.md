@@ -2,6 +2,19 @@
 
 All notable changes to Cat-Scan are documented in this file.
 
+> Versioning note (March 5, 2026): canonical OSS release versions use `VERSION` + git tags (`vX.Y.Z`). Historical entries below with `10.x`-`17.x` were internal milestone labels and were not published semver release tags.
+
+## [0.9.2] - 2026-03-05
+
+### Release
+
+- Establish canonical OSS release/version split:
+  - Release version from `VERSION` and SemVer git tags (`vX.Y.Z`)
+  - Build identity from immutable commit tags (`sha-<short_sha>`)
+- CI now enforces release-tag consistency (`v$(cat VERSION)`) and always publishes `sha-*` image tags.
+- Runtime health and UI now expose both release and build identity for traceability.
+- Added release policy and preflight documentation for reproducible SemVer publishing.
+
 ## [17.0.0] - 2026-01-13
 
 ### Phase 17: RTB Bidstream & UTC Standardization

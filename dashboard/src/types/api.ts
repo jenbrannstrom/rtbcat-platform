@@ -155,8 +155,12 @@ export interface Stats {
 
 export interface Health {
   status: string;
+  release_version?: string;
   version: string;
+  git_sha?: string;
   configured: boolean;
+  has_credentials?: boolean;
+  database_exists?: boolean;
 }
 
 export interface DataHealthTableState {

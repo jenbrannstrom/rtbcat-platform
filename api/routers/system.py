@@ -48,6 +48,20 @@ def get_version() -> str:
     return get_git_sha()
 
 
+def get_release_version() -> str:
+    """Get the human release version (SemVer), independent of build SHA."""
+    if version := os.environ.get("RELEASE_VERSION"):
+        return version
+
+    version_file = Path(__file__).resolve().parent.parent.parent / "VERSION"
+    if version_file.exists():
+        version = version_file.read_text().strip()
+        if version:
+            return version
+
+    return "unknown"
+
+
 def get_git_sha() -> str:
     """Get git SHA from env or from .git metadata baked into image."""
     try:
@@ -82,6 +96,7 @@ def get_git_sha() -> str:
 class HealthResponse(BaseModel):
     """Response model for health check."""
     status: str
+    release_version: str = "unknown"
     version: str
     git_sha: str = "unknown"
     configured: bool
@@ -425,6 +440,7 @@ async def health_check(
 
     return HealthResponse(
         status="healthy",
+        release_version=get_release_version(),
         version=get_version(),
         git_sha=get_git_sha(),
         configured=configured,

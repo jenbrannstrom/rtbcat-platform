@@ -8,7 +8,6 @@ import {
   Image,
   FolderKanban,
   Settings,
-  ExternalLink,
   TrendingDown,
   ChevronLeft,
   ChevronRight,
@@ -126,6 +125,17 @@ export function Sidebar() {
   const hasSeatAdminAccess =
     isSudo || Object.values(seatPermissions).some((level) => level === "admin");
   const canViewAllSeats = isSudo;
+  const releaseVersion = process.env.NEXT_PUBLIC_RELEASE_VERSION;
+  const buildVersion =
+    process.env.NEXT_PUBLIC_APP_VERSION && process.env.NEXT_PUBLIC_APP_VERSION !== "unknown"
+      ? process.env.NEXT_PUBLIC_APP_VERSION
+      : process.env.NEXT_PUBLIC_GIT_SHA && process.env.NEXT_PUBLIC_GIT_SHA !== "unknown"
+        ? `sha-${process.env.NEXT_PUBLIC_GIT_SHA}`
+        : "dev";
+  const versionLabel =
+    releaseVersion && releaseVersion !== "unknown"
+      ? `v${releaseVersion} (${buildVersion})`
+      : buildVersion;
 
   // Load collapsed and expanded states from localStorage
   useEffect(() => {
@@ -795,15 +805,15 @@ export function Sidebar() {
                 <span
                   title={
                     process.env.NEXT_PUBLIC_GIT_SHA && process.env.NEXT_PUBLIC_GIT_SHA !== "unknown"
-                      ? `Build: ${process.env.NEXT_PUBLIC_GIT_SHA}`
+                      ? `Release: ${
+                          releaseVersion && releaseVersion !== "unknown"
+                            ? `v${releaseVersion}`
+                            : "unknown"
+                        } | Build: ${process.env.NEXT_PUBLIC_GIT_SHA}`
                       : undefined
                   }
                 >
-                  {process.env.NEXT_PUBLIC_APP_VERSION && process.env.NEXT_PUBLIC_APP_VERSION !== "unknown"
-                    ? process.env.NEXT_PUBLIC_APP_VERSION
-                    : process.env.NEXT_PUBLIC_GIT_SHA && process.env.NEXT_PUBLIC_GIT_SHA !== "unknown"
-                      ? `sha-${process.env.NEXT_PUBLIC_GIT_SHA}`
-                      : "dev"}
+                  {versionLabel}
                 </span>
                 <span>·</span>
                 <a

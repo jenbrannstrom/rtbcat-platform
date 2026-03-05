@@ -1,6 +1,6 @@
-# Cat-Scan: an Optimizer for Google Authorized Buyers' signal 
+# Cat-Scan: an Optimizer for Google Authorized Buyers Signals
 
-**Version:** 0.9.2 | **Runtime Build ID:** `sha-<gitsha>` | **Last Updated:** March 2026
+**Release Version:** from `VERSION` (SemVer) | **Runtime Build ID:** image tag / git SHA (example: `sha-a4c50dc`) | **Last Updated:** March 5, 2026
 
 An open-source tool that helps RTB bidders improve QPS efficiency on Google Authorized Buyers. Cat-Scan learns which bid-request streams your bidder prefers, then fine-tunes in an attempt to send more of what works and less of what doesn't.
 
@@ -10,15 +10,15 @@ An open-source tool that helps RTB bidders improve QPS efficiency on Google Auth
 
 ## The Problem
 
-Google Authorized Buyers delivers hundreds of billions of bid requests per day. 
+Google Authorized Buyers delivers hundreds of billions of bid requests per day.
 
 ![QPS Funnel: how bid requests flow through the Google AB pipeline](https://docs.rtb.cat/assets/qps-funnel.svg)
 
-​		illustration: Google Authorized Buyers can send your bidder hundreds of billions of bid-requests per day. You only want a certain part of that firehose.
+Illustration: Google Authorized Buyers can send your bidder hundreds of billions of bid requests per day. You only want part of that firehose.
 
-Auth Buyers platform is better than all other SSP's because it gives you 10 pretargeting configs to filter the firehose of real-time-bidding signal. 
+Authorized Buyers gives you up to 10 pretargeting configs to filter that real-time bidding firehose.
 
-But there is no Reporting API, so you can't programmatically answer basic questions:
+But there is no Reporting API for these metrics, so you cannot programmatically answer basic questions:
 
 - Which signal (QPS) does your bidder actually prefer vs declining to bid on?
 - Which pretargeting configs are performing and which are poorly configured?
@@ -28,8 +28,8 @@ You're left with CSV exports and manual analysis. That doesn't scale.
 
 ## What Cat-Scan Does
 
-Cat-Scan sits alongside your Google AB seat. Unfortunately Google has no Reporting API for Auth Buyers seats. So we are forced to ingest data from scheduled CSV reports sent to a dedicated Gmail address, parse them, and normalise them into a queryable dataset.
-There is an Auth Buyers API that allows us to pull creative metadata directly. This does help somewhat.
+Cat-Scan sits alongside your Google AB seat. Because Google has no reporting API for this data, Cat-Scan ingests scheduled CSV reports sent to a dedicated Gmail address, parses them, and normalizes them into a queryable dataset.
+Google does provide an Authorized Buyers API for creative metadata, which Cat-Scan uses directly.
 
 From there, it:
 
@@ -66,7 +66,7 @@ Cat-Scan groups creatives automatically based on shared destination URLs. This r
 
 ```bash
 # Clone and set up
-git clone https://github.com/rtbcat/rtbcat-platform.git
+git clone https://github.com/jenbrannstrom/rtbcat-platform.git
 cd rtbcat-platform
 ./setup.sh
 
@@ -183,7 +183,7 @@ See **[AUTHENTICATION.md](docs/AUTHENTICATION.md)** for the bootstrap token flow
 | `retention` | Data retention policies |
 | `uploads` | CSV file uploads |
 
-Full API docs at `/docs` when running locally (118 endpoints).
+Full API docs are available at `/docs` when running locally.
 
 See **[DATA_MODEL.md](DATA_MODEL.md)** for the database schema and multi-bidder architecture.
 
@@ -264,22 +264,14 @@ Metrics: Filtered bids
 
 ---
 
-## CLI
+## Importer CLI
 
 ```bash
-# Smart import (auto-detects report type), recommended
-./venv/bin/python -m qps.smart_importer /path/to/any-report.csv
-
-# Import bidstream CSV specifically
-./venv/bin/python -m qps.funnel_importer /path/to/bidstream-report.csv
-
-# CLI tool
-PYTHONPATH=. ./venv/bin/python -m cli.qps_analyzer import /path/to/report.csv
-PYTHONPATH=. ./venv/bin/python -m cli.qps_analyzer validate /path/to/report.csv
-PYTHONPATH=. ./venv/bin/python -m cli.qps_analyzer summary
-PYTHONPATH=. ./venv/bin/python -m cli.qps_analyzer full-report --days 7
-PYTHONPATH=. ./venv/bin/python -m cli.qps_analyzer generate-thumbnails --limit 100
+# Unified CSV importer (recommended)
+./venv/bin/python -m importers.unified_importer /path/to/report.csv
 ```
+
+For importer internals and supported report types, see [`importers/README.md`](importers/README.md).
 
 ---
 
@@ -292,10 +284,10 @@ PYTHONPATH=. ./venv/bin/python -m cli.qps_analyzer generate-thumbnails --limit 1
 | POST | `/collect/sync` | Sync from Google API |
 | GET | `/campaigns` | List campaigns |
 | POST | `/campaigns/auto-cluster` | Clustering |
-| GET | `/analytics/efficiency` | Efficiency analysis |
+| GET | `/analytics/home/funnel` | Home funnel analytics |
 | POST | `/performance/import-csv` | Import CSV |
 
-Full API docs: `http://localhost:8000/docs` (118 endpoints total)
+Full API docs: `http://localhost:8000/docs`
 
 ---
 
@@ -438,12 +430,13 @@ Postgres is required. The legacy `docker-compose.simple.yml` is deprecated.
 | Document | Purpose |
 |----------|---------|
 | **[INSTALL.md](INSTALL.md)** | Installation guide |
-| **[docs/SECURITY.md](docs/SECURITY.md)** | Security guide for forks and deployments |
+| **[SECURITY.md](SECURITY.md)** | Vulnerability reporting policy + deployment security guide |
 | **[DATA_MODEL.md](DATA_MODEL.md)** | Database schema (41 tables) |
 | **[ARCHITECTURE.md](ARCHITECTURE.md)** | System architecture |
 | **[docs/OPTIMIZATION_LOGIC.md](docs/OPTIMIZATION_LOGIC.md)** | How Cat-Scan analyses QPS signals |
 | **[docs/LOCAL_DEV_DATABASE.md](docs/LOCAL_DEV_DATABASE.md)** | Local DB subset workflow |
 | **[METRICS_GUIDE.md](METRICS_GUIDE.md)** | RTB metrics reference |
+| **[docs/VERSIONING.md](docs/VERSIONING.md)** | Release and build version policy |
 | **[ROADMAP.md](ROADMAP.md)** | Planned features and known bugs |
 | **[CHANGELOG.md](CHANGELOG.md)** | Version history |
 | **[CONTRIBUTING.md](CONTRIBUTING.md)** | Contribution workflow |
@@ -472,7 +465,7 @@ git ls-files | grep -E '\.(env|tfstate|db)$|terraform\.tfvars'
 # Should return empty
 ```
 
-Use GitHub Secrets for CI/CD. See **[docs/SECURITY.md](docs/SECURITY.md)**.
+Use GitHub Secrets for CI/CD. See **[SECURITY.md](SECURITY.md)**.
 
 ---
 
@@ -501,7 +494,7 @@ See **[ROADMAP.md](ROADMAP.md)** for what's planned.
 | Issue | Fix |
 |-------|-----|
 | Port 8000 stuck | `sudo lsof -ti:8000 \| xargs -r sudo kill -9` |
-| No video thumbnails | `PYTHONPATH=. ./venv/bin/python -m cli.qps_analyzer generate-thumbnails` |
+| No video thumbnails | Check ffmpeg install and run a thumbnail refresh from `/settings/system` |
 | Dashboard not updating | `npm run build` |
 | uvicorn "module not found" | Use `./venv/bin/python -m uvicorn` instead |
 
@@ -519,10 +512,11 @@ See **[ROADMAP.md](ROADMAP.md)** for what's planned.
 
 ## Versioning
 
-- **Release version:** `VERSION` file (current: `0.9.2`)
-- **Runtime build ID:** image tag / git SHA (e.g., `sha-3b96ce6`)
+- **Release version:** `VERSION` file (`X.Y.Z`), published with annotated git tag `vX.Y.Z`
+- **Runtime build ID:** immutable image tag / commit SHA (`sha-<short_sha>`)
+- **Health/API identity:** `/health` exposes `release_version`, `version` (build ID), and `git_sha`
 
-In production, the UI footer and `/health` show the SHA build ID for deploy traceability.
+See **[docs/VERSIONING.md](docs/VERSIONING.md)** for the enforced release flow.
 
 ---
 

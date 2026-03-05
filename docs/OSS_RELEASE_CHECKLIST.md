@@ -21,6 +21,7 @@ Run locally before pushing:
 | `SECURITY.md` present at root | file check | Yes |
 | `LICENSE` present at root | file check | Yes |
 | `.gitignore` covers `.env`, `*.db`, `*.tfstate`, `terraform.tfvars` | pattern check | Yes |
+| `VERSION` is valid SemVer (`X.Y.Z`) | regex check | Yes |
 
 CI equivalent: `.github/workflows/oss-release-preflight.yml` (runs on PRs and manual dispatch).
 
@@ -91,6 +92,7 @@ Before tagging a release, a maintainer must confirm:
 - [ ] `git log --oneline --all -- '*.env' '*.tfstate' '*credentials*'` returns empty.
 - [ ] No hardcoded IPs, project IDs, or real domains outside `docs/` examples.
 - [ ] `docs/SECURITY.md` deployment guidance is up to date.
+- [ ] `VERSION` value matches intended release tag (`v$(cat VERSION)`).
 - [ ] CHANGELOG.md covers all user-facing changes since last release.
 - [ ] The preflight workflow is green on the release branch.
 
@@ -105,11 +107,17 @@ Before tagging a release, a maintainer must confirm:
 # 2. Bump VERSION file
 echo "1.0.0" > VERSION
 
-# 3. Commit and tag
+# 3. Update CHANGELOG.md and commit
 git add VERSION CHANGELOG.md
 git commit -m "release: v1.0.0"
+
+# 4. Create annotated release tag (must match VERSION)
 git tag -a v1.0.0 -m "v1.0.0"
 
-# 4. Push (tag triggers build-and-push workflow)
-git push origin unified-platform --tags
+# 5. Push branch, then push tag (tag triggers build-and-push workflow)
+git push origin unified-platform
+git push origin v1.0.0
+
+# 6. Confirm release tag ordering
+git tag --list 'v*' --sort=-v:refname | head -n 5
 ```

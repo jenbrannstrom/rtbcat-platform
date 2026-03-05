@@ -42,13 +42,15 @@ COPY --chown=rtbcat:rtbcat . .
 # Create data directory (matches production mount point)
 RUN mkdir -p /home/rtbcat/.catscan && chown rtbcat:rtbcat /home/rtbcat/.catscan
 
-# Read version from VERSION file and set environment variables
-ARG APP_VERSION=0.9.0
+# Build/runtime version metadata
+ARG APP_VERSION=0.0.0
 ARG GIT_SHA=unknown
+ARG RELEASE_VERSION=0.0.0
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     APP_VERSION=${APP_VERSION} \
     GIT_SHA=${GIT_SHA} \
+    RELEASE_VERSION=${RELEASE_VERSION} \
     UVICORN_WORKERS=1
 
 # Switch to non-root user

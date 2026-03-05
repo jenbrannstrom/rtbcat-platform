@@ -33,8 +33,12 @@ def get_allowed_origins() -> list[str]:
 
 
 def get_version() -> str:
-    """Get app version from VERSION file or environment variable."""
-    # First check environment variable (set in Docker)
+    """Get API/OpenAPI version identifier.
+
+    In deployed images this is the build id (`sha-<short_sha>`) via APP_VERSION.
+    In local dev, fallback to the semver value from VERSION.
+    """
+    # First check environment variable (set in Docker images)
     if version := os.environ.get("APP_VERSION"):
         return version
 

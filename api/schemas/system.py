@@ -7,7 +7,9 @@ from pydantic import BaseModel, Field
 class HealthResponse(BaseModel):
     """Response model for health check."""
     status: str
+    release_version: str = "unknown"
     version: str
+    git_sha: str = "unknown"
     configured: bool
     has_credentials: bool = False
     database_exists: bool = False
