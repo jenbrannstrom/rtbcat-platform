@@ -22,28 +22,28 @@ from services.auth_service import User, UserBuyerSeatPermission
 
 
 def _sudo_user() -> User:
-    return User(id="sudo-1", email="cat-scan@rtb.cat", role="sudo")
+    return User(id="sudo-1", email="user@example.com", role="sudo")
 
 
 def _local_admin_user() -> User:
-    """User with admin access to buyer 299038253 (TUKY) only."""
-    return User(id="dea-1", email="dea@rtb.cat", role="admin")
+    """User with admin access to buyer 2222222222 (pilot) only."""
+    return User(id="dea-1", email="user@example.com", role="admin")
 
 
 def _readonly_user() -> User:
-    """User with read access to buyer 299038253 (TUKY) only."""
-    return User(id="ro-1", email="readonly@rtb.cat", role="read")
+    """User with read access to buyer 2222222222 (pilot) only."""
+    return User(id="ro-1", email="user@example.com", role="read")
 
 
-def _tuky_admin_perm() -> UserBuyerSeatPermission:
+def _pilot_admin_perm() -> UserBuyerSeatPermission:
     return UserBuyerSeatPermission(
-        id="perm-1", user_id="dea-1", buyer_id="299038253", access_level="admin"
+        id="perm-1", user_id="dea-1", buyer_id="2222222222", access_level="admin"
     )
 
 
-def _tuky_read_perm() -> UserBuyerSeatPermission:
+def _pilot_read_perm() -> UserBuyerSeatPermission:
     return UserBuyerSeatPermission(
-        id="perm-2", user_id="ro-1", buyer_id="299038253", access_level="read"
+        id="perm-2", user_id="ro-1", buyer_id="2222222222", access_level="read"
     )
 
 
@@ -79,7 +79,7 @@ def _mock_auth_svc(perms: list[UserBuyerSeatPermission]):
 async def test_sudo_bypasses_all_access_checks():
     """Sudo user bypasses buyer access level checks."""
     # Should not raise for any buyer or level
-    await require_buyer_access_level("299038253", "admin", _sudo_user())
+    await require_buyer_access_level("2222222222", "admin", _sudo_user())
     await require_buyer_access_level("999999", "admin", _sudo_user())
     await require_buyer_access_level("000000", "read", _sudo_user())
 
@@ -87,21 +87,21 @@ async def test_sudo_bypasses_all_access_checks():
 @pytest.mark.asyncio
 async def test_local_admin_can_admin_own_seat():
     """Local-admin can access their seat at admin level."""
-    with patch("api.dependencies.get_auth_service", return_value=_mock_auth_svc([_tuky_admin_perm()])):
-        await require_buyer_access_level("299038253", "admin", _local_admin_user())
+    with patch("api.dependencies.get_auth_service", return_value=_mock_auth_svc([_pilot_admin_perm()])):
+        await require_buyer_access_level("2222222222", "admin", _local_admin_user())
 
 
 @pytest.mark.asyncio
 async def test_local_admin_can_read_own_seat():
     """Local-admin can also read their seat (admin implies read)."""
-    with patch("api.dependencies.get_auth_service", return_value=_mock_auth_svc([_tuky_admin_perm()])):
-        await require_buyer_access_level("299038253", "read", _local_admin_user())
+    with patch("api.dependencies.get_auth_service", return_value=_mock_auth_svc([_pilot_admin_perm()])):
+        await require_buyer_access_level("2222222222", "read", _local_admin_user())
 
 
 @pytest.mark.asyncio
 async def test_local_admin_denied_other_seat():
     """Local-admin cannot access a seat they don't have permission for."""
-    with patch("api.dependencies.get_auth_service", return_value=_mock_auth_svc([_tuky_admin_perm()])):
+    with patch("api.dependencies.get_auth_service", return_value=_mock_auth_svc([_pilot_admin_perm()])):
         with pytest.raises(HTTPException) as exc_info:
             await require_buyer_access_level("999999", "admin", _local_admin_user())
         assert exc_info.value.status_code == 403
@@ -110,23 +110,23 @@ async def test_local_admin_denied_other_seat():
 @pytest.mark.asyncio
 async def test_readonly_can_read_own_seat():
     """Read-only user can read their seat."""
-    with patch("api.dependencies.get_auth_service", return_value=_mock_auth_svc([_tuky_read_perm()])):
-        await require_buyer_access_level("299038253", "read", _readonly_user())
+    with patch("api.dependencies.get_auth_service", return_value=_mock_auth_svc([_pilot_read_perm()])):
+        await require_buyer_access_level("2222222222", "read", _readonly_user())
 
 
 @pytest.mark.asyncio
 async def test_readonly_denied_admin_own_seat():
     """Read-only user cannot admin-mutate their seat."""
-    with patch("api.dependencies.get_auth_service", return_value=_mock_auth_svc([_tuky_read_perm()])):
+    with patch("api.dependencies.get_auth_service", return_value=_mock_auth_svc([_pilot_read_perm()])):
         with pytest.raises(HTTPException) as exc_info:
-            await require_buyer_access_level("299038253", "admin", _readonly_user())
+            await require_buyer_access_level("2222222222", "admin", _readonly_user())
         assert exc_info.value.status_code == 403
 
 
 @pytest.mark.asyncio
 async def test_readonly_denied_other_seat():
     """Read-only user cannot access a seat they don't have permission for."""
-    with patch("api.dependencies.get_auth_service", return_value=_mock_auth_svc([_tuky_read_perm()])):
+    with patch("api.dependencies.get_auth_service", return_value=_mock_auth_svc([_pilot_read_perm()])):
         with pytest.raises(HTTPException) as exc_info:
             await require_buyer_access_level("999999", "read", _readonly_user())
         assert exc_info.value.status_code == 403
@@ -142,15 +142,15 @@ async def test_require_buyer_admin_access_sudo():
 
 @pytest.mark.asyncio
 async def test_require_buyer_admin_access_local_admin():
-    with patch("api.dependencies.get_auth_service", return_value=_mock_auth_svc([_tuky_admin_perm()])):
-        await require_buyer_admin_access("299038253", _local_admin_user())
+    with patch("api.dependencies.get_auth_service", return_value=_mock_auth_svc([_pilot_admin_perm()])):
+        await require_buyer_admin_access("2222222222", _local_admin_user())
 
 
 @pytest.mark.asyncio
 async def test_require_buyer_admin_access_readonly_denied():
-    with patch("api.dependencies.get_auth_service", return_value=_mock_auth_svc([_tuky_read_perm()])):
+    with patch("api.dependencies.get_auth_service", return_value=_mock_auth_svc([_pilot_read_perm()])):
         with pytest.raises(HTTPException) as exc_info:
-            await require_buyer_admin_access("299038253", _readonly_user())
+            await require_buyer_admin_access("2222222222", _readonly_user())
         assert exc_info.value.status_code == 403
 
 
@@ -165,14 +165,14 @@ async def test_require_seat_admin_or_sudo_for_sudo():
 
 @pytest.mark.asyncio
 async def test_require_seat_admin_or_sudo_for_local_admin():
-    with patch("api.dependencies.get_auth_service", return_value=_mock_auth_svc([_tuky_admin_perm()])):
+    with patch("api.dependencies.get_auth_service", return_value=_mock_auth_svc([_pilot_admin_perm()])):
         result = await require_seat_admin_or_sudo(_local_admin_user())
         assert result.role == "admin"
 
 
 @pytest.mark.asyncio
 async def test_require_seat_admin_or_sudo_denied_for_readonly():
-    with patch("api.dependencies.get_auth_service", return_value=_mock_auth_svc([_tuky_read_perm()])):
+    with patch("api.dependencies.get_auth_service", return_value=_mock_auth_svc([_pilot_read_perm()])):
         with pytest.raises(HTTPException) as exc_info:
             await require_seat_admin_or_sudo(_readonly_user())
         assert exc_info.value.status_code == 403

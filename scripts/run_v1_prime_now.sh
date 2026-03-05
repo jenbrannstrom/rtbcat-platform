@@ -4,7 +4,7 @@ set -euo pipefail
 # One-command runner for optimizer signal priming with safe defaults.
 # Avoids multiline paste issues in terminals.
 
-BUYER_ID="${CATSCAN_BUYER_ID:-1487810529}"
+BUYER_ID="${CATSCAN_BUYER_ID:-1111111111}"
 BUYER_ID_SET=0
 BILLING_ID="${CATSCAN_PRIME_BILLING_ID:-}"
 BASE_URL="${CATSCAN_API_BASE_URL:-}"
@@ -31,7 +31,7 @@ Purpose:
   resolution via scripts/run_v1_prime_with_billing_fallback.sh.
 
 Options:
-  --buyer-id <id>          Optional buyer_id override (default: 1487810529)
+  --buyer-id <id>          Optional buyer_id override (default: 1111111111)
   --billing-id <id>        Optional explicit billing_id
   --api-base-url <url>     Optional API base URL override
   --email <email>          Optional X-Email override
@@ -41,9 +41,9 @@ Options:
 
 Examples:
   scripts/run_v1_prime_now.sh
-  scripts/run_v1_prime_now.sh 1487810529
-  scripts/run_v1_prime_now.sh --buyer-id 1487810529 --billing-id 194605230430 --dry-run
-  scripts/run_v1_prime_now.sh --buyer-id 1487810529 -- --timeout 45 --event-count 30
+  scripts/run_v1_prime_now.sh 1111111111
+  scripts/run_v1_prime_now.sh --buyer-id 1111111111 --billing-id 555555555555 --dry-run
+  scripts/run_v1_prime_now.sh --buyer-id 1111111111 -- --timeout 45 --event-count 30
 EOF
 }
 
@@ -114,7 +114,7 @@ if [[ -z "$BUYER_ID" ]]; then
 fi
 
 if [[ -z "$CANARY_EMAIL" && -z "${CATSCAN_CANARY_BEARER_TOKEN:-}" ]]; then
-  CANARY_EMAIL="cat-scan@rtb.cat"
+  CANARY_EMAIL="user@example.com"
 fi
 
 if [[ ! -x "scripts/run_v1_prime_with_billing_fallback.sh" ]]; then

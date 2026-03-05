@@ -50,7 +50,7 @@ v1-closeout-deployed-only:
 v1-closeout-dispatch:
 	bash scripts/run_v1_closeout_deployed_dispatch.sh \
 	  --buyer-id "$${CATSCAN_BUYER_ID:-}" \
-	  --api-base-url "$${CATSCAN_API_BASE_URL:-https://scan.rtb.cat/api}" \
+	  --api-base-url "$${CATSCAN_API_BASE_URL:-https://your-deployment.example.com/api}" \
 	  --model-id "$${CATSCAN_MODEL_ID:-}" \
 	  --profile "$${CATSCAN_CANARY_PROFILE:-balanced}" \
 	  --since-hours "$${CATSCAN_CANARY_QPS_PAGE_SLO_SINCE_HOURS:-168}" \

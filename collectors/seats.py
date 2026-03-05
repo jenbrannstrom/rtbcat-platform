@@ -140,7 +140,7 @@ class BuyerSeatsClient(BaseAuthorizedBuyersClient):
         name = data.get("name", "")
         buyer_id = name.split("/")[-1] if "/" in name else name
 
-        # Extract bidder_id from bidder field (e.g., "bidders/299038253" -> "299038253")
+        # Extract bidder_id from bidder field (e.g., "bidders/2222222222" -> "2222222222")
         # This is more reliable than using the value passed to the constructor
         bidder = data.get("bidder", "")
         bidder_id = bidder.split("/")[-1] if "/" in bidder else self.account_id

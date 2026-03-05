@@ -49,7 +49,7 @@ Las imágenes se etiquetan con el SHA corto de git: `sha-XXXXXXX`. El paso de de
      -f reason="your reason here"
    ```
 3. Monitorear: `gh run watch <run_id> --exit-status`
-4. Verificar: `curl -sS https://scan.rtb.cat/api/health | jq -r '.git_sha,.version'`
+4. Verificar: `curl -sS https://your-deployment.example.com/api/health | jq -r '.git_sha,.version'`
 
 ## Verificación de un despliegue
 
@@ -75,8 +75,8 @@ Después del despliegue, el flujo de trabajo ejecuta `scripts/contracts_check.py
 
 | Entorno | Nombre de VM | Dominio |
 |---------|-------------|---------|
-| Staging | `catscan-production-sg2` | (interno) |
-| Producción | `catscan-production-sg` | `scan.rtb.cat` |
+| Staging | `catscan-vm` | (interno) |
+| Producción | `catscan-vm` | `your-deployment.example.com` |
 
 Despliegue primero en staging, verifique y luego despliegue en producción.
 

@@ -39,7 +39,7 @@
 **Обнаружение:**
 1. Обратитесь к эндпоинту напрямую с ВМ:
    ```bash
-   curl -sS --max-time 60 -H 'X-Email: cat-scan@rtb.cat' \
+   curl -sS --max-time 60 -H 'X-Email: user.com' \
      'http://localhost:8000/uploads/data-freshness?days=14&buyer_id=<ID>'
    ```
 2. Если запрос не завершается в срок или возвращает 500, проверьте план выполнения:
@@ -64,7 +64,7 @@
 
 **Обнаружение:**
 ```bash
-curl -sS -H 'X-Email: cat-scan@rtb.cat' \
+curl -sS -H 'X-Email: user.com' \
   http://localhost:8000/gmail/status
 ```
 

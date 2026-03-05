@@ -59,7 +59,7 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      VM_NAME: ${{ github.event.inputs.target == 'production' && 'catscan-production-sg' || 'catscan-production-sg2' }}
+      VM_NAME: ${{ github.event.inputs.target == 'production' && 'catscan-vm-prod' || 'catscan-vm-staging' }}
 
     steps:
       - name: Show deployment intent

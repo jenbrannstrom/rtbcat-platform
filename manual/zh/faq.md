@@ -68,7 +68,7 @@
 ### [运维] 如何检查当前部署的版本？
 
 ```bash
-curl -sS https://scan.rtb.cat/api/health | jq -r '.git_sha,.version'
+curl -sS https://your-deployment.example.com/api/health | jq -r '.git_sha,.version'
 ```
 
 返回 git SHA 和镜像标签。与你的提交日志对比。

@@ -14,7 +14,7 @@ Cat-Scan admite tres métodos de inicio de sesión:
 
 ## Primer inicio de sesión
 
-1. Navega a `https://scan.rtb.cat` (o la URL de tu despliegue).
+1. Navega a `https://your-deployment.example.com` (o la URL de tu despliegue).
 2. Verás la página de inicio de sesión con las opciones disponibles.
 3. Elige tu método y autentícate.
 4. En el primer inicio de sesión, el sistema crea tu registro de usuario

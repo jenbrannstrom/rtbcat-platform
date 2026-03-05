@@ -170,7 +170,7 @@ curl -sS -X POST "https://<host>/api/conversions/appsflyer/postback" \
 Example:
 
 ```bash
-curl -sS -X POST "https://<host>/api/conversions/adjust/callback?buyer_id=1111111111" \
+curl -sS -X POST "https://<host>/api/conversions/adjust/callback?buyer_id=<BUYER_ID>" \
   -H "Content-Type: application/json" \
   -H "X-Webhook-Secret: ${CATSCAN_ADJUST_WEBHOOK_SECRET}" \
   -d '{
@@ -198,7 +198,7 @@ curl -sS -X POST "https://<host>/api/conversions/adjust/callback?buyer_id=111111
 Example:
 
 ```bash
-curl -sS -X POST "https://<host>/api/conversions/branch/webhook?buyer_id=1111111111" \
+curl -sS -X POST "https://<host>/api/conversions/branch/webhook?buyer_id=<BUYER_ID>" \
   -H "Content-Type: application/json" \
   -H "X-Webhook-Secret: ${CATSCAN_BRANCH_WEBHOOK_SECRET}" \
   -d '{
@@ -258,7 +258,7 @@ Usage notes:
 Example:
 
 ```bash
-curl -sS -X POST "https://<host>/api/conversions/redtrack/postback?buyer_id=1111111111" \
+curl -sS -X POST "https://<host>/api/conversions/redtrack/postback?buyer_id=<BUYER_ID>" \
   -H "Content-Type: application/json" \
   -H "X-Webhook-Secret: ${CATSCAN_GENERIC_CONVERSION_WEBHOOK_SECRET}" \
   -d '{
@@ -286,7 +286,7 @@ Usage notes:
 Example:
 
 ```bash
-curl -sS "https://<host>/api/conversions/pixel?source_type=pixel&buyer_id=1111111111&event_name=purchase&event_ts=2026-02-28T15:30:00Z&event_value=19.99&currency=USD&click_id=clk-250" \
+curl -sS "https://<host>/api/conversions/pixel?source_type=pixel&buyer_id=<BUYER_ID>&event_name=purchase&event_ts=2026-02-28T15:30:00Z&event_value=19.99&currency=USD&click_id=clk-250" \
   -H "X-Webhook-Secret: ${CATSCAN_GENERIC_CONVERSION_WEBHOOK_SECRET}" \
   -o /tmp/catscan-pixel.gif
 ```
@@ -309,7 +309,7 @@ Example:
 curl -sS -X POST "https://<host>/api/conversions/csv/upload" \
   -F "file=@/tmp/conversions.csv" \
   -F "source_type=manual_csv" \
-  -F "buyer_id=1111111111"
+  -F "buyer_id=<BUYER_ID>"
 ```
 
 ## 4. Post-Setup Validation Checklist
@@ -356,37 +356,37 @@ What it does:
 Example using API mapping fetch via `X-Email`:
 
 ```bash
-export CATSCAN_CANARY_EMAIL="cat-scan@rtb.cat"
+export CATSCAN_CANARY_EMAIL="user.com"
 scripts/run_appsflyer_phase_a_audit.sh \
-  --buyer-id 1487810529 \
+  --buyer-id <BUYER_ID> \
   --input ~/Downloads/appsflyer_raw_2026-03-01.csv \
   --fetch-mapping true \
   --email "${CATSCAN_CANARY_EMAIL}" \
-  --doc-out docs/review/2026-03-03/APPSFLYER_PHASE_A_BUYER_1487810529.md
+  --doc-out docs/review/2026-03-03/APPSFLYER_PHASE_A_BUYER_1111111111.md
 ```
 
 Example using explicit mapping profile file:
 
 ```bash
 scripts/run_appsflyer_phase_a_audit.sh \
-  --buyer-id 1487810529 \
+  --buyer-id <BUYER_ID> \
   --input ~/Downloads/appsflyer_raw_2026-03-01.csv \
-  --mapping-profile /tmp/mapping_profile_1487810529.json
+  --mapping-profile /tmp/mapping_profile_1111111111.json
 ```
 
 Example using already-ingested DB payloads (no local AppsFlyer file required):
 
 ```bash
 export POSTGRES_DSN='postgresql://user:pass@host:5432/dbname'
-export CATSCAN_CANARY_EMAIL="cat-scan@rtb.cat"
+export CATSCAN_CANARY_EMAIL="user.com"
 scripts/run_appsflyer_phase_a_audit.sh \
-  --buyer-id 1487810529 \
+  --buyer-id <BUYER_ID> \
   --from-db \
   --db-since-days 14 \
   --db-limit 200000 \
   --fetch-mapping true \
   --email "${CATSCAN_CANARY_EMAIL}" \
-  --doc-out docs/review/2026-03-03/APPSFLYER_PHASE_A_BUYER_1487810529.md
+  --doc-out docs/review/2026-03-03/APPSFLYER_PHASE_A_BUYER_1111111111.md
 ```
 
 ## 7. Attribution Join Evidence API (Phase-B)
@@ -410,12 +410,12 @@ Operational helper script:
 Example:
 
 ```bash
-export CATSCAN_CANARY_EMAIL="cat-scan@rtb.cat"
+export CATSCAN_CANARY_EMAIL="user.com"
 scripts/run_conversion_attribution_phase_b_report.sh \
-  --buyer-id 1487810529 \
+  --buyer-id <BUYER_ID> \
   --source-type appsflyer \
   --days 14 \
   --fallback-window-days 1 \
   --email "${CATSCAN_CANARY_EMAIL}" \
-  --doc-out docs/review/2026-03-03/PHASE_B_ATTRIBUTION_REPORT_1487810529.md
+  --doc-out docs/review/2026-03-03/PHASE_B_ATTRIBUTION_REPORT_1111111111.md
 ```

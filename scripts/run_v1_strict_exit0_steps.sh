@@ -2,7 +2,7 @@
 set -euo pipefail
 
 BUYER_ID="${CATSCAN_BUYER_ID:-}"
-BASE_URL="${CATSCAN_API_BASE_URL:-https://scan.rtb.cat/api}"
+BASE_URL="${CATSCAN_API_BASE_URL:-https://your-deployment.example.com/api}"
 DAYS="${CATSCAN_CANARY_DAYS:-14}"
 FRESHNESS_HOURS="${CATSCAN_CANARY_FRESHNESS_HOURS:-72}"
 TIMEOUT_SECONDS="${CATSCAN_CANARY_TIMEOUT_SECONDS:-30}"
@@ -29,7 +29,7 @@ Runs strict-exit-0 preflight steps for a buyer:
 
 Options:
   --buyer-id <id>              Buyer id (required)
-  --base-url <url>             API base URL (default: https://scan.rtb.cat/api)
+  --base-url <url>             API base URL (default: https://your-deployment.example.com/api)
   --days <n>                   Lookback days for economics/readiness/stats (default: 14)
   --freshness-hours <n>        Conversion readiness freshness hours (default: 72)
   --timeout <seconds>          Curl timeout (default: 30)

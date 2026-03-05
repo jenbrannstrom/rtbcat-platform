@@ -84,7 +84,7 @@ complet de la table). Voir [Opérations de base de données](14-database.md).
 ### [DevOps] Comment vérifier quelle version est déployée ?
 
 ```bash
-curl -sS https://scan.rtb.cat/api/health | jq -r '.git_sha,.version'
+curl -sS https://your-deployment.example.com/api/health | jq -r '.git_sha,.version'
 ```
 
 Cela retourne le SHA git et le tag de l'image. Comparez avec votre historique de

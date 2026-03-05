@@ -49,7 +49,7 @@ Images worden getagd met de verkorte git-SHA: `sha-XXXXXXX`. De deploy-stap gebr
      -f reason="your reason here"
    ```
 3. Monitor: `gh run watch <run_id> --exit-status`
-4. Verifieer: `curl -sS https://scan.rtb.cat/api/health | jq -r '.git_sha,.version'`
+4. Verifieer: `curl -sS https://your-deployment.example.com/api/health | jq -r '.git_sha,.version'`
 
 ## Een deployment verifieren
 
@@ -75,8 +75,8 @@ Na de deployment voert de workflow `scripts/contracts_check.py` uit binnen de AP
 
 | Omgeving | VM-naam | Domein |
 |----------|---------|--------|
-| Staging | `catscan-production-sg2` | (intern) |
-| Productie | `catscan-production-sg` | `scan.rtb.cat` |
+| Staging | `catscan-vm` | (intern) |
+| Productie | `catscan-vm` | `your-deployment.example.com` |
 
 Deploy eerst naar staging, verifieer, en deploy dan naar productie.
 

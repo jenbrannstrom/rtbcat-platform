@@ -48,7 +48,7 @@ seconds.
 **Detection:**
 1. Hit the endpoint directly from the VM:
    ```bash
-   curl -sS --max-time 60 -H 'X-Email: cat-scan@rtb.cat' \
+   curl -sS --max-time 60 -H 'X-Email: user.com' \
      'http://localhost:8000/uploads/data-freshness?days=14&buyer_id=<ID>'
    ```
 2. If it times out or returns 500, check the query plan:
@@ -76,7 +76,7 @@ Import history has no recent entries.
 
 **Detection:**
 ```bash
-curl -sS -H 'X-Email: cat-scan@rtb.cat' \
+curl -sS -H 'X-Email: user.com' \
   http://localhost:8000/gmail/status
 ```
 

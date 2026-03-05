@@ -437,7 +437,7 @@ API Endpoint                        Tables Read                        Frontend 
 | Table | Status | Impact |
 |-------|--------|--------|
 | `rtb_endpoints_current` | **0 rows (all bidders)** | endpoint-efficiency shows no observed QPS |
-| `config_publisher_daily` | **0 rows for buyer 6574658621** | publisher breakdown returns empty |
+| `config_publisher_daily` | **0 rows for buyer `<BUYER_ID>`** | publisher breakdown returns empty |
 | `ingestion_runs` | **0 rows** | no ingestion tracking |
-| `import_history` | **only buyer 6634662463** | no import tracking for 6574658621 |
-| billing_id `173162721799` | in pretargeting but **not in precompute** | IDN_Banner_Instl config has no data |
+| `import_history` | **only buyer `<BUYER_ID>`** | no import tracking for <BUYER_ID> |
+| billing_id `777777777777` | in pretargeting but **not in precompute** | IDN_Banner_Instl config has no data |

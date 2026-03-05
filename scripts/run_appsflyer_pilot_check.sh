@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-BUYER_ID="${CATSCAN_BUYER_ID:-299038253}"
+BUYER_ID="${CATSCAN_BUYER_ID:-2222222222}"
 SOURCE_TYPE="${CATSCAN_CONVERSION_SOURCE_TYPE:-appsflyer}"
-BASE_URL="${CATSCAN_API_BASE_URL:-https://scan.rtb.cat/api}"
+BASE_URL="${CATSCAN_API_BASE_URL:-https://your-deployment.example.com/api}"
 CANARY_EMAIL="${CATSCAN_CANARY_EMAIL:-${CATSCAN_CANARY_BEARER_TOKEN:-}}"
 API_TOKEN="${CATSCAN_API_TOKEN:-}"
 TIMEOUT_SECONDS="${CATSCAN_CANARY_TIMEOUT_SECONDS:-60}"
@@ -15,9 +15,9 @@ OUT_DIR="${CATSCAN_OUTPUT_DIR:-/tmp}"
 usage() {
   cat <<'EOF'
 Usage:
-  scripts/run_tuky_appsflyer_pilot_check.sh [options]
+  scripts/run_appsflyer_pilot_check.sh [options]
 
-Runs end-to-end pilot checks for Tuky Display AppsFlyer onboarding:
+Runs end-to-end pilot checks for Customer Delta AppsFlyer onboarding:
 1) /health version
 2) /creatives/click-macro-coverage summary
 3) /conversions/readiness
@@ -25,9 +25,9 @@ Runs end-to-end pilot checks for Tuky Display AppsFlyer onboarding:
 5) /conversions/attribution/joins (exact matched sample)
 
 Options:
-  --buyer-id <id>            Buyer ID (default: 299038253)
+  --buyer-id <id>            Buyer ID (default: 2222222222)
   --source-type <name>       Conversion source type (default: appsflyer)
-  --base-url <url>           API base URL (default: https://scan.rtb.cat/api)
+  --base-url <url>           API base URL (default: https://your-deployment.example.com/api)
   --email <email>            X-Email identity (default: CATSCAN_CANARY_EMAIL)
   --token <token>            Bearer token (overrides --email)
   --timeout <seconds>        Curl timeout per request (default: 60)
@@ -38,10 +38,10 @@ Options:
   -h, --help                 Show help
 
 Examples:
-  export CATSCAN_CANARY_EMAIL="cat-scan@rtb.cat"
-  scripts/run_tuky_appsflyer_pilot_check.sh
+  export CATSCAN_CANARY_EMAIL="user@example.com"
+  scripts/run_appsflyer_pilot_check.sh
 
-  scripts/run_tuky_appsflyer_pilot_check.sh --buyer-id 299038253 --days 30
+  scripts/run_appsflyer_pilot_check.sh --buyer-id 2222222222 --days 30
 EOF
 }
 
@@ -131,7 +131,7 @@ fi
 
 BASE_URL="${BASE_URL%/}"
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
-RUN_DIR="${OUT_DIR%/}/tuky-appsflyer-pilot-check-${BUYER_ID}-${STAMP}"
+RUN_DIR="${OUT_DIR%/}/appsflyer-pilot-check-${BUYER_ID}-${STAMP}"
 mkdir -p "$RUN_DIR"
 
 declare -a AUTH_HEADERS=()
@@ -239,7 +239,7 @@ fi
 
 report_md="${RUN_DIR}/pilot_check_report.md"
 cat > "$report_md" <<REPORT
-# Tuky AppsFlyer Pilot Check
+# AppsFlyer Pilot Check
 
 - generated_utc: ${STAMP}
 - buyer_id: \`${BUYER_ID}\`

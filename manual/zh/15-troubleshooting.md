@@ -46,7 +46,7 @@
 **检测：**
 1. 从 VM 直接访问端点：
    ```bash
-   curl -sS --max-time 60 -H 'X-Email: cat-scan@rtb.cat' \
+   curl -sS --max-time 60 -H 'X-Email: user.com' \
      'http://localhost:8000/uploads/data-freshness?days=14&buyer_id=<ID>'
    ```
 2. 如果超时或返回 500，检查查询计划：
@@ -72,7 +72,7 @@
 
 **检测：**
 ```bash
-curl -sS -H 'X-Email: cat-scan@rtb.cat' \
+curl -sS -H 'X-Email: user.com' \
   http://localhost:8000/gmail/status
 ```
 

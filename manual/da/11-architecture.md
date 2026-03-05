@@ -38,7 +38,7 @@
 
 ## Container-layout
 
-Produktion kører på en enkelt GCP VM (`catscan-production-sg`, zone
+Produktion kører på en enkelt GCP VM (`catscan-vm`, zone
 `asia-southeast1-b`) med `docker-compose.gcp.yml`.
 
 | Container | Image | Port | Rolle |

@@ -49,7 +49,7 @@ deploy.yml (workflow_dispatch)
      -f reason="your reason here"
    ```
 3. راقب التقدم: `gh run watch <run_id> --exit-status`
-4. تحقق من النتيجة: `curl -sS https://scan.rtb.cat/api/health | jq -r '.git_sha,.version'`
+4. تحقق من النتيجة: `curl -sS https://your-deployment.example.com/api/health | jq -r '.git_sha,.version'`
 
 ## التحقق من النشر
 
@@ -75,8 +75,8 @@ deploy.yml (workflow_dispatch)
 
 | البيئة | اسم الآلة الافتراضية | النطاق |
 |--------|----------------------|--------|
-| بيئة الاختبار | `catscan-production-sg2` | (داخلي) |
-| الإنتاج | `catscan-production-sg` | `scan.rtb.cat` |
+| بيئة الاختبار | `catscan-vm` | (داخلي) |
+| الإنتاج | `catscan-vm` | `your-deployment.example.com` |
 
 انشر على بيئة الاختبار أولاً، ثم تحقق، ثم انشر على الإنتاج.
 

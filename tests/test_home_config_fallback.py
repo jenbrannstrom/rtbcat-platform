@@ -51,7 +51,7 @@ async def test_home_configs_fall_back_to_30d_when_7d_empty(monkeypatch: pytest.M
 
     monkeypatch.setattr("services.home_analytics_service._get_precompute_status", stub_status)
 
-    payload = await service.get_config_payload(days=7, buyer_id="1487810529")
+    payload = await service.get_config_payload(days=7, buyer_id="1111111111")
 
     assert repo.days_requested == [7, 30]
     assert payload["data_state"] == "degraded"
@@ -91,7 +91,7 @@ async def test_home_configs_no_fallback_when_7d_has_rows(monkeypatch: pytest.Mon
 
     monkeypatch.setattr("services.home_analytics_service._get_precompute_status", stub_status)
 
-    payload = await service.get_config_payload(days=7, buyer_id="1487810529")
+    payload = await service.get_config_payload(days=7, buyer_id="1111111111")
 
     assert repo.days_requested == [7]
     assert payload["data_state"] == "healthy"
@@ -133,7 +133,7 @@ async def test_home_configs_use_overall_totals_when_present(monkeypatch: pytest.
 
     monkeypatch.setattr("services.home_analytics_service._get_precompute_status", stub_status)
 
-    payload = await service.get_config_payload(days=7, buyer_id="1487810529")
+    payload = await service.get_config_payload(days=7, buyer_id="1111111111")
 
     assert payload["total_reached"] == 1000
     assert payload["total_impressions"] == 200

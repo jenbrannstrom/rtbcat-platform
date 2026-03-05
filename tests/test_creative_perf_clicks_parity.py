@@ -98,7 +98,7 @@ async def test_summaries_buyer_scoping(repo):
         return_value=[],
     ) as mock_query:
         await repo.get_creative_summaries(
-            ["12345"], days=7, buyer_id_filter="299038253"
+            ["12345"], days=7, buyer_id_filter="2222222222"
         )
 
     # Verify the query was called with buyer filter in params
@@ -106,7 +106,7 @@ async def test_summaries_buyer_scoping(repo):
     sql = call_args[0][0]
     params = call_args[0][1]
     assert "buyer_account_id" in sql
-    assert "299038253" in params
+    assert "2222222222" in params
 
 
 @pytest.mark.asyncio

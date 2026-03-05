@@ -77,7 +77,7 @@ FAIL и BLOCKED:
 ### [DevOps] Как узнать, какая версия развернута?
 
 ```bash
-curl -sS https://scan.rtb.cat/api/health | jq -r '.git_sha,.version'
+curl -sS https://your-deployment.example.com/api/health | jq -r '.git_sha,.version'
 ```
 
 Эта команда возвращает git SHA и тег образа. Сравните с вашим журналом коммитов.

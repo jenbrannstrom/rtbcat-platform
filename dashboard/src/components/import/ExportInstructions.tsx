@@ -188,7 +188,7 @@ export function ExportInstructions() {
         </p>
         <p className="text-gray-600 text-xs">
           {t.import.exportGuideExampleLabel}{" "}
-          <code className="bg-white px-1 rounded">catscan-bidsinauction-1487810529-yesterday-UTC</code>
+          <code className="bg-white px-1 rounded">catscan-bidsinauction-1111111111-yesterday-UTC</code>
         </p>
       </div>
 

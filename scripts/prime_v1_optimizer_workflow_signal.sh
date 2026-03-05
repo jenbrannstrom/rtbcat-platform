@@ -2,7 +2,7 @@
 set -euo pipefail
 
 BUYER_ID="${CATSCAN_BUYER_ID:-}"
-BASE_URL="${CATSCAN_API_BASE_URL:-https://scan.rtb.cat/api}"
+BASE_URL="${CATSCAN_API_BASE_URL:-https://your-deployment.example.com/api}"
 CANARY_EMAIL="${CATSCAN_CANARY_EMAIL:-${CATSCAN_CANARY_BEARER_TOKEN:-}}"
 TIMEOUT_SECONDS="${CATSCAN_CANARY_TIMEOUT_SECONDS:-30}"
 REFRESH_TIMEOUT_SECONDS="${CATSCAN_PRIME_REFRESH_TIMEOUT_SECONDS:-}"
@@ -45,7 +45,7 @@ Steps:
 
 Options:
   --buyer-id <id>                 Required buyer_id
-  --base-url <url>                API base URL (default: https://scan.rtb.cat/api)
+  --base-url <url>                API base URL (default: https://your-deployment.example.com/api)
   --email <email>                 X-Email identity (default: env CATSCAN_CANARY_EMAIL)
   --timeout <seconds>             HTTP timeout per request (default: 30)
   --refresh-timeout <seconds>     Timeout for aggregates refresh (default: --timeout)

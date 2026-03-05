@@ -14,7 +14,7 @@ Cat-Scan ondersteunt drie inlogmethoden:
 
 ## Eerste keer inloggen
 
-1. Navigeer naar `https://scan.rtb.cat` (of de URL van uw implementatie).
+1. Navigeer naar `https://your-deployment.example.com` (of de URL van uw implementatie).
 2. U ziet de inlogpagina met de beschikbare inlogopties.
 3. Kies uw methode en authenticeer.
 4. Bij de eerste keer inloggen maakt het systeem automatisch uw

@@ -49,7 +49,7 @@ Obrazy są tagowane skróconym SHA commitu: `sha-XXXXXXX`. Krok wdrożeniowy uż
      -f reason="your reason here"
    ```
 3. Monitoruj: `gh run watch <run_id> --exit-status`
-4. Zweryfikuj: `curl -sS https://scan.rtb.cat/api/health | jq -r '.git_sha,.version'`
+4. Zweryfikuj: `curl -sS https://your-deployment.example.com/api/health | jq -r '.git_sha,.version'`
 
 ## Weryfikacja wdrożenia
 
@@ -75,8 +75,8 @@ Po wdrożeniu workflow uruchamia `scripts/contracts_check.py` wewnątrz kontener
 
 | Środowisko | Nazwa VM | Domena |
 |------------|----------|--------|
-| Staging | `catscan-production-sg2` | (wewnętrzna) |
-| Produkcja | `catscan-production-sg` | `scan.rtb.cat` |
+| Staging | `catscan-vm` | (wewnętrzna) |
+| Produkcja | `catscan-vm` | `your-deployment.example.com` |
 
 Najpierw wdróż na staging, zweryfikuj, a potem wdróż na produkcję.
 

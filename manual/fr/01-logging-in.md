@@ -14,7 +14,7 @@ Cat-Scan prend en charge trois méthodes de connexion :
 
 ## Première connexion
 
-1. Accédez à `https://scan.rtb.cat` (ou l'URL de votre déploiement).
+1. Accédez à `https://your-deployment.example.com` (ou l'URL de votre déploiement).
 2. La page de connexion s'affiche avec les options d'authentification disponibles.
 3. Choisissez votre méthode et authentifiez-vous.
 4. Lors de la première connexion, le système crée automatiquement votre

@@ -43,7 +43,7 @@ def test_csv_upload_forbidden_without_seat_admin(
     client = _build_client(monkeypatch, _deny_seat_admin)
     response = client.post(
         "/api/conversions/csv/upload",
-        data={"source_type": "manual_csv", "buyer_id": "1487810529"},
+        data={"source_type": "manual_csv", "buyer_id": "1111111111"},
         files={"file": ("events.csv", io.BytesIO(b"event_type,event_ts\npurchase,2026-03-04T00:00:00Z\n"), "text/csv")},
     )
 
@@ -60,7 +60,7 @@ def test_csv_upload_allows_with_seat_admin(
     client = _build_client(monkeypatch, _allow_seat_admin)
     response = client.post(
         "/api/conversions/csv/upload",
-        data={"source_type": "manual_csv", "buyer_id": "1487810529"},
+        data={"source_type": "manual_csv", "buyer_id": "1111111111"},
         files={"file": ("events.csv", io.BytesIO(b"event_type,event_ts\npurchase,2026-03-04T00:00:00Z\n"), "text/csv")},
     )
 

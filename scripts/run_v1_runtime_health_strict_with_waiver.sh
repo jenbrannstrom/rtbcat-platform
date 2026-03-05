@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-BUYER_ID="${CATSCAN_BUYER_ID:-1487810529}"
+BUYER_ID="${CATSCAN_BUYER_ID:-1111111111}"
 PROFILE="${CATSCAN_CANARY_PROFILE:-balanced}"
 EXPIRES_ON="${CATSCAN_CANARY_BIDSTREAM_WAIVER_EXPIRES_ON:-2026-06-30}"
 NOTE="${CATSCAN_CANARY_BIDSTREAM_WAIVER_NOTE:-Google RTB source for this buyer does not provide platform/environment/transaction_type dimensions}"
@@ -20,7 +20,7 @@ Usage:
   scripts/run_v1_runtime_health_strict_with_waiver.sh [options]
 
 Options:
-  --buyer-id <id>      Buyer ID (default: 1487810529)
+  --buyer-id <id>      Buyer ID (default: 1111111111)
   --profile <name>     safe|balanced|aggressive (default: balanced)
   --expires-on <date>  Waiver expiry YYYY-MM-DD (default: 2026-06-30)
   --note <text>        Waiver note (default: Google dimension source gap note)
@@ -37,7 +37,7 @@ Options:
   -h, --help           Show help
 
 Example:
-  scripts/run_v1_runtime_health_strict_with_waiver.sh --buyer-id 1487810529 --profile balanced
+  scripts/run_v1_runtime_health_strict_with_waiver.sh --buyer-id 1111111111 --profile balanced
 EOF
 }
 

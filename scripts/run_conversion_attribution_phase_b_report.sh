@@ -3,7 +3,7 @@ set -euo pipefail
 
 BUYER_ID="${CATSCAN_BUYER_ID:-}"
 SOURCE_TYPE="${CATSCAN_CONVERSION_SOURCE_TYPE:-appsflyer}"
-BASE_URL="${CATSCAN_API_BASE_URL:-https://scan.rtb.cat/api}"
+BASE_URL="${CATSCAN_API_BASE_URL:-https://your-deployment.example.com/api}"
 DAYS="${CATSCAN_ATTRIBUTION_DAYS:-14}"
 FALLBACK_WINDOW_DAYS="${CATSCAN_ATTRIBUTION_FALLBACK_WINDOW_DAYS:-1}"
 LIMIT="${CATSCAN_ATTRIBUTION_REPORT_LIMIT:-50}"
@@ -31,7 +31,7 @@ Options:
   --days <n>                      Lookback days (default: 14)
   --fallback-window-days <n>      Fallback creative-time window in days (default: 1)
   --limit <n>                     Sample rows per joins query (default: 50)
-  --api-base-url <url>            API base URL (default: https://scan.rtb.cat/api)
+  --api-base-url <url>            API base URL (default: https://your-deployment.example.com/api)
   --token <value>                 Bearer token for API auth
   --email <value>                 X-Email identity for API auth
   --out-dir <dir>                 Output root (default: /tmp)

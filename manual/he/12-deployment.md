@@ -49,7 +49,7 @@ deploy.yml (workflow_dispatch)
      -f reason="your reason here"
    ```
 3. עקבו: `gh run watch <run_id> --exit-status`
-4. אמתו: `curl -sS https://scan.rtb.cat/api/health | jq -r '.git_sha,.version'`
+4. אמתו: `curl -sS https://your-deployment.example.com/api/health | jq -r '.git_sha,.version'`
 
 ## אימות פריסה
 
@@ -75,8 +75,8 @@ deploy.yml (workflow_dispatch)
 
 | סביבה | שם VM | דומיין |
 |--------|-------|--------|
-| Staging | `catscan-production-sg2` | (פנימי) |
-| Production | `catscan-production-sg` | `scan.rtb.cat` |
+| Staging | `catscan-vm` | (פנימי) |
+| Production | `catscan-vm` | `your-deployment.example.com` |
 
 פרסו תחילה ל-staging, אמתו, ואז פרסו ל-production.
 

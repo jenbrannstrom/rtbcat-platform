@@ -6,7 +6,7 @@ REF="${CATSCAN_GH_REF:-unified-platform}"
 DEPLOYED_WORKFLOW="v1-closeout-deployed.yml"
 BYOM_WORKFLOW="v1-byom-api-regression.yml"
 
-API_BASE_URL="${CATSCAN_API_BASE_URL:-https://scan.rtb.cat/api}"
+API_BASE_URL="${CATSCAN_API_BASE_URL:-https://your-deployment.example.com/api}"
 BUYER_ID="${CATSCAN_BUYER_ID:-}"
 MODEL_ID="${CATSCAN_MODEL_ID:-}"
 CANARY_PROFILE="${CATSCAN_CANARY_PROFILE:-balanced}"
@@ -31,7 +31,7 @@ Usage:
 
 Options:
   --buyer-id <id>                 Buyer scope for deployed closeout (recommended)
-  --api-base-url <url>            API base URL (default: https://scan.rtb.cat/api)
+  --api-base-url <url>            API base URL (default: https://your-deployment.example.com/api)
   --model-id <id>                 Optional model ID override
   --profile <safe|balanced|aggressive>
                                   Canary profile (default: balanced)
@@ -48,8 +48,8 @@ Options:
   -h, --help                      Show this help
 
 Examples:
-  scripts/run_v1_closeout_deployed_dispatch.sh --buyer-id 1487810529
-  scripts/run_v1_closeout_deployed_dispatch.sh --buyer-id 1487810529 --run-byom
+  scripts/run_v1_closeout_deployed_dispatch.sh --buyer-id 1111111111
+  scripts/run_v1_closeout_deployed_dispatch.sh --buyer-id 1111111111 --run-byom
 EOF
 }
 

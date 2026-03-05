@@ -1,7 +1,7 @@
 # API 快速参考
 
 这是 Cat-Scan 118+ API 端点的可导航索引，按领域分组。完整的请求/响应
-模式请参见交互式 OpenAPI 文档：`https://scan.rtb.cat/api/docs`。
+模式请参见交互式 OpenAPI 文档：`https://your-deployment.example.com/api/docs`。
 
 ## 核心/系统
 

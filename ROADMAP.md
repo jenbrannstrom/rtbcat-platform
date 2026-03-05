@@ -38,7 +38,7 @@
 ## AppsFlyer Attribution Plan (2026-03-03)
 
 - [ ] **Objective:** add post-click attribution signal into optimizer decisions without breaking existing buyers or requiring media buyers to know RTB-internal IDs.
-- [x] **Evidence baseline captured:** production click-URL audit across 4 seats shows AppsFlyer URLs in 1/4 seats (Tuky Display), with no AppsFlyer URLs observed in the other 3 seats' sampled recent creatives.
+- [x] **Evidence baseline captured:** production click-URL audit across 4 seats shows AppsFlyer URLs in 1/4 seats (Customer Delta), with no AppsFlyer URLs observed in the other 3 seats' sampled recent creatives.
 - [x] **Measurement UX in code:** dedicated click-macro audit API/page + creative-modal macro compliance indicator implemented (pending/alongside deploy verification).
 
 ### Integration principles (locked)
@@ -92,7 +92,7 @@
   - `/optimizer/economics/efficiency` latency/timeout stability.
   - Proposal lifecycle completeness (`billing_id` propagation and apply-path reliability).
   - QPS rollup completeness gaps.
-  - Progress (2026-03-04): runtime-health strict is now green for pilot buyer `1487810529` with explicit buyer-scoped waiver + deterministic rollup emission.
+  - Progress (2026-03-04): runtime-health strict is now green for pilot buyer `1111111111` with explicit buyer-scoped waiver + deterministic rollup emission.
     - Evidence: workflow run `22655481679` (success).
     - Waiver: bidstream dimension breakdown gap (`platform/environment/transaction_type` all 100% missing for this buyer data source).
     - Waiver expiry: `2026-06-30` (must be revisited; do not treat as permanent).
@@ -100,7 +100,7 @@
   - Progress (2026-03-04): automated enforcement added.
     - Daily strict run automation: `.github/workflows/v1-runtime-health-strict.yml` now scheduled (`03:35 UTC`) with buyer/profile defaults + waiver support.
     - Stability monitor: `.github/workflows/v1-runtime-health-stability.yml` (scheduled `03:50 UTC`) validates consecutive success window using `scripts/check_v1_runtime_health_stability.sh`.
-  - Evidence (2026-03-04): stability window achieved for pilot buyer `1487810529` with latest 3 strict runs all `success`:
+  - Evidence (2026-03-04): stability window achieved for pilot buyer `1111111111` with latest 3 strict runs all `success`:
     - `22656590137`, `22656554679`, `22656401648` (`stability=STABLE` via `scripts/check_v1_runtime_health_stability.sh --window 3`).
   - Guardrail status: enabled and continuously monitored; waiver remains explicitly scoped and expires `2026-06-30`.
 
@@ -120,11 +120,11 @@
   - `/optimizer/economics/efficiency` intermittent high latency/timeouts (especially assumed-value path).
   - proposal lifecycle data completeness (`billing_id` missing in generated proposals for some buyer states).
   - QPS page rollup completeness gaps (`/analytics/home/endpoint-efficiency` missing in rollup on some windows).
-  - Progress (2026-03-04): strict gate now passes for buyer `1487810529` with explicit waiver + runtime telemetry hardening.
+  - Progress (2026-03-04): strict gate now passes for buyer `1111111111` with explicit waiver + runtime telemetry hardening.
     - Success evidence: `v1 Runtime Health Strict` run `22655481679` (`exit 0` for both strict steps).
     - Waiver rationale: Google RTB source for this buyer does not provide bidstream dimension breakdowns (`platform/environment/transaction_type`), so blocker is treated as environment-waived for this buyer only.
     - Waiver controls: buyer-scoped JSON waiver with required `note` and `expires_on`; current expiry `2026-06-30`.
-  - Runtime-health strict evidence (2026-03-02, run `22599615982`): both strict canaries blocked by `rtb_quality_freshness state is unavailable (no quality data for this buyer/period)` for buyer `1487810529`.
+  - Runtime-health strict evidence (2026-03-02, run `22599615982`): both strict canaries blocked by `rtb_quality_freshness state is unavailable (no quality data for this buyer/period)` for buyer `1111111111`.
   - Remediation helper added: `scripts/remediate_v1_quality_freshness_blocker.sh` (check data health -> trigger `/gmail/import` -> poll `/gmail/status` -> re-check readiness).
   - Progress (2026-03-02): backend mitigation patch staged on `unified-platform` (pending deploy + validation):
     - `DataHealthService`: parallelized sub-checks, fixed RTB buyer filters to `buyer_account_id`, disabled MV refresh-on-read by default (opt-in via `DATA_HEALTH_REFRESH_SEAT_DAY_MV_ON_READ`).
@@ -181,7 +181,7 @@
 ## Deploy / Contracts Follow-up (2026-02-24)
 
 - [x] **GitHub deploy workflow defaults corrected for SG production**
-  - Fixed `deploy.yml` defaults to match current production target (`catscan-production-sg`, `asia-southeast1-b`, SG Artifact Registry).
+  - Fixed `deploy.yml` defaults to match current production target (`catscan-vm-prod`, `asia-southeast1-b`, SG Artifact Registry).
   - Related commits on `unified-platform`: `a61c998`, `5546ac5`.
 - [x] **Deploy unblocked with temporary contract-gate bypass**
   - `scripts/contracts_check.py` fixed missing `::text` casts on `metric_date` comparisons (`5546ac5`) to resolve `date >= text` SQL errors.

@@ -74,7 +74,7 @@ BLOCKED:
 ### [DevOps] كيف أتحقق من الإصدار المنشور؟
 
 ```bash
-curl -sS https://scan.rtb.cat/api/health | jq -r '.git_sha,.version'
+curl -sS https://your-deployment.example.com/api/health | jq -r '.git_sha,.version'
 ```
 
 هذا يعيد SHA الخاص بـ git وعلامة الصورة. قارنه بسجل الإيداعات لديك.

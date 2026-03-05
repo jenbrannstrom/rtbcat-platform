@@ -7,7 +7,7 @@ to Google Cloud Storage for BigQuery ingestion.
 Usage:
     python scripts/export_csv_to_parquet.py \
         --input /path/to/report.csv \
-        --buyer-id 6634662463 \
+        --buyer-id 3333333333 \
         --date 2026-01-23 \
         --report-type funnel_publishers
 

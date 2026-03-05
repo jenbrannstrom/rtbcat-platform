@@ -3,7 +3,7 @@ set -euo pipefail
 
 BUYER_ID="${CATSCAN_BUYER_ID:-}"
 SOURCE_TYPE="${CATSCAN_CONVERSION_SOURCE_TYPE:-appsflyer}"
-BASE_URL="${CATSCAN_API_BASE_URL:-https://scan.rtb.cat/api}"
+BASE_URL="${CATSCAN_API_BASE_URL:-https://your-deployment.example.com/api}"
 TIMEOUT_SECONDS="${CATSCAN_CANARY_TIMEOUT_SECONDS:-90}"
 DAYS="${CATSCAN_ATTRIBUTION_DAYS:-14}"
 FRESHNESS_HOURS="${CATSCAN_CONVERSION_FRESHNESS_HOURS:-72}"
@@ -46,7 +46,7 @@ Required:
 
 Options:
   --source-type <name>             Conversion source type (default: appsflyer)
-  --api-base-url <url>             API base URL (default: https://scan.rtb.cat/api)
+  --api-base-url <url>             API base URL (default: https://your-deployment.example.com/api)
   --timeout <seconds>              Readiness request timeout (default: 90)
   --days <n>                       Lookback days (default: 14)
   --freshness-hours <n>            Readiness freshness threshold (default: 72)
@@ -74,11 +74,11 @@ Options:
 
 Examples:
   export CATSCAN_API_TOKEN="..."
-  scripts/run_appsflyer_pilot_live_validation.sh --buyer-id 299038253
+  scripts/run_appsflyer_pilot_live_validation.sh --buyer-id 2222222222
 
-  export CATSCAN_CANARY_EMAIL="cat-scan@rtb.cat"
+  export CATSCAN_CANARY_EMAIL="user@example.com"
   scripts/run_appsflyer_pilot_live_validation.sh \
-    --buyer-id 299038253 \
+    --buyer-id 2222222222 \
     --strict-phase-b-refresh
 EOF
 }
@@ -314,7 +314,7 @@ fallback_unmatched="0"
 
 echo "[1/3] Pilot readiness snapshot..."
 set +e
-bash scripts/run_tuky_appsflyer_pilot_check.sh \
+bash scripts/run_appsflyer_pilot_check.sh \
   --buyer-id "$BUYER_ID" \
   --source-type "$SOURCE_TYPE" \
   --base-url "$BASE_URL" \

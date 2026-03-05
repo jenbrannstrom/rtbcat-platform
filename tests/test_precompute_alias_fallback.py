@@ -133,10 +133,10 @@ async def test_rtb_config_breakdown_falls_back_to_30d_when_7d_empty() -> None:
     svc = RtbBidstreamService(repo=repo)
 
     payload = await svc.get_config_breakdown(
-        billing_id="158610251694",
+        billing_id="888888888888",
         breakdown_type="size",
         days=7,
-        buyer_account_id="1487810529",
+        buyer_account_id="1111111111",
     )
 
     assert repo.size_days_requested == [7, 30]
@@ -154,10 +154,10 @@ async def test_rtb_config_breakdown_no_fallback_when_30d_empty() -> None:
     svc = RtbBidstreamService(repo=repo)
 
     payload = await svc.get_config_breakdown(
-        billing_id="158610251694",
+        billing_id="888888888888",
         breakdown_type="size",
         days=30,
-        buyer_account_id="1487810529",
+        buyer_account_id="1111111111",
     )
 
     assert repo.size_days_requested == []

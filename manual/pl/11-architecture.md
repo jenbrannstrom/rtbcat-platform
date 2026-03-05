@@ -38,7 +38,7 @@
 
 ## Układ kontenerów
 
-Produkcja działa na pojedynczej maszynie wirtualnej GCP (`catscan-production-sg`,
+Produkcja działa na pojedynczej maszynie wirtualnej GCP (`catscan-vm`,
 strefa `asia-southeast1-b`) z użyciem `docker-compose.gcp.yml`.
 
 | Kontener | Obraz | Port | Rola |

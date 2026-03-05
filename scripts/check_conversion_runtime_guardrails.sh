@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-BASE_URL="${CATSCAN_API_BASE_URL:-https://scan.rtb.cat/api}"
+BASE_URL="${CATSCAN_API_BASE_URL:-https://your-deployment.example.com/api}"
 CANARY_EMAIL="${CATSCAN_CANARY_EMAIL:-${CATSCAN_CANARY_BEARER_TOKEN:-}}"
 TIMEOUT_SECONDS="${CATSCAN_CANARY_TIMEOUT_SECONDS:-60}"
 OUT_DIR="${CATSCAN_OUTPUT_DIR:-/tmp}"
@@ -20,7 +20,7 @@ Runs conversion runtime guardrail checks in one command:
 4) GET  /retention/stats (after)
 
 Options:
-  --base-url <url>         API base URL (default: https://scan.rtb.cat/api)
+  --base-url <url>         API base URL (default: https://your-deployment.example.com/api)
   --email <email>          X-Email identity (default: CATSCAN_CANARY_EMAIL/CATSCAN_CANARY_BEARER_TOKEN)
   --timeout <seconds>      Curl timeout per request (default: 60)
   --out-dir <dir>          Output root (default: /tmp)
@@ -29,7 +29,7 @@ Options:
   -h, --help               Show help
 
 Examples:
-  export CATSCAN_CANARY_EMAIL="cat-scan@rtb.cat"
+  export CATSCAN_CANARY_EMAIL="user@example.com"
   scripts/check_conversion_runtime_guardrails.sh
 
   scripts/check_conversion_runtime_guardrails.sh --strict-security

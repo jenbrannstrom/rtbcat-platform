@@ -51,7 +51,7 @@ deploy.yml（workflow_dispatch）
      -f reason="你的原因"
    ```
 3. 监控：`gh run watch <run_id> --exit-status`
-4. 验证：`curl -sS https://scan.rtb.cat/api/health | jq -r '.git_sha,.version'`
+4. 验证：`curl -sS https://your-deployment.example.com/api/health | jq -r '.git_sha,.version'`
 
 ## 验证部署
 
@@ -79,8 +79,8 @@ deploy.yml（workflow_dispatch）
 
 | 环境 | VM 名称 | 域名 |
 |------|---------|------|
-| Staging | `catscan-production-sg2` | （内部） |
-| 生产 | `catscan-production-sg` | `scan.rtb.cat` |
+| Staging | `catscan-vm` | （内部） |
+| 生产 | `catscan-vm` | `your-deployment.example.com` |
 
 先部署到 staging，验证后再部署到生产。
 

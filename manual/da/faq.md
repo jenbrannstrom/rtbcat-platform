@@ -78,7 +78,7 @@ Løsning: sørg for, at queries bruger `generate_series + EXISTS`-mønsteret
 ### [DevOps] Hvordan tjekker jeg, hvilken version der er deployet?
 
 ```bash
-curl -sS https://scan.rtb.cat/api/health | jq -r '.git_sha,.version'
+curl -sS https://your-deployment.example.com/api/health | jq -r '.git_sha,.version'
 ```
 
 Dette returnerer git SHA og image-tag. Sammenlign med din commit-log.

@@ -659,7 +659,7 @@ def main() -> int:
     parser.add_argument(
         "--base-url",
         default=os.getenv("CATSCAN_API_BASE_URL", "http://127.0.0.1:8000"),
-        help="API base URL (example: http://127.0.0.1:8000 or https://scan.rtb.cat/api)",
+        help="API base URL (example: http://127.0.0.1:8000 or https://your-deployment.example.com/api)",
     )
     parser.add_argument("--buyer-id", default=os.getenv("CATSCAN_BUYER_ID"))
     parser.add_argument("--model-id", default=os.getenv("CATSCAN_MODEL_ID"))

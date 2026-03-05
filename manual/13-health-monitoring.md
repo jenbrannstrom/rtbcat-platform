@@ -10,7 +10,7 @@ Returns basic API status, git SHA, and version. Used by the deploy workflow
 and external monitoring.
 
 ```bash
-curl -sS https://scan.rtb.cat/api/health | jq .
+curl -sS https://your-deployment.example.com/api/health | jq .
 ```
 
 ### `/system/data-health`: data completeness
@@ -43,9 +43,9 @@ end-to-end.
 Diagnoses why a specific buyer has missing CSV coverage.
 
 ```bash
-export CATSCAN_CANARY_EMAIL="cat-scan@rtb.cat"
+export CATSCAN_CANARY_EMAIL="user.com"
 scripts/diagnose_v1_buyer_report_coverage.sh \
-  --buyer-id 1487810529 \
+  --buyer-id <BUYER_ID> \
   --timeout 180 \
   --days 14
 ```
@@ -83,8 +83,8 @@ Runs the strict gate in CI. Triggered manually via workflow_dispatch.
 ```bash
 gh workflow run v1-runtime-health-strict.yml \
   --ref unified-platform \
-  -f api_base_url="https://scan.rtb.cat/api" \
-  -f buyer_id="1487810529" \
+  -f api_base_url="https://your-deployment.example.com/api" \
+  -f buyer_id="<BUYER_ID>" \
   -f canary_profile="balanced" \
   -f canary_timeout_seconds="180"
 ```
@@ -101,7 +101,7 @@ Runtime scripts authenticate using environment variables:
 
 From the VM host, use `CATSCAN_CANARY_EMAIL` with `http://localhost:8000`.
 From CI (external), use `CATSCAN_BEARER_TOKEN` or `CATSCAN_SESSION_COOKIE`
-with `https://scan.rtb.cat/api`.
+with `https://your-deployment.example.com/api`.
 
 ## Interpreting results
 

@@ -9,7 +9,7 @@ Usage:
   scripts/clone_subset_to_local.sh \
     --remote-dsn "postgresql://user:pass@host:5432/db" \
     --local-dsn  "postgresql://user:pass@127.0.0.1:5433/db" \
-    [--buyer-id 6634662463] \
+    [--buyer-id 3333333333] \
     [--days 30] \
     [--skip-truncate] \
     [--skip-campaigns] \

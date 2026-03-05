@@ -39,7 +39,7 @@
 **Detección:**
 1. Consulte el endpoint directamente desde la VM:
    ```bash
-   curl -sS --max-time 60 -H 'X-Email: cat-scan@rtb.cat' \
+   curl -sS --max-time 60 -H 'X-Email: user.com' \
      'http://localhost:8000/uploads/data-freshness?days=14&buyer_id=<ID>'
    ```
 2. Si se agota el tiempo o devuelve 500, verifique el plan de consulta:
@@ -64,7 +64,7 @@
 
 **Detección:**
 ```bash
-curl -sS -H 'X-Email: cat-scan@rtb.cat' \
+curl -sS -H 'X-Email: user.com' \
   http://localhost:8000/gmail/status
 ```
 

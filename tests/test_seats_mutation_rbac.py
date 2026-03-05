@@ -62,7 +62,7 @@ async def test_sync_seat_creatives_requires_buyer_admin(
 
     with pytest.raises(HTTPException) as exc:
         await seats_router.sync_seat_creatives(
-            buyer_id="299038253",
+            buyer_id="2222222222",
             filter_query=None,
             background_tasks=BackgroundTasks(),
             config=object(),
@@ -88,8 +88,8 @@ async def test_update_seat_requires_buyer_admin(
 
     with pytest.raises(HTTPException) as exc:
         await seats_router.update_seat(
-            buyer_id="299038253",
-            request=seats_router.UpdateSeatRequest(display_name="Tuky"),
+            buyer_id="2222222222",
+            request=seats_router.UpdateSeatRequest(display_name="Customer Delta"),
             seats_service=service,
             store=object(),
             user=_readonly_user(),
@@ -112,7 +112,7 @@ async def test_discover_seats_requires_seat_admin_or_sudo(
     with pytest.raises(HTTPException) as exc:
         await seats_router.discover_seats(
             request=seats_router.DiscoverSeatsRequest(
-                bidder_id="1487810529",
+                bidder_id="1111111111",
                 auto_sync=False,
             ),
             config=object(),

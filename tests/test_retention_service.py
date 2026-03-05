@@ -69,7 +69,7 @@ async def test_get_storage_stats_includes_conversion_tables() -> None:
     repo = _StubRetentionRepo()
     service = RetentionService(repo=repo)
 
-    stats = await service.get_storage_stats(seat_id="1487810529")
+    stats = await service.get_storage_stats(seat_id="1111111111")
 
     assert stats["raw_rows"] == 10
     assert stats["summary_rows"] == 5
@@ -88,7 +88,7 @@ async def test_run_retention_job_deletes_conversion_tables() -> None:
     repo = _StubRetentionRepo()
     service = RetentionService(repo=repo)
 
-    result = await service.run_retention_job(seat_id="1487810529")
+    result = await service.run_retention_job(seat_id="1111111111")
 
     assert result["deleted_raw_rows"] == 11
     assert result["deleted_conversion_join_rows"] == 3

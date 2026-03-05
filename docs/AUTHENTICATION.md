@@ -32,9 +32,9 @@ The first admin **must** be created via `/auth/bootstrap`:
 sudo grep CATSCAN_BOOTSTRAP_TOKEN /etc/catscan.env
 
 # 2. Create the first admin
-curl -X POST https://vm2.scan.rtb.cat/api/auth/bootstrap \
+curl -X POST https://staging.example.com/api/auth/bootstrap \
   -H "Content-Type: application/json" \
-  -d '{"bootstrap_token": "<token>", "email": "admin@rtb.cat", "password": "securepassword", "display_name": "Admin"}'
+  -d '{"bootstrap_token": "<token>", "email": "user.com", "password": "securepassword", "display_name": "Admin"}'
 ```
 
 While bootstrap is incomplete:
@@ -50,7 +50,7 @@ the first user to register or log in via any method becomes **admin**.
 ```bash
 curl -X POST http://localhost:8000/auth/register \
   -H "Content-Type: application/json" \
-  -d '{"email": "admin@rtb.cat", "password": "securepassword", "display_name": "Admin"}'
+  -d '{"email": "user.com", "password": "securepassword", "display_name": "Admin"}'
 ```
 
 Or navigate to `/login`, click "Sign in with Email", and register (only shown when no users exist).
@@ -65,10 +65,10 @@ After the first user exists, registration is **restricted to admins only**:
 
 - An admin can register users via the API:
   ```bash
-  curl -X POST https://vm2.scan.rtb.cat/api/auth/register \
+  curl -X POST https://staging.example.com/api/auth/register \
     -H "Content-Type: application/json" \
     -H "Cookie: rtbcat_session=<admin-session-id>" \
-    -d '{"email": "newuser@rtb.cat", "password": "securepassword"}'
+    -d '{"email": "user.com", "password": "securepassword"}'
   ```
 - Or via the admin user management page at `/admin/users`.
 - Non-admin users trying to register get: `403 Registration is disabled. Please contact an administrator.`
@@ -105,7 +105,7 @@ Registration is already locked down by default:
 Users who logged in via Google or Authing can add a password for direct login:
 
 ```bash
-curl -X POST https://vm2.scan.rtb.cat/api/auth/set-password \
+curl -X POST https://staging.example.com/api/auth/set-password \
   -H "Content-Type: application/json" \
   -H "Cookie: rtbcat_session=<session-id>" \
   -d '{"password": "newpassword"}'

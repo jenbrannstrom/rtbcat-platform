@@ -22,7 +22,7 @@ async def test_get_credentials_with_fallback_logs_warning_on_legacy_config_failu
             raise RuntimeError("legacy credentials missing")
 
     service = SeatsService()
-    seat = BuyerSeat(buyer_id="1487810529", bidder_id="1487810529", display_name="Amazing Design Tools LLC")
+    seat = BuyerSeat(buyer_id="1111111111", bidder_id="1111111111", display_name="Customer Alpha")
 
     async def _no_multi_account(*_args, **_kwargs):
         return None

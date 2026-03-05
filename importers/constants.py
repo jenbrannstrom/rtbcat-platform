@@ -28,18 +28,18 @@ GOOGLE_AVAILABLE_SIZES = frozenset([
 # Pretargeting configurations with billing IDs
 # Note: These are loaded from database via API - this is just a fallback/reference
 PRETARGETING_CONFIGS = {
-    # MobYoung configs will be synced from Google API
+    # Customer Gamma configs will be synced from Google API
 }
 
 # Endpoint configuration (the real QPS bottleneck)
 # Note: These are loaded from database via API - this is just a fallback/reference
 ENDPOINTS = {
-    # MobYoung endpoints will be synced from Google API
+    # Customer Gamma endpoints will be synced from Google API
 }
 
 # Total endpoint capacity (this is the REAL bottleneck, not pretargeting QPS)
 TOTAL_ENDPOINT_QPS = sum(e.get("qps_limit", 0) for e in ENDPOINTS.values())
 
-# Account info (MobYoung)
-ACCOUNT_ID = "6634662463"
-ACCOUNT_NAME = "Amazing MobYoung"
+# Account info (Customer Gamma)
+ACCOUNT_ID = "3333333333"
+ACCOUNT_NAME = "Customer Gamma"

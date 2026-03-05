@@ -49,7 +49,7 @@ Images tagges med det korte git-SHA: `sha-XXXXXXX`. Udrulningstrinnet bruger `GI
      -f reason="your reason here"
    ```
 3. Overvåg: `gh run watch <run_id> --exit-status`
-4. Verificér: `curl -sS https://scan.rtb.cat/api/health | jq -r '.git_sha,.version'`
+4. Verificér: `curl -sS https://your-deployment.example.com/api/health | jq -r '.git_sha,.version'`
 
 ## Verificering af en udrulning
 
@@ -75,8 +75,8 @@ Efter udrulning kører workflowet `scripts/contracts_check.py` inde i API-contai
 
 | Miljø | VM-navn | Domæne |
 |-------|---------|--------|
-| Staging | `catscan-production-sg2` | (intern) |
-| Produktion | `catscan-production-sg` | `scan.rtb.cat` |
+| Staging | `catscan-vm` | (intern) |
+| Produktion | `catscan-vm` | `your-deployment.example.com` |
 
 Udrul til staging først, verificér, og udrul derefter til produktion.
 

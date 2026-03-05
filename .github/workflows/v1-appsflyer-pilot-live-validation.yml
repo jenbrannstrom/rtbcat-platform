@@ -6,7 +6,7 @@ on:
       buyer_id:
         description: "Buyer ID to validate"
         required: true
-        default: "299038253"
+        default: "2222222222"
       source_type:
         description: "Conversion source type"
         required: false
@@ -14,7 +14,7 @@ on:
       api_base_url:
         description: "API base URL (include /api path)"
         required: false
-        default: "https://scan.rtb.cat/api"
+        default: "https://your-deployment.example.com/api"
       timeout_seconds:
         description: "Readiness request timeout (seconds)"
         required: false
@@ -48,9 +48,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
-      CATSCAN_BUYER_ID: ${{ github.event.inputs.buyer_id || '299038253' }}
+      CATSCAN_BUYER_ID: ${{ github.event.inputs.buyer_id || '2222222222' }}
       CATSCAN_CONVERSION_SOURCE_TYPE: ${{ github.event.inputs.source_type || 'appsflyer' }}
-      CATSCAN_API_BASE_URL: ${{ github.event.inputs.api_base_url || 'https://scan.rtb.cat/api' }}
+      CATSCAN_API_BASE_URL: ${{ github.event.inputs.api_base_url || 'https://your-deployment.example.com/api' }}
       CATSCAN_CANARY_TIMEOUT_SECONDS: ${{ github.event.inputs.timeout_seconds || '90' }}
       CATSCAN_ATTRIBUTION_DAYS: ${{ github.event.inputs.days || '14' }}
       CATSCAN_ATTRIBUTION_FALLBACK_WINDOW_DAYS: ${{ github.event.inputs.fallback_window_days || '1' }}

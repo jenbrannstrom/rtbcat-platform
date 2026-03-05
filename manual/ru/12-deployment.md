@@ -49,7 +49,7 @@ deploy.yml (workflow_dispatch)
      -f reason="your reason here"
    ```
 3. Отслеживайте выполнение: `gh run watch <run_id> --exit-status`
-4. Проверьте результат: `curl -sS https://scan.rtb.cat/api/health | jq -r '.git_sha,.version'`
+4. Проверьте результат: `curl -sS https://your-deployment.example.com/api/health | jq -r '.git_sha,.version'`
 
 ## Проверка развёртывания
 
@@ -75,8 +75,8 @@ deploy.yml (workflow_dispatch)
 
 | Окружение | Имя ВМ | Домен |
 |-----------|--------|-------|
-| Staging | `catscan-production-sg2` | (внутренний) |
-| Production | `catscan-production-sg` | `scan.rtb.cat` |
+| Staging | `catscan-vm` | (внутренний) |
+| Production | `catscan-vm` | `your-deployment.example.com` |
 
 Сначала разверните на staging, проверьте, затем разверните на production.
 

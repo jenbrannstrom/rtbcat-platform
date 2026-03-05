@@ -9,7 +9,7 @@
 מחזירה סטטוס בסיסי של ה-API, SHA של git וגרסה. משמשת את תהליך הפריסה וניטור חיצוני.
 
 ```bash
-curl -sS https://scan.rtb.cat/api/health | jq .
+curl -sS https://your-deployment.example.com/api/health | jq .
 ```
 
 ### `/system/data-health`: שלמות נתונים
@@ -40,9 +40,9 @@ curl -sS https://scan.rtb.cat/api/health | jq .
 מאבחן מדוע לקונה מסוים חסרה כיסוי CSV.
 
 ```bash
-export CATSCAN_CANARY_EMAIL="cat-scan@rtb.cat"
+export CATSCAN_CANARY_EMAIL="user.com"
 scripts/diagnose_v1_buyer_report_coverage.sh \
-  --buyer-id 1487810529 \
+  --buyer-id <BUYER_ID> \
   --timeout 180 \
   --days 14
 ```
@@ -80,8 +80,8 @@ scripts/diagnose_v1_buyer_report_coverage.sh \
 ```bash
 gh workflow run v1-runtime-health-strict.yml \
   --ref unified-platform \
-  -f api_base_url="https://scan.rtb.cat/api" \
-  -f buyer_id="1487810529" \
+  -f api_base_url="https://your-deployment.example.com/api" \
+  -f buyer_id="<BUYER_ID>" \
   -f canary_profile="balanced" \
   -f canary_timeout_seconds="180"
 ```
@@ -98,7 +98,7 @@ gh workflow run v1-runtime-health-strict.yml \
 
 מה-VM עצמו, השתמשו ב-`CATSCAN_CANARY_EMAIL` עם `http://localhost:8000`.
 מ-CI (חיצוני), השתמשו ב-`CATSCAN_BEARER_TOKEN` או `CATSCAN_SESSION_COOKIE`
-עם `https://scan.rtb.cat/api`.
+עם `https://your-deployment.example.com/api`.
 
 ## פרשנות תוצאות
 

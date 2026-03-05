@@ -126,23 +126,23 @@ describe("middleware - legacy aliases", () => {
   });
 
   it("redirects legacy pretargeting publishers route to canonical bill_id route", () => {
-    const result = middleware(makeRequest("/pretargeting/167604111024/publishers"));
+    const result = middleware(makeRequest("/pretargeting/666666666666/publishers"));
     expect(result.type).toBe("redirect");
-    expect(mockRedirect).toHaveBeenCalledWith("/bill_id/167604111024?tab=publishers");
+    expect(mockRedirect).toHaveBeenCalledWith("/bill_id/666666666666?tab=publishers");
   });
 
   it("redirects buyer-prefixed legacy pretargeting route to buyer bill_id route", () => {
-    const result = middleware(makeRequest("/42/pretargeting/167604111024/publishers"));
+    const result = middleware(makeRequest("/42/pretargeting/666666666666/publishers"));
     expect(result.type).toBe("redirect");
-    expect(mockRedirect).toHaveBeenCalledWith("/42/bill_id/167604111024?tab=publishers");
+    expect(mockRedirect).toHaveBeenCalledWith("/42/bill_id/666666666666?tab=publishers");
   });
 
   it("injects cookie buyer into legacy pretargeting route redirect", () => {
     const result = middleware(
-      makeRequest("/pretargeting/167604111024/publishers", { [SELECTED_BUYER_COOKIE]: "42" })
+      makeRequest("/pretargeting/666666666666/publishers", { [SELECTED_BUYER_COOKIE]: "42" })
     );
     expect(result.type).toBe("redirect");
-    expect(mockRedirect).toHaveBeenCalledWith("/42/bill_id/167604111024?tab=publishers");
+    expect(mockRedirect).toHaveBeenCalledWith("/42/bill_id/666666666666?tab=publishers");
   });
 });
 

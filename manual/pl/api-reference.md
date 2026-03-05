@@ -2,7 +2,7 @@
 
 To nawigowany indeks ponad 118 endpointów API Cat-Scan, pogrupowanych według
 domeny. Pełne schematy żądań i odpowiedzi znajdziesz w interaktywnej
-dokumentacji OpenAPI pod adresem `https://scan.rtb.cat/api/docs`.
+dokumentacji OpenAPI pod adresem `https://your-deployment.example.com/api/docs`.
 
 ## Core / System
 

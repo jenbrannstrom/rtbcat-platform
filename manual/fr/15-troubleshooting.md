@@ -51,7 +51,7 @@ au lieu d'utiliser les index, cela peut prendre plus de 160 secondes.
 **Détection :**
 1. Appeler le endpoint directement depuis la VM :
    ```bash
-   curl -sS --max-time 60 -H 'X-Email: cat-scan@rtb.cat' \
+   curl -sS --max-time 60 -H 'X-Email: user.com' \
      'http://localhost:8000/uploads/data-freshness?days=14&buyer_id=<ID>'
    ```
 2. En cas d'expiration ou de réponse 500, vérifier le plan de requête :
@@ -81,7 +81,7 @@ d'entrées récentes.
 
 **Détection :**
 ```bash
-curl -sS -H 'X-Email: cat-scan@rtb.cat' \
+curl -sS -H 'X-Email: user.com' \
   http://localhost:8000/gmail/status
 ```
 

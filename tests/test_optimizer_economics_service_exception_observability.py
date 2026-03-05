@@ -24,10 +24,10 @@ async def test_fetch_daily_totals_logs_warning_and_returns_empty_on_error(
 
     with caplog.at_level(logging.WARNING):
         result = await service._fetch_daily_totals(
-            buyer_id="1487810529",
+            buyer_id="1111111111",
             start=date(2026, 2, 1),
             end=date(2026, 2, 7),
-            billing_id="162974537887",
+            billing_id="999999999999",
         )
 
     assert result == {}
@@ -47,7 +47,7 @@ async def test_fetch_quality_totals_logs_warning_and_returns_empty_on_error(
 
     with caplog.at_level(logging.WARNING):
         result = await service._fetch_quality_totals(
-            buyer_id="1487810529",
+            buyer_id="1111111111",
             start=date(2026, 2, 1),
             end=date(2026, 2, 7),
         )
@@ -77,7 +77,7 @@ async def test_get_assumed_value_logs_trend_fallbacks_and_returns_payload(
 
     with caplog.at_level(logging.WARNING):
         payload = await service.get_assumed_value(
-            buyer_id="1487810529",
+            buyer_id="1111111111",
             start_date="2026-02-01",
             end_date="2026-02-14",
             precomputed_totals={
@@ -90,6 +90,6 @@ async def test_get_assumed_value_logs_trend_fallbacks_and_returns_payload(
             },
         )
 
-    assert payload["buyer_id"] == "1487810529"
+    assert payload["buyer_id"] == "1111111111"
     assert "recent spend trend query failed" in caplog.text.lower()
     assert "previous spend trend query failed" in caplog.text.lower()

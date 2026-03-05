@@ -381,7 +381,7 @@ CAT-SCAN CSV REPORTS - ACTUAL FILES IN USE
 These are the 5 CSV report files Cat-Scan imports from Google Authorized Buyers.
 
 NAMING CONVENTION: catscan-{type}-{account_id}-{period}-UTC
-Example: catscan-pipeline-1487810529-yesterday-UTC
+Example: catscan-pipeline-1111111111-yesterday-UTC
 
 Go to: Authorized Buyers -> Reporting -> Scheduled Reports -> New Report
 CRITICAL: Set timezone to UTC for ALL reports! Non-UTC data is marked as legacy.

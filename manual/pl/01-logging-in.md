@@ -14,7 +14,7 @@ Cat-Scan obsługuje trzy metody logowania:
 
 ## Pierwsze logowanie
 
-1. Przejdź do `https://scan.rtb.cat` (lub adresu URL Twojego wdrożenia).
+1. Przejdź do `https://your-deployment.example.com` (lub adresu URL Twojego wdrożenia).
 2. Zobaczysz stronę logowania z dostępnymi opcjami logowania.
 3. Wybierz metodę i uwierzytelnij się.
 4. Przy pierwszym logowaniu system automatycznie tworzy Twój rekord użytkownika

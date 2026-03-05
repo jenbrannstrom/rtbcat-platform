@@ -9,7 +9,7 @@
 返回基本 API 状态、git SHA 和版本。部署工作流和外部监控使用。
 
 ```bash
-curl -sS https://scan.rtb.cat/api/health | jq .
+curl -sS https://your-deployment.example.com/api/health | jq .
 ```
 
 ### `/system/data-health`：数据完整性
@@ -41,9 +41,9 @@ curl -sS https://scan.rtb.cat/api/health | jq .
 诊断特定买方 CSV 覆盖缺失的原因。
 
 ```bash
-export CATSCAN_CANARY_EMAIL="cat-scan@rtb.cat"
+export CATSCAN_CANARY_EMAIL="user.com"
 scripts/diagnose_v1_buyer_report_coverage.sh \
-  --buyer-id 1487810529 \
+  --buyer-id <BUYER_ID> \
   --timeout 180 \
   --days 14
 ```
@@ -81,8 +81,8 @@ scripts/diagnose_v1_buyer_report_coverage.sh \
 ```bash
 gh workflow run v1-runtime-health-strict.yml \
   --ref unified-platform \
-  -f api_base_url="https://scan.rtb.cat/api" \
-  -f buyer_id="1487810529" \
+  -f api_base_url="https://your-deployment.example.com/api" \
+  -f buyer_id="<BUYER_ID>" \
   -f canary_profile="balanced" \
   -f canary_timeout_seconds="180"
 ```
@@ -99,7 +99,7 @@ gh workflow run v1-runtime-health-strict.yml \
 
 从 VM 主机，使用 `CATSCAN_CANARY_EMAIL` 配合 `http://localhost:8000`。
 从 CI（外部），使用 `CATSCAN_BEARER_TOKEN` 或 `CATSCAN_SESSION_COOKIE`
-配合 `https://scan.rtb.cat/api`。
+配合 `https://your-deployment.example.com/api`。
 
 ## 结果解读
 

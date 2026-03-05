@@ -39,7 +39,7 @@
 **Wykrywanie:**
 1. Wywołaj endpoint bezpośrednio z VM:
    ```bash
-   curl -sS --max-time 60 -H 'X-Email: cat-scan@rtb.cat' \
+   curl -sS --max-time 60 -H 'X-Email: user.com' \
      'http://localhost:8000/uploads/data-freshness?days=14&buyer_id=<ID>'
    ```
 2. Jeśli przekracza limit czasu lub zwraca 500, sprawdź plan zapytania:
@@ -64,7 +64,7 @@
 
 **Wykrywanie:**
 ```bash
-curl -sS -H 'X-Email: cat-scan@rtb.cat' \
+curl -sS -H 'X-Email: user.com' \
   http://localhost:8000/gmail/status
 ```
 

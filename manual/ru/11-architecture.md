@@ -38,7 +38,7 @@
 
 ## Компоновка контейнеров
 
-Production-среда работает на одной GCP VM (`catscan-production-sg`, зона
+Production-среда работает на одной GCP VM (`catscan-vm`, зона
 `asia-southeast1-b`) с использованием `docker-compose.gcp.yml`.
 
 | Контейнер | Образ | Порт | Назначение |

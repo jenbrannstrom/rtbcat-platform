@@ -38,7 +38,7 @@
 
 ## Disposición de contenedores
 
-La producción se ejecuta en una única VM de GCP (`catscan-production-sg`, zona
+La producción se ejecuta en una única VM de GCP (`catscan-vm`, zona
 `asia-southeast1-b`) utilizando `docker-compose.gcp.yml`.
 
 | Contenedor | Imagen | Puerto | Función |

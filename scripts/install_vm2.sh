@@ -53,7 +53,7 @@ prompt ENVIRONMENT "Environment" "production"
 prompt MACHINE_TYPE "Machine type" "e2-medium"
 prompt BOOT_DISK_SIZE "Boot disk size (GB)" "80"
 
-prompt DOMAIN_NAME "Domain (vm2.scan.rtb.cat or leave blank)" ""
+prompt DOMAIN_NAME "Domain (staging.example.com or leave blank)" ""
 prompt ENABLE_HTTPS "Enable HTTPS (true/false)" "false"
 
 prompt GITHUB_REPO "GitHub repo URL" "https://github.com/jenbrannstrom/rtbcat-platform.git"

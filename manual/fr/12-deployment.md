@@ -54,7 +54,7 @@ déployée correspond toujours à un commit précis.
      -f reason="your reason here"
    ```
 3. Suivre l'avancement : `gh run watch <run_id> --exit-status`
-4. Vérifier : `curl -sS https://scan.rtb.cat/api/health | jq -r '.git_sha,.version'`
+4. Vérifier : `curl -sS https://your-deployment.example.com/api/health | jq -r '.git_sha,.version'`
 
 ## Vérification d'un déploiement
 
@@ -86,8 +86,8 @@ En cas d'échec de la vérification :
 
 | Environnement | Nom de la VM | Domaine |
 |----------------|--------------|---------|
-| Staging | `catscan-production-sg2` | (interne) |
-| Production | `catscan-production-sg` | `scan.rtb.cat` |
+| Staging | `catscan-vm` | (interne) |
+| Production | `catscan-vm` | `your-deployment.example.com` |
 
 Déployez d'abord sur le staging, vérifiez, puis déployez en production.
 

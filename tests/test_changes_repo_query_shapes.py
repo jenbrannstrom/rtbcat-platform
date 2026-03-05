@@ -20,13 +20,13 @@ async def test_list_pending_changes_billing_scope_prefers_composite_filter(
 
     monkeypatch.setattr("storage.postgres_repositories.changes_repo.pg_query", _stub_query)
     repo = ChangesRepository()
-    rows = await repo.list_pending_changes(billing_id="173162721799", status="pending", limit=25)
+    rows = await repo.list_pending_changes(billing_id="777777777777", status="pending", limit=25)
 
     assert rows == []
     sql_lower = str(captured["sql"]).lower()
     assert "where billing_id = %s and status = %s" in sql_lower
     assert "order by created_at desc, id desc" in sql_lower
-    assert captured["params"] == ("173162721799", "pending", 25)
+    assert captured["params"] == ("777777777777", "pending", 25)
 
 
 @pytest.mark.asyncio

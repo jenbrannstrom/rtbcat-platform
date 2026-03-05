@@ -34,14 +34,14 @@ A correctly-operating CatScan instance satisfies all of the following simultaneo
 
 1. **FACT**: `rtb_endpoints_current` is currently empty (0 rows, all bidders). No QPS observation job exists in the deployed codebase. Confidence that endpoint-efficiency can ever show observed QPS without new code: 0.0.
 2. **FACT**: `ingestion_runs` table is empty and nothing writes to it in the current pipeline.
-3. **FACT**: `config_publisher_daily` has 0 rows for buyer 6574658621. The BQ self-join that populates it requires `publisher_id` in `rtb_daily` which may be missing from CSV reports.
-4. **FACT**: `import_history` only tracks buyer 6634662463, not 6574658621. Gmail import worker does not write to `import_history` for all buyers.
+3. **FACT**: `config_publisher_daily` has 0 rows for buyer `<BUYER_ID>`. The BQ self-join that populates it requires `publisher_id` in `rtb_daily` which may be missing from CSV reports.
+4. **FACT**: `import_history` only tracks buyer `<BUYER_ID>`, not <BUYER_ID>. Gmail import worker does not write to `import_history` for all buyers.
 5. **FACT**: No tests run in CI. The build-and-push workflow has zero test steps.
 6. **FACT**: No post-deploy health check or rollback mechanism exists.
 7. **INFERENCE**: Precompute is triggered manually or after import — there is no cron schedule ensuring daily freshness.
 8. **FACT**: The DELETE-then-INSERT pattern in all precompute services means a crash mid-transaction leaves the date range empty until retry.
 9. **INFERENCE**: BigQuery tables may lag Postgres raw tables if the Parquet export pipeline is not run.
-10. **FACT**: `billing_id=173162721799` (IDN_Banner_Instl) exists in pretargeting_configs but has no precomputed data.
+10. **FACT**: `billing_id=777777777777` (IDN_Banner_Instl) exists in pretargeting_configs but has no precomputed data.
 
 ---
 
@@ -67,14 +67,14 @@ A correctly-operating CatScan instance satisfies all of the following simultaneo
 | `buyer_account_id` fallback to bidder_id from filename | FACT: Lines 369-372 | 0.90 |
 | `billing_id` defaults to "unknown" if missing from CSV | FACT: Line 335 | 0.95 |
 | **Risk**: `ingestion_runs` table never populated | FACT: Table exists but 0 rows, no writer found | 0.95 |
-| **Risk**: `import_history` only populated for some buyers | FACT: Only buyer 6634662463 in evidence | 0.85 |
+| **Risk**: `import_history` only populated for some buyers | FACT: Only buyer `<BUYER_ID>` in evidence | 0.85 |
 | **Risk**: Spend conversion heuristic (< 1000 → multiply by 1M) | FACT: Line 376 — fragile threshold | 0.90 |
 
 ### Subsystem 3: Raw/Staging Tables
 
 | Aspect | Current State | Confidence |
 |--------|--------------|------------|
-| `rtb_daily` has data for buyer 6574658621 | INFERENCE: Precompute succeeds, so raw data exists | 0.85 |
+| `rtb_daily` has data for buyer `<BUYER_ID>` | INFERENCE: Precompute succeeds, so raw data exists | 0.85 |
 | `rtb_bidstream` has data | INFERENCE: home_seat_daily populated from it via BQ | 0.80 |
 | BigQuery mirrors are current | INFERENCE: Precompute runs BQ queries successfully | 0.75 |
 | **Risk**: No row-count monitoring on raw tables | INFERENCE: No alerts or checks found | 0.85 |
@@ -89,7 +89,7 @@ A correctly-operating CatScan instance satisfies all of the following simultaneo
 | 7 rtb_* tables populated via `refresh_rtb_summaries()` | FACT: Code verified | 0.85 |
 | `precompute_refresh_log` tracks refreshes | FACT: Latest entry 2026-02-11T03:00:07 | 0.95 |
 | **Risk**: DELETE-then-INSERT pattern is not crash-safe | FACT: A crash between DELETE and INSERT leaves a gap | 0.90 |
-| **Risk**: `config_publisher_daily` requires self-join that fails when publisher_id missing | FACT: 0 rows for buyer 6574658621 | 0.90 |
+| **Risk**: `config_publisher_daily` requires self-join that fails when publisher_id missing | FACT: 0 rows for buyer `<BUYER_ID>` | 0.90 |
 | **Risk**: No validation that precompute output row counts are non-zero | INFERENCE: Code has no post-insert count check | 0.85 |
 
 ### Subsystem 5: API Semantics
@@ -158,7 +158,7 @@ A correctly-operating CatScan instance satisfies all of the following simultaneo
 | **Pass criteria** | Every active buyer has import_history.imported_at within last 36 hours AND rows_imported > 0 |
 | **Owner** | Pipeline team |
 | **Confidence** | 0.85 |
-| **Caveats** | `import_history` currently only tracks buyer 6634662463. This contract requires fixing the import worker to write import_history for ALL buyers. |
+| **Caveats** | `import_history` currently only tracks buyer `<BUYER_ID>`. This contract requires fixing the import worker to write import_history for ALL buyers. |
 
 #### C-SRC-002: Gmail Unread Backlog Zero
 
@@ -207,7 +207,7 @@ A correctly-operating CatScan instance satisfies all of the following simultaneo
 | **Contract ID** | C-ING-002 |
 | **Rule** | For every active buyer in `buyer_seats`, `import_history` must contain at least 1 row with `rows_imported > 0` per 48-hour window. |
 | **Scope** | All active buyers |
-| **Why it matters** | Currently only buyer 6634662463 appears in import_history. Buyer 6574658621 has no import tracking despite having precomputed data. |
+| **Why it matters** | Currently only buyer `<BUYER_ID>` appears in import_history. buyer `<BUYER_ID>` has no import tracking despite having precomputed data. |
 | **Detection method** | SQL: `SELECT bs.buyer_id, COUNT(ih.id) as imports FROM buyer_seats bs LEFT JOIN import_history ih ON ih.filename LIKE '%' || bs.buyer_id || '%' AND ih.imported_at > NOW() - INTERVAL '48 hours' WHERE bs.active = true GROUP BY bs.buyer_id HAVING COUNT(ih.id) = 0` |
 | **Check frequency** | Every 12 hours |
 | **Alert condition** | Any active buyer with 0 imports in 48h → severity MEDIUM |
@@ -296,7 +296,7 @@ A correctly-operating CatScan instance satisfies all of the following simultaneo
 | **Pass criteria** | All active bidders have ≥1 endpoint, synced < 48h ago |
 | **Owner** | Pipeline team |
 | **Confidence** | 0.85 |
-| **Caveats** | Current data shows 3 endpoints for 6574658621 synced 2026-02-11 02:20 — working correctly. |
+| **Caveats** | Current data shows 3 endpoints for <BUYER_ID> synced 2026-02-11 02:20 — working correctly. |
 
 ---
 
@@ -310,7 +310,7 @@ A correctly-operating CatScan instance satisfies all of the following simultaneo
 | **Rule** | For every active buyer, `home_seat_daily` must have exactly 1 row per calendar day for the last N days (N = requested window: 7, 14, or 30). No gaps allowed. |
 | **Scope** | All active buyers, windows 7/14/30 |
 | **Why it matters** | Missing days cause incorrect funnel totals and misleading win_rate calculations. The API sums across the window — a missing day silently reduces the denominator. |
-| **Detection method** | SQL: `WITH dates AS (SELECT generate_series(CURRENT_DATE - 7, CURRENT_DATE - 1, '1 day'::interval)::date as d) SELECT d FROM dates WHERE d::text NOT IN (SELECT metric_date FROM home_seat_daily WHERE buyer_account_id = '6574658621')` — must return 0 rows. |
+| **Detection method** | SQL: `WITH dates AS (SELECT generate_series(CURRENT_DATE - 7, CURRENT_DATE - 1, '1 day'::interval)::date as d) SELECT d FROM dates WHERE d::text NOT IN (SELECT metric_date FROM home_seat_daily WHERE buyer_account_id = '<BUYER_ID>')` — must return 0 rows. |
 | **Check frequency** | After every precompute refresh |
 | **Alert condition** | Any missing day in 7-day window → severity HIGH |
 | **Failure behavior** | API must include `missing_dates: [...]` in response and set `data_state: "degraded"`. |
@@ -327,12 +327,12 @@ A correctly-operating CatScan instance satisfies all of the following simultaneo
 | **Contract ID** | C-PRE-002 |
 | **Rule** | For every ACTIVE pretargeting config (from `pretargeting_configs`), `home_config_daily` must have ≥1 row in the last 7 days. The set of billing_ids in home_config_daily must be a superset of ACTIVE billing_ids in pretargeting_configs. |
 | **Scope** | Per buyer, 7-day window |
-| **Why it matters** | FACT: billing_id 173162721799 (IDN_Banner_Instl) is ACTIVE in pretargeting_configs but has 0 rows in home_config_daily. This config is invisible in the dashboard. |
-| **Detection method** | SQL: `SELECT pc.billing_id, pc.display_name FROM pretargeting_configs pc WHERE pc.bidder_id = '6574658621' AND pc.state = 'ACTIVE' AND pc.billing_id NOT IN (SELECT DISTINCT billing_id FROM home_config_daily WHERE buyer_account_id = '6574658621' AND metric_date >= (CURRENT_DATE - 7)::text)` |
+| **Why it matters** | FACT: billing_id 777777777777 (IDN_Banner_Instl) is ACTIVE in pretargeting_configs but has 0 rows in home_config_daily. This config is invisible in the dashboard. |
+| **Detection method** | SQL: `SELECT pc.billing_id, pc.display_name FROM pretargeting_configs pc WHERE pc.bidder_id = '<BUYER_ID>' AND pc.state = 'ACTIVE' AND pc.billing_id NOT IN (SELECT DISTINCT billing_id FROM home_config_daily WHERE buyer_account_id = '<BUYER_ID>' AND metric_date >= (CURRENT_DATE - 7)::text)` |
 | **Check frequency** | After every precompute refresh |
 | **Alert condition** | Any ACTIVE config missing from precompute → severity MEDIUM |
 | **Failure behavior** | API should include `missing_configs: [...]` in the config payload. UI shows the config card with a "No data" indicator. |
-| **Remediation runbook** | 1. Check if the config's billing_id appears in `rtb_daily`: `SELECT COUNT(*) FROM rtb_daily WHERE billing_id = '173162721799'`. 2. If 0, the config may have no traffic yet or the CSV report doesn't include it. 3. If present in rtb_daily but not in BQ, re-run Parquet export + BQ load. 4. If present in BQ but not in precompute, re-run `refresh_config_breakdowns()`. |
+| **Remediation runbook** | 1. Check if the config's billing_id appears in `rtb_daily`: `SELECT COUNT(*) FROM rtb_daily WHERE billing_id = '777777777777'`. 2. If 0, the config may have no traffic yet or the CSV report doesn't include it. 3. If present in rtb_daily but not in BQ, re-run Parquet export + BQ load. 4. If present in BQ but not in precompute, re-run `refresh_config_breakdowns()`. |
 | **Pass criteria** | All ACTIVE pretargeting configs have ≥1 row in home_config_daily within the window |
 | **Owner** | Pipeline team |
 | **Confidence** | 0.90 |
@@ -345,12 +345,12 @@ A correctly-operating CatScan instance satisfies all of the following simultaneo
 | **Contract ID** | C-PRE-003 |
 | **Rule** | For every active buyer with data in `home_config_daily`, `config_publisher_daily` must have ≥1 row in the same window. |
 | **Scope** | Per buyer, 7-day window |
-| **Why it matters** | FACT: `config_publisher_daily` has 0 rows for buyer 6574658621. The publisher breakdown panel returns empty. This is caused by the BQ self-join in `config_precompute.py` lines 487-523 failing when `publisher_id` is empty in the CSV. |
-| **Detection method** | SQL: `SELECT COUNT(*) FROM config_publisher_daily WHERE buyer_account_id = '6574658621'` — must be > 0 if home_config_daily has data. |
+| **Why it matters** | FACT: `config_publisher_daily` has 0 rows for buyer `<BUYER_ID>`. The publisher breakdown panel returns empty. This is caused by the BQ self-join in `config_precompute.py` lines 487-523 failing when `publisher_id` is empty in the CSV. |
+| **Detection method** | SQL: `SELECT COUNT(*) FROM config_publisher_daily WHERE buyer_account_id = '<BUYER_ID>'` — must be > 0 if home_config_daily has data. |
 | **Check frequency** | After every precompute refresh |
 | **Alert condition** | 0 rows when peer tables have data → severity MEDIUM |
 | **Failure behavior** | API sets `data_state: "degraded"` with `fallback_reason: "publisher dimension unavailable"`. |
-| **Remediation runbook** | 1. Check if `rtb_daily` has publisher_id populated: `SELECT COUNT(*), COUNT(NULLIF(publisher_id, '')) FROM rtb_daily WHERE buyer_account_id = '6574658621'`. 2. If publisher_id is mostly empty, the CSV report type doesn't include publisher. Need a different report type or API fallback. 3. If publisher_id exists in raw data but not in precompute, check BQ self-join logic. |
+| **Remediation runbook** | 1. Check if `rtb_daily` has publisher_id populated: `SELECT COUNT(*), COUNT(NULLIF(publisher_id, '')) FROM rtb_daily WHERE buyer_account_id = '<BUYER_ID>'`. 2. If publisher_id is mostly empty, the CSV report type doesn't include publisher. Need a different report type or API fallback. 3. If publisher_id exists in raw data but not in precompute, check BQ self-join logic. |
 | **Pass criteria** | config_publisher_daily row count > 0 when home_config_daily row count > 0 |
 | **Owner** | Pipeline team |
 | **Confidence** | 0.85 |
@@ -394,7 +394,7 @@ A correctly-operating CatScan instance satisfies all of the following simultaneo
 | **Pass criteria** | 0 rows with buyer_id ≠ bidder_id |
 | **Owner** | Platform team |
 | **Confidence** | 0.90 |
-| **Caveats** | FACT: Current data shows buyer_id = bidder_id = '6574658621'. This invariant may not hold for all Google account types. |
+| **Caveats** | FACT: Current data shows buyer_id = bidder_id = '<BUYER_ID>'. This invariant may not hold for all Google account types. |
 
 #### C-KEY-002: Pretargeting Config Billing ID Uniqueness
 
@@ -421,8 +421,8 @@ A correctly-operating CatScan instance satisfies all of the following simultaneo
 | **Contract ID** | C-KEY-003 |
 | **Rule** | The presence of `billing_id = 'unknown'` in `home_config_daily` must be tracked and its percentage of total reached queries must be < 20%. |
 | **Scope** | Per buyer, rolling 7 days |
-| **Why it matters** | FACT: 'unknown' appears in home_config_daily for buyer 6574658621. This represents traffic that couldn't be attributed to a pretargeting config, making per-config analytics inaccurate. |
-| **Detection method** | SQL: `SELECT SUM(CASE WHEN billing_id = 'unknown' THEN reached_queries ELSE 0 END) * 100.0 / NULLIF(SUM(reached_queries), 0) as unknown_pct FROM home_config_daily WHERE buyer_account_id = '6574658621' AND metric_date >= (CURRENT_DATE - 7)::text` |
+| **Why it matters** | FACT: 'unknown' appears in home_config_daily for buyer `<BUYER_ID>`. This represents traffic that couldn't be attributed to a pretargeting config, making per-config analytics inaccurate. |
+| **Detection method** | SQL: `SELECT SUM(CASE WHEN billing_id = 'unknown' THEN reached_queries ELSE 0 END) * 100.0 / NULLIF(SUM(reached_queries), 0) as unknown_pct FROM home_config_daily WHERE buyer_account_id = '<BUYER_ID>' AND metric_date >= (CURRENT_DATE - 7)::text` |
 | **Check frequency** | After every precompute refresh |
 | **Alert condition** | unknown_pct > 20% → severity MEDIUM; > 50% → severity HIGH |
 | **Failure behavior** | API should include `unknown_traffic_pct` in config response. |
@@ -444,7 +444,7 @@ A correctly-operating CatScan instance satisfies all of the following simultaneo
 | **Rule** | The API field `observed_query_rate_qps` must come EXCLUSIVELY from `rtb_endpoints_current`. It must NEVER be computed from `home_seat_daily.reached_queries / window_seconds`. That derived value must be in a separately-named field (`funnel_proxy_qps_avg`). |
 | **Scope** | `/analytics/home/endpoint-efficiency` response |
 | **Why it matters** | Mixing proxy and observed metrics makes it impossible for the user to know if they're seeing real endpoint telemetry or a back-computed estimate. Commit 9f65ba3 fixed this but is NOT DEPLOYED. |
-| **Detection method** | API test: Call `/analytics/home/endpoint-efficiency?buyer_id=6574658621&days=7`. Verify: (1) `summary.observed_query_rate_qps` is null when `rtb_endpoints_current` has 0 rows. (2) `summary.funnel_proxy_qps_avg` is present and > 0. (3) `summary.endpoint_delivery_state` is "missing" when no observed data. |
+| **Detection method** | API test: Call `/analytics/home/endpoint-efficiency?buyer_id=<BUYER_ID>&days=7`. Verify: (1) `summary.observed_query_rate_qps` is null when `rtb_endpoints_current` has 0 rows. (2) `summary.funnel_proxy_qps_avg` is present and > 0. (3) `summary.endpoint_delivery_state` is "missing" when no observed data. |
 | **Check frequency** | On every deploy, as part of smoke tests |
 | **Alert condition** | `observed_query_rate_qps` is non-null when `rtb_endpoints_current` has 0 rows → severity CRITICAL |
 | **Failure behavior** | Deploy must be rolled back. |
@@ -480,7 +480,7 @@ A correctly-operating CatScan instance satisfies all of the following simultaneo
 | **Rule** | All non-admin analytics API endpoints must respond within 500ms at P95, measured over a 1-hour window, at current scale (1-4 buyers). |
 | **Scope** | `/analytics/home/funnel`, `/analytics/home/configs`, `/analytics/home/endpoint-efficiency` |
 | **Why it matters** | The frontend has a 12-second timeout. If P95 is > 500ms, P99 is likely > 5s, risking user-visible timeouts. |
-| **Detection method** | Measure response times from the API access log or structured logging. Alternatively, synthetic check: `time curl -s -o /dev/null -w '%{time_total}' 'https://vm2.scan.rtb.cat/api/analytics/home/configs?buyer_id=6574658621&days=7'` |
+| **Detection method** | Measure response times from the API access log or structured logging. Alternatively, synthetic check: `time curl -s -o /dev/null -w '%{time_total}' 'https://staging.example.com/api/analytics/home/configs?buyer_id=<BUYER_ID>&days=7'` |
 | **Check frequency** | Continuously (access log analysis) or every 5 minutes (synthetic) |
 | **Alert condition** | P95 > 500ms → severity MEDIUM; P95 > 2000ms → severity HIGH |
 | **Failure behavior** | Add query-level caching or optimize slow queries. |
@@ -542,7 +542,7 @@ A correctly-operating CatScan instance satisfies all of the following simultaneo
 | **Rule** | After a container restart, the API must respond to all analytics endpoints within 5 seconds within 60 seconds of container start. |
 | **Scope** | Post-deploy, post-restart |
 | **Why it matters** | FACT: After deploying sha-02d1f53, the API hung for several minutes (connection pool cold start). Users saw timeouts. |
-| **Detection method** | Post-deploy smoke test: `for i in 1 2 3 4 5; do curl -sS -o /dev/null -w '%{http_code} %{time_total}s\n' 'https://vm2.scan.rtb.cat/api/health'; sleep 10; done` — all must return 200 within 5s. |
+| **Detection method** | Post-deploy smoke test: `for i in 1 2 3 4 5; do curl -sS -o /dev/null -w '%{http_code} %{time_total}s\n' 'https://staging.example.com/api/health'; sleep 10; done` — all must return 200 within 5s. |
 | **Check frequency** | After every deploy/restart |
 | **Alert condition** | Any endpoint returns > 5s or non-200 within 60s of start → severity HIGH |
 | **Failure behavior** | Connection pool should be warmed on startup (eager initialization). |
@@ -580,7 +580,7 @@ A correctly-operating CatScan instance satisfies all of the following simultaneo
 |-------|-------|
 | **Contract ID** | C-REL-002 |
 | **Rule** | Within 2 minutes of deploying a new image, a smoke test must verify: (1) `/health` returns 200 with the new git_sha, (2) `/analytics/home/configs?buyer_id=<primary>&days=7` returns 200 with `data_state != "unavailable"`, (3) Response time < 5s. |
-| **Scope** | Both VMs (catscan-production-sg, catscan-production-sg2) |
+| **Scope** | Both VMs (catscan-vm, catscan-vm) |
 | **Why it matters** | Detects deployment failures, broken imports, and cold start issues before users notice. |
 | **Detection method** | Shell script run after deploy: check health, check analytics, check response time. |
 | **Check frequency** | After every deploy |
@@ -606,14 +606,14 @@ Note on execution:
 
 | test_id | contract | setup | query | expected | failure interpretation |
 |---------|----------|-------|-------|----------|----------------------|
-| T-SQL-001 | C-PRE-001 | None (reads production) | `SELECT COUNT(DISTINCT metric_date) FROM home_seat_daily WHERE buyer_account_id = '6574658621' AND metric_date >= (CURRENT_DATE - 9)::text AND metric_date <= (CURRENT_DATE - 2)::text` | ≥ 5 (7 days minus 2 for lag) | Precompute gap — missing days |
-| T-SQL-002 | C-PRE-002 | None | `SELECT pc.billing_id FROM pretargeting_configs pc WHERE pc.bidder_id = '6574658621' AND pc.state = 'ACTIVE' AND pc.billing_id NOT IN (SELECT DISTINCT billing_id FROM home_config_daily WHERE buyer_account_id = '6574658621' AND metric_date >= (CURRENT_DATE - 9)::text)` | 0 rows (or only newly-created configs) | Active config has no precomputed data |
+| T-SQL-001 | C-PRE-001 | None (reads production) | `SELECT COUNT(DISTINCT metric_date) FROM home_seat_daily WHERE buyer_account_id = '<BUYER_ID>' AND metric_date >= (CURRENT_DATE - 9)::text AND metric_date <= (CURRENT_DATE - 2)::text` | ≥ 5 (7 days minus 2 for lag) | Precompute gap — missing days |
+| T-SQL-002 | C-PRE-002 | None | `SELECT pc.billing_id FROM pretargeting_configs pc WHERE pc.bidder_id = '<BUYER_ID>' AND pc.state = 'ACTIVE' AND pc.billing_id NOT IN (SELECT DISTINCT billing_id FROM home_config_daily WHERE buyer_account_id = '<BUYER_ID>' AND metric_date >= (CURRENT_DATE - 9)::text)` | 0 rows (or only newly-created configs) | Active config has no precomputed data |
 | T-SQL-003 | C-EPT-001 | None | `SELECT COUNT(*) FROM rtb_endpoints_current` | > 0 | **KNOWN FAIL**: rtb_endpoints_current is empty |
 | T-SQL-004 | C-KEY-001 | None | `SELECT COUNT(*) FROM buyer_seats WHERE buyer_id != bidder_id` | 0 | buyer/bidder ID mismatch |
 | T-SQL-005 | C-KEY-002 | None | `SELECT bidder_id, billing_id, COUNT(*) FROM pretargeting_configs GROUP BY bidder_id, billing_id HAVING COUNT(*) > 1` | 0 rows | Duplicate billing_id |
 | T-SQL-006 | C-KEY-003 | None | See C-KEY-003 detection query | unknown_pct < 20 | Too much unattributed traffic |
 | T-SQL-007 | C-PRE-004 | None | `SELECT cache_name FROM (SELECT cache_name, MAX(refreshed_at) as last FROM precompute_refresh_log WHERE buyer_account_id = '__all__' GROUP BY cache_name) sub WHERE last::timestamp < NOW() - INTERVAL '24 hours'` | 0 rows | Stale precompute |
-| T-SQL-008 | C-PRE-003 | None | `SELECT COUNT(*) FROM config_publisher_daily WHERE buyer_account_id = '6574658621'` | > 0 | **KNOWN FAIL**: 0 rows |
+| T-SQL-008 | C-PRE-003 | None | `SELECT COUNT(*) FROM config_publisher_daily WHERE buyer_account_id = '<BUYER_ID>'` | > 0 | **KNOWN FAIL**: 0 rows |
 | T-SQL-009 | C-ING-001 | None | `SELECT COUNT(*) FROM ingestion_runs` | > 0 | **KNOWN FAIL**: 0 rows |
 | T-SQL-010 | C-EPT-002 | None | See C-EPT-002 detection query | 0 rows returned | Missing or stale endpoint config |
 
@@ -621,21 +621,21 @@ Note on execution:
 
 | test_id | contract | setup | command | expected | failure interpretation |
 |---------|----------|-------|---------|----------|----------------------|
-| T-API-001 | C-API-001 | None | `curl -s 'https://vm2.scan.rtb.cat/api/analytics/home/endpoint-efficiency?buyer_id=6574658621&days=7' \| jq '.summary.endpoint_delivery_state'` | `"missing"` | Proxy masquerading as observed (**KNOWN FAIL on sha-02d1f53**: field doesn't exist until 9f65ba3 deployed) |
-| T-API-002 | C-API-001 | None | `curl -s 'https://vm2.scan.rtb.cat/api/analytics/home/endpoint-efficiency?buyer_id=6574658621&days=7' \| jq '.summary.observed_query_rate_qps'` | `null` | Non-null would mean proxy is mislabeled |
-| T-API-003 | C-API-002 | None | `curl -s 'https://vm2.scan.rtb.cat/api/analytics/home/funnel?buyer_id=6574658621&days=7' \| jq '.data_state'` | `"healthy"` or `"degraded"` | Incorrect state determination |
-| T-API-004 | C-API-002 | None | `curl -s 'https://vm2.scan.rtb.cat/api/analytics/home/funnel?buyer_id=9999999999&days=7' \| jq '.data_state'` | `"unavailable"` | Should be unavailable for non-existent buyer |
-| T-API-005 | C-API-003 | None | `curl -s -o /dev/null -w '%{time_total}' 'https://vm2.scan.rtb.cat/api/analytics/home/configs?buyer_id=6574658621&days=7'` | < 0.5 | P95 SLO violated |
-| T-API-006 | C-API-003 | None | `curl -s -o /dev/null -w '%{time_total}' 'https://vm2.scan.rtb.cat/api/analytics/home/endpoint-efficiency?buyer_id=6574658621&days=7'` | < 0.5 | P95 SLO violated |
-| T-API-007 | C-REL-002 | Post-deploy | `curl -s 'https://vm2.scan.rtb.cat/api/health' \| jq '.status'` | `"healthy"` | Deployment failed |
+| T-API-001 | C-API-001 | None | `curl -s 'https://staging.example.com/api/analytics/home/endpoint-efficiency?buyer_id=<BUYER_ID>&days=7' \| jq '.summary.endpoint_delivery_state'` | `"missing"` | Proxy masquerading as observed (**KNOWN FAIL on sha-02d1f53**: field doesn't exist until 9f65ba3 deployed) |
+| T-API-002 | C-API-001 | None | `curl -s 'https://staging.example.com/api/analytics/home/endpoint-efficiency?buyer_id=<BUYER_ID>&days=7' \| jq '.summary.observed_query_rate_qps'` | `null` | Non-null would mean proxy is mislabeled |
+| T-API-003 | C-API-002 | None | `curl -s 'https://staging.example.com/api/analytics/home/funnel?buyer_id=<BUYER_ID>&days=7' \| jq '.data_state'` | `"healthy"` or `"degraded"` | Incorrect state determination |
+| T-API-004 | C-API-002 | None | `curl -s 'https://staging.example.com/api/analytics/home/funnel?buyer_id=<BUYER_ID>&days=7' \| jq '.data_state'` | `"unavailable"` | Should be unavailable for non-existent buyer |
+| T-API-005 | C-API-003 | None | `curl -s -o /dev/null -w '%{time_total}' 'https://staging.example.com/api/analytics/home/configs?buyer_id=<BUYER_ID>&days=7'` | < 0.5 | P95 SLO violated |
+| T-API-006 | C-API-003 | None | `curl -s -o /dev/null -w '%{time_total}' 'https://staging.example.com/api/analytics/home/endpoint-efficiency?buyer_id=<BUYER_ID>&days=7'` | < 0.5 | P95 SLO violated |
+| T-API-007 | C-REL-002 | Post-deploy | `curl -s 'https://staging.example.com/api/health' \| jq '.status'` | `"healthy"` | Deployment failed |
 
 ### Browser E2E State Tests
 
 | test_id | contract | setup | action | expected | failure interpretation |
 |---------|----------|-------|--------|----------|----------------------|
 | T-E2E-001 | C-UI-001 | Load `/` with no seat selected | Observe | Seat selector visible, no data panels shown | Queries fired without seat |
-| T-E2E-002 | C-UI-001 | Select buyer 6574658621 | Observe | Config cards render with reached/impressions > 0 | Data not loading or rendering |
-| T-E2E-003 | C-UI-001 | Select buyer 6574658621, observe endpoint panel | Observe | "Feed missing" text visible (requires 9f65ba3) | Missing state not rendered |
+| T-E2E-002 | C-UI-001 | Select buyer `<BUYER_ID>` | Observe | Config cards render with reached/impressions > 0 | Data not loading or rendering |
+| T-E2E-003 | C-UI-001 | Select buyer `<BUYER_ID>`, observe endpoint panel | Observe | "Feed missing" text visible (requires 9f65ba3) | Missing state not rendered |
 | T-E2E-004 | C-UI-002 | Load `/`, open browser Network tab | Count API calls before seat selection | 0 analytics API calls (only /seats) | Seat gating violated |
 
 ### Failure Injection Tests
@@ -725,7 +725,7 @@ REQUIRED ARTIFACTS:
   - Precompute cron schedule or post-import trigger
   - T-SQL-008 passes (config_publisher_daily > 0)
   - T-SQL-001 passes with full window coverage
-  - billing_id 173162721799 either has data or is explicitly labeled no_traffic
+  - billing_id 777777777777 either has data or is explicitly labeled no_traffic
 PASS CRITERIA: All 5 home_* and all 4 config_* tables have data for all active buyers in 7-day window
 FAIL CRITERIA: Any table has 0 rows for an active buyer with traffic
 EVIDENCE FORMAT: SQL counts per table per buyer + precompute_refresh_log entries
@@ -815,7 +815,7 @@ EVIDENCE FORMAT: CI run logs showing test execution + blocked deploy example
 
 3. **No precompute scheduling exists** (confidence gap: 0.80). No cron job, no systemd timer, no post-import hook was found that automatically triggers precompute. It appears to be run manually or ad-hoc. This means data freshness depends on human memory.
 
-4. **`config_publisher_daily` self-join failure root cause** (confidence gap: 0.70). The BQ self-join that populates this table requires `publisher_id` in `rtb_daily`. It's unclear whether the CSV reports for buyer 6574658621 include publisher_id at all, or whether the join condition is too restrictive.
+4. **`config_publisher_daily` self-join failure root cause** (confidence gap: 0.70). The BQ self-join that populates this table requires `publisher_id` in `rtb_daily`. It's unclear whether the CSV reports for buyer `<BUYER_ID>` include publisher_id at all, or whether the join condition is too restrictive.
 
 5. **CI has zero test coverage** (confidence gap: 0.95). Any code change ships to production without automated validation. The blast radius of a broken commit is unlimited.
 

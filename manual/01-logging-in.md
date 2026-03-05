@@ -14,7 +14,7 @@ Cat-Scan supports three login methods:
 
 ## First login
 
-1. Navigate to `https://scan.rtb.cat` (or your deployment's URL).
+1. Navigate to `https://your-deployment.example.com` (or your deployment's URL).
 2. You'll see the login page with available sign-in options.
 3. Choose your method and authenticate.
 4. On first login, the system creates your user record automatically (for
