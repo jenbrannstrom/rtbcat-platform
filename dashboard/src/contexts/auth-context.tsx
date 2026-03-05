@@ -146,6 +146,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
 
+      // Treat other server errors the same way to prevent redirect loops.
+      if (response.status >= 500) {
+        console.warn(`Auth service unavailable (${response.status})`);
+        setUser(null);
+        setPermissions([]);
+        setSeatPermissions({});
+        setAuthError("service_unavailable");
+        return;
+      }
+
       if (!response.ok) {
         setUser(null);
         setPermissions([]);
@@ -233,7 +243,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       // Redirect to login page with callback URL
-      const callbackUrl = encodeURIComponent(safePathname);
+      const callbackUrl = encodeURIComponent(
+        typeof window !== "undefined"
+          ? `${window.location.pathname}${window.location.search}`
+          : safePathname
+      );
       window.location.href = `/login?callbackUrl=${callbackUrl}`;
     }
   }, [initialized, isLoading, user, isPublicPage, safePathname, authError]);

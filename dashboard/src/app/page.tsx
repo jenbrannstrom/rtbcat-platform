@@ -19,6 +19,7 @@ import {
   type EndpointEfficiencyResponse,
 } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { isSeatReadyForAnalytics } from "@/lib/seat-readiness";
 import { useAccount } from "@/contexts/account-context";
 import { useTranslation } from "@/contexts/i18n-context";
 import type { BuyerSeat } from "@/types/api";
@@ -700,8 +701,8 @@ function WasteAnalysisContent() {
   // Only fire analytics queries once seats have loaded AND selectedBuyerId is
   // confirmed valid.  This prevents 403 storms when the user's RBAC changed
   // but localStorage still holds the old buyer_id.
-  const selectedBuyerKnownValid = !!selectedBuyerId && !!seats && seats.some((s) => s.buyer_id === selectedBuyerId);
-  const seatReady = !!selectedBuyerId && (seatsLoading || selectedBuyerKnownValid);
+  const selectedBuyerKnownValid = isSeatReadyForAnalytics(selectedBuyerId, seats);
+  const seatReady = selectedBuyerKnownValid;
   const pretargetingCacheSeed = useMemo(
     () => readPretargetingConfigCache(selectedBuyerId),
     [selectedBuyerId]
