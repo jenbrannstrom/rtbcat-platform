@@ -534,6 +534,8 @@ async def auto_cluster_creatives(
             unclustered_count=unclustered_count,
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Auto-clustering failed: {e}")
         raise HTTPException(status_code=500, detail=f"Clustering failed: {str(e)}")
@@ -562,6 +564,8 @@ async def get_unclustered_creatives(
             "count": len(creative_ids),
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to get unclustered creatives: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -797,6 +801,8 @@ async def list_campaigns(
 
         return [AICampaignResponse(**c) for c in result]
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to list campaigns: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -848,6 +854,8 @@ async def create_campaign(request: CampaignCreateRequest):
 
         return AICampaignResponse(**campaign_data)
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to create campaign: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -1019,6 +1027,8 @@ async def get_campaign_creatives(campaign_id: str):
         creative_ids = await svc.get_campaign_creatives(campaign_id)
         return {"creative_ids": creative_ids, "count": len(creative_ids)}
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to get campaign creatives: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -1039,6 +1049,8 @@ async def add_creatives_to_campaign(campaign_id: str, request: AssignCreativesRe
         )
         return {"status": "assigned", "count": count}
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to assign creatives: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -1080,6 +1092,8 @@ async def move_creative(creative_id: str, request: MoveCreativeRequest):
         )
         return {"status": "moved"}
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to move creative: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -1103,6 +1117,8 @@ async def get_campaign_performance(
         perf = await svc.get_campaign_performance(campaign_id, days=days)
         return CampaignPerformanceResponse(**perf)
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to get campaign performance: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -1121,6 +1137,8 @@ async def get_campaign_daily_trend(
         trend = await svc.get_campaign_daily_trend(campaign_id, days=days)
         return {"trend": trend}
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to get campaign trend: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -1137,6 +1155,8 @@ async def refresh_campaign_summaries(seat_id: Optional[int] = None):
         result = await svc.refresh_all_summaries(seat_id=seat_id)
         return {"status": "refreshed", "campaigns_updated": result["campaigns"], "dates_processed": result["dates"]}
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to refresh summaries: {e}")
         raise HTTPException(status_code=500, detail=str(e))

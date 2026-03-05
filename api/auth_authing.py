@@ -322,7 +322,10 @@ async def authing_callback(
             )
 
             if token_response.status_code != 200:
-                logger.error(f"Authing token error: {token_response.text}")
+                logger.error(
+                    "Authing token error: status=%s",
+                    token_response.status_code,
+                )
                 return RedirectResponse(
                     url="/login?error=Failed+to+get+token",
                     status_code=302,
@@ -345,7 +348,10 @@ async def authing_callback(
             )
 
             if userinfo_response.status_code != 200:
-                logger.error(f"Authing userinfo error: {userinfo_response.text}")
+                logger.error(
+                    "Authing userinfo error: status=%s",
+                    userinfo_response.status_code,
+                )
                 return RedirectResponse(
                     url="/login?error=Failed+to+get+user+info",
                     status_code=302,
@@ -354,7 +360,7 @@ async def authing_callback(
             userinfo = userinfo_response.json()
 
     except Exception as e:
-        logger.error(f"Authing callback error: {e}")
+        logger.error("Authing callback error: %s", type(e).__name__)
         return RedirectResponse(
             url="/login?error=Authentication+failed",
             status_code=302,
@@ -367,7 +373,10 @@ async def authing_callback(
         email = userinfo.get("preferred_username") or userinfo.get("phone_number")
 
     if not email:
-        logger.error(f"No email in Authing userinfo: {userinfo}")
+        logger.error(
+            "No email in Authing userinfo (keys present: %s)",
+            ", ".join(sorted(userinfo.keys())) if isinstance(userinfo, dict) else type(userinfo).__name__,
+        )
         return RedirectResponse(
             url="/login?error=No+email+in+user+info",
             status_code=302,
