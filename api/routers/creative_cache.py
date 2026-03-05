@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 from datetime import datetime
-import secrets
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Query
 from pydantic import BaseModel
 
 from api.dependencies import get_store, get_config
+from api.security_utils import has_valid_scheduler_secret
 from config import ConfigManager
 from services.creative_cache_service import CreativeCacheService
 from services.secrets_manager import get_secrets_manager
@@ -38,7 +38,7 @@ async def refresh_creative_cache_scheduled(
     """Refresh live creative cache for active creatives during off-hours."""
     secret = get_secrets_manager().get("CREATIVE_CACHE_REFRESH_SECRET")
     header_secret = request.headers.get("X-Creative-Cache-Refresh-Secret")
-    if not secret or not header_secret or not secrets.compare_digest(header_secret, secret):
+    if not has_valid_scheduler_secret(secret, header_secret):
         raise HTTPException(status_code=403, detail="Invalid scheduler secret")
 
     svc = CreativeCacheService(store=store, config=config)

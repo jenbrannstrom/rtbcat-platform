@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import logging
-import secrets
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
+from api.security_utils import has_valid_scheduler_secret
 from services.secrets_manager import get_secrets_manager
 from services.config_precompute import refresh_config_breakdowns
 from services.endpoints_service import EndpointsService
@@ -21,13 +21,6 @@ from services.rtb_precompute import refresh_rtb_summaries
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["Precompute"])
-
-
-def _has_valid_scheduler_secret(expected: str | None, provided: str | None) -> bool:
-    """Validate scheduler/monitor shared-secret headers using constant-time comparison."""
-    if not expected or not provided:
-        return False
-    return secrets.compare_digest(provided, expected)
 
 
 class PrecomputeRefreshResponse(BaseModel):
@@ -66,7 +59,7 @@ async def refresh_precompute_scheduled(request: Request) -> PrecomputeRefreshRes
     secrets_mgr = get_secrets_manager()
     secret = secrets_mgr.get("PRECOMPUTE_REFRESH_SECRET")
     header_secret = request.headers.get("X-Precompute-Refresh-Secret")
-    if not _has_valid_scheduler_secret(secret, header_secret):
+    if not has_valid_scheduler_secret(secret, header_secret):
         raise HTTPException(status_code=403, detail="Invalid scheduler secret")
 
     refresh_days = secrets_mgr.get_int("PRECOMPUTE_REFRESH_DAYS", 2)
@@ -107,7 +100,7 @@ async def precompute_health(request: Request) -> PrecomputeHealthResponse | JSON
     secrets_mgr = get_secrets_manager()
     secret = secrets_mgr.get("PRECOMPUTE_MONITOR_SECRET")
     header_secret = request.headers.get("X-Precompute-Monitor-Secret")
-    if not _has_valid_scheduler_secret(secret, header_secret):
+    if not has_valid_scheduler_secret(secret, header_secret):
         raise HTTPException(status_code=403, detail="Invalid monitor secret")
 
     max_age_hours = secrets_mgr.get_int("PRECOMPUTE_REFRESH_MAX_AGE_HOURS", 36)
