@@ -9,7 +9,7 @@ Usage:
     python scripts/bq_backfill_raw_facts.py --all --date-range 2026-01-07 2026-01-25
 
 Environment Variables:
-    BIGQUERY_PROJECT_ID: GCP project ID (default: catscan-prod-202601)
+    BIGQUERY_PROJECT_ID: GCP project ID (default: your-project-id)
     BIGQUERY_DATASET: BigQuery dataset name (default: rtbcat_analytics)
     POSTGRES_DSN: PostgreSQL connection string
     GOOGLE_APPLICATION_CREDENTIALS: Path to service account JSON
@@ -223,7 +223,7 @@ ROW_EXTRACTORS = {
 
 def get_config() -> Dict[str, str]:
     """Get configuration from environment."""
-    project_id = os.getenv("BIGQUERY_PROJECT_ID", "catscan-prod-202601")
+    project_id = os.getenv("BIGQUERY_PROJECT_ID", "your-project-id")
     dataset = os.getenv("BIGQUERY_DATASET", "rtbcat_analytics")
     postgres_dsn = os.getenv("POSTGRES_DSN")
 

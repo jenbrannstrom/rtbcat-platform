@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO="${CATSCAN_GH_REPO:-jenbrannstrom/rtbcat-platform}"
-REF="${CATSCAN_GH_REF:-unified-platform}"
+REPO="${CATSCAN_GH_REPO:-YOUR_ORG/rtbcat-platform}"
+REF="${CATSCAN_GH_REF:-main}"
 WORKFLOW="v1-conversion-runtime-guardrails.yml"
 
 API_BASE_URL="${CATSCAN_API_BASE_URL:-https://your-deployment.example.com/api}"
@@ -24,8 +24,8 @@ Options:
   --strict-security <bool>  true|false (default: true)
   --run-retention <bool>    true|false (default: true)
   --timeout <seconds>       Per-request timeout for API checks (default: 60)
-  --repo <owner/repo>       GitHub repo (default: jenbrannstrom/rtbcat-platform)
-  --ref <branch>            Git ref/branch (default: unified-platform)
+  --repo <owner/repo>       GitHub repo (default: YOUR_ORG/rtbcat-platform)
+  --ref <branch>            Git ref/branch (default: main)
   --poll-timeout <seconds>  Wait for run registration (default: 180)
   -h, --help                Show help
 

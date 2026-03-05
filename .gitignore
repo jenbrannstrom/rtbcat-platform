@@ -34,9 +34,6 @@ data/
 **/terraform.tfvars
 terraform/.terraform.lock.hcl
 
-# Deployment prompts with real infrastructure details (use .example as template)
-prompts/deploy-catscan.md
-
 # Note: docs/GCP_CREDENTIALS_SETUP.md is now tracked (contains setup instructions, not secrets)
 investigations/
 

@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO="${CATSCAN_GH_REPO:-jenbrannstrom/rtbcat-platform}"
+REPO="${CATSCAN_GH_REPO:-YOUR_ORG/rtbcat-platform}"
 WORKFLOW="${CATSCAN_RUNTIME_HEALTH_WORKFLOW_FILE:-v1-runtime-health-strict.yml}"
-BRANCH="${CATSCAN_GH_REF:-unified-platform}"
+BRANCH="${CATSCAN_GH_REF:-main}"
 BUYER_ID="${CATSCAN_BUYER_ID:-}"
 WINDOW="${CATSCAN_RUNTIME_HEALTH_STABILITY_WINDOW:-3}"
 LIMIT="${CATSCAN_RUNTIME_HEALTH_STABILITY_LIMIT:-20}"
@@ -18,9 +18,9 @@ Checks whether the most recent completed runtime-health strict runs are stable
 (`conclusion=success`) for the selected branch/workflow.
 
 Options:
-  --repo <owner/repo>      GitHub repo (default: jenbrannstrom/rtbcat-platform)
+  --repo <owner/repo>      GitHub repo (default: YOUR_ORG/rtbcat-platform)
   --workflow <file.yml>    Workflow file name (default: v1-runtime-health-strict.yml)
-  --branch <name>          Branch/ref filter (default: unified-platform)
+  --branch <name>          Branch/ref filter (default: main)
   --buyer-id <id>          Optional buyer filter via run title token `buyer=<id>`
   --window <n>             Required consecutive successful runs (default: 3)
   --limit <n>              Number of recent runs to inspect (default: 20)

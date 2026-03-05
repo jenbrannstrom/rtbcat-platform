@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO="${CATSCAN_GH_REPO:-jenbrannstrom/rtbcat-platform}"
-BRANCH="${CATSCAN_GH_REF:-unified-platform}"
+REPO="${CATSCAN_GH_REPO:-YOUR_ORG/rtbcat-platform}"
+BRANCH="${CATSCAN_GH_REF:-main}"
 DEPLOYED_WORKFLOW="${CATSCAN_DEPLOYED_WORKFLOW:-v1-closeout-deployed.yml}"
 BYOM_WORKFLOW="${CATSCAN_BYOM_WORKFLOW:-v1-byom-api-regression.yml}"
 LIMIT="${CATSCAN_AUDIT_LIMIT:-20}"
@@ -15,8 +15,8 @@ Usage:
   scripts/audit_v1_closeout_remote.sh [options]
 
 Options:
-  --repo <owner/repo>         GitHub repo (default: jenbrannstrom/rtbcat-platform)
-  --branch <name>             Branch to inspect (default: unified-platform)
+  --repo <owner/repo>         GitHub repo (default: YOUR_ORG/rtbcat-platform)
+  --branch <name>             Branch to inspect (default: main)
   --limit <n>                 Max runs per workflow (default: 20)
   --out <path>                Output markdown file path (default: /tmp/v1_closeout_remote_audit_<ts>.md)
   --include-log-snippets      Include short FAIL/BLOCKED snippets from workflow logs
@@ -24,7 +24,7 @@ Options:
 
 Examples:
   scripts/audit_v1_closeout_remote.sh
-  scripts/audit_v1_closeout_remote.sh --branch unified-platform --limit 30
+  scripts/audit_v1_closeout_remote.sh --branch main --limit 30
   scripts/audit_v1_closeout_remote.sh --include-log-snippets
 EOF
 }

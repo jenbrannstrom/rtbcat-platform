@@ -29,7 +29,7 @@ Options:
 
 Examples:
   scripts/check_prod_postgres_migrations.sh
-  scripts/check_prod_postgres_migrations.sh --project catscan-prod-202601
+  scripts/check_prod_postgres_migrations.sh --project your-project-id
   scripts/check_prod_postgres_migrations.sh --status-only
 EOF
 }

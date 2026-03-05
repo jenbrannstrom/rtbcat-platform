@@ -36,7 +36,7 @@ Options:
 
 Examples:
   scripts/audit_prod_click_url_macros.sh
-  scripts/audit_prod_click_url_macros.sh --project catscan-prod-202601 --days 14
+  scripts/audit_prod_click_url_macros.sh --project your-project-id --days 14
   scripts/audit_prod_click_url_macros.sh --buyer-ids 1111111111,1234567890 --per-seat-limit 80
 EOF
 }

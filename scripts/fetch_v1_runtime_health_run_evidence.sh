@@ -2,7 +2,7 @@
 set -euo pipefail
 
 RUN_ID=""
-REPO="${CATSCAN_GH_REPO:-jenbrannstrom/rtbcat-platform}"
+REPO="${CATSCAN_GH_REPO:-YOUR_ORG/rtbcat-platform}"
 OUT_ROOT="${CATSCAN_RUNTIME_HEALTH_ARTIFACT_ROOT:-/tmp}"
 WORKFLOW_ARTIFACT_NAME="${CATSCAN_RUNTIME_HEALTH_ARTIFACT_NAME:-v1-runtime-health-strict-report}"
 SHOW_FULL_LOG=0
@@ -20,7 +20,7 @@ Fetches runtime-health strict evidence for a GitHub Actions run:
 
 Options:
   --run-id <id>           Required GitHub Actions run ID
-  --repo <owner/repo>     Repo (default: jenbrannstrom/rtbcat-platform)
+  --repo <owner/repo>     Repo (default: YOUR_ORG/rtbcat-platform)
   --out-root <dir>        Output root (default: /tmp)
   --artifact <name>       Artifact name (default: v1-runtime-health-strict-report)
   --full-log              Print full log path and tail
