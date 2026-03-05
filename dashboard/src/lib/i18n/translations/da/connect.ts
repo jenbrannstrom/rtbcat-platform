@@ -1,0 +1,41 @@
+import type { PartialTranslations } from '../../types';
+
+const value: PartialTranslations['connect'] = {
+    'title': 'Tilslut',
+    'connectAccount': 'Tilslut konto',
+    'serviceAccount': 'Tjenestekonto',
+    'instructions': 'Følg instruktionerne for at tilslutte din konto',
+    'setupComplete': 'Opsætning fuldført!',
+    'setUpCatScan': 'Opsæt Cat-Scan',
+    'accountConnectedReady': 'Din konto er tilsluttet og klar til analyse',
+    'stepOf': 'Trin {current} af {total}: {title}',
+    'uploadCredentials': 'Upload legitimationsoplysninger',
+    'syncCreatives': 'Synkroniser kreative',
+    'readyToGo': 'Klar',
+    'googleCredentials': 'Google legitimationsoplysninger',
+    'connected': 'Tilsluttet',
+    'serviceAccountConfigured': 'Tjenestekonto konfigureret',
+    'change': 'Skift',
+    'uploading': 'Uploader...',
+    'dropFileHere': 'Slip fil her',
+    'uploadServiceAccountJson': 'Upload tjenestekonto JSON',
+    'dragAndDropOrClick': 'Træk og slip eller klik for at gennemse',
+    'noBuyerSeatsFound': 'Ingen køberpladser fundet',
+    'creatives': 'kreative',
+    'lastSynced': 'Sidst synkroniseret',
+    'syncing': 'Synkroniserer...',
+    'syncNow': 'Synkroniser nu',
+    'readyToAnalyze': 'Klar til analyse',
+    'goToDashboard': 'Gå til dashboard',
+    'discoveredSeats': 'Fandt {count} køberplads(er)',
+    'failedToDiscoverSeats': 'Kunne ikke finde pladser',
+    'connectedAs': 'Tilsluttet som {email}',
+    'uploadFailed': 'Upload mislykkedes',
+    'syncedCreatives': 'Synkroniserede {count} kreative',
+    'syncFailed': 'Synkronisering mislykkedes',
+    'pleaseSelectJsonFile': 'Vælg venligst en JSON-fil',
+    'invalidJsonFile': 'Ugyldig JSON-fil.',
+    'account': 'Konto'
+};
+
+export default value;

@@ -1,0 +1,40 @@
+import type { PartialTranslations } from '../../types';
+
+const value: PartialTranslations['campaigns'] = {
+    'title': 'Кластери креативів',
+    'newCampaign': 'Новий кластер',
+    'grid': 'Сітка',
+    'list': 'Список',
+    'high': 'Високий',
+    'medium': 'Середній',
+    'low': 'Низький',
+    'noData': 'Немає даних',
+    'campaignCount': '{count} кластер',
+    'campaignCountPlural': '{count} кластерів',
+    'unclustered': 'нескластеровані',
+    'analyzing': 'Аналіз...',
+    'dismiss': 'Відхилити',
+    'created': 'Створено',
+    'creating': 'Створення...',
+    'create': 'Створити',
+    'creativeCount': '{count} креатив',
+    'creativeCountPlural': '{count} креативів',
+    'sort': 'Сортувати:',
+    'spend': 'Витрати',
+    'impressions': 'Покази',
+    'clicks': 'Кліки',
+    'name': 'Назва',
+    'allCountries': 'Усі країни',
+    'backToCreativeClusters': 'Повернутися до кластерів креативів',
+    'aiGenerated': 'Згенеровано AI',
+    'periodYesterday': 'Вчора',
+    'periodLast7Days': 'Останні 7 днів',
+    'periodLast30Days': 'Останні 30 днів',
+    'periodAllTime': 'Увесь час',
+    'dailyPerformance': 'Денна продуктивність',
+    'noCreativesInCampaign': 'Немає креативів у цій кампанії',
+    'country': 'Країна',
+    'disapproved': 'Відхилено'
+};
+
+export default value;

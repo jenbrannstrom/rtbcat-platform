@@ -1,0 +1,41 @@
+import type { PartialTranslations } from '../../types';
+
+const value: PartialTranslations['connect'] = {
+    'title': 'Підключити',
+    'connectAccount': 'Підключити акаунт',
+    'serviceAccount': 'Сервісний акаунт',
+    'instructions': 'Дотримуйтесь інструкцій для підключення акаунту',
+    'setupComplete': 'Налаштування завершено!',
+    'setUpCatScan': 'Налаштувати Cat-Scan',
+    'accountConnectedReady': 'Ваш акаунт підключено і готовий до аналізу',
+    'stepOf': 'Крок {current} з {total}: {title}',
+    'uploadCredentials': 'Завантажити облікові дані',
+    'syncCreatives': 'Синхронізувати креативи',
+    'readyToGo': 'Готово',
+    'googleCredentials': 'Облікові дані Google',
+    'connected': 'Підключено',
+    'serviceAccountConfigured': 'Сервісний акаунт налаштовано',
+    'change': 'Змінити',
+    'uploading': 'Завантаження...',
+    'dropFileHere': 'Перетягніть файл сюди',
+    'uploadServiceAccountJson': 'Завантажити JSON сервісного акаунта',
+    'dragAndDropOrClick': 'Перетягніть або натисніть для вибору',
+    'noBuyerSeatsFound': 'Місць покупця не знайдено',
+    'creatives': 'креативи',
+    'lastSynced': 'Остання синхронізація',
+    'syncing': 'Синхронізація...',
+    'syncNow': 'Синхронізувати зараз',
+    'readyToAnalyze': 'Готовий до аналізу',
+    'goToDashboard': 'Перейти до панелі',
+    'discoveredSeats': 'Знайдено {count} місць покупця',
+    'failedToDiscoverSeats': 'Не вдалося знайти місця',
+    'connectedAs': 'Підключено як {email}',
+    'uploadFailed': 'Завантаження не вдалося',
+    'syncedCreatives': 'Синхронізовано {count} креативів',
+    'syncFailed': 'Синхронізація не вдалася',
+    'pleaseSelectJsonFile': 'Виберіть файл JSON',
+    'invalidJsonFile': 'Недійсний файл JSON.',
+    'account': 'Акаунт'
+};
+
+export default value;

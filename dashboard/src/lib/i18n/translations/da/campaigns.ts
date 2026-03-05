@@ -1,0 +1,40 @@
+import type { PartialTranslations } from '../../types';
+
+const value: PartialTranslations['campaigns'] = {
+    'title': 'Kreative klynger',
+    'newCampaign': 'Ny klynge',
+    'grid': 'Gitter',
+    'list': 'Liste',
+    'high': 'Høj',
+    'medium': 'Middel',
+    'low': 'Lav',
+    'noData': 'Ingen data',
+    'campaignCount': '{count} klynge',
+    'campaignCountPlural': '{count} klynger',
+    'unclustered': 'ikke-klynget',
+    'analyzing': 'Analyserer...',
+    'dismiss': 'Afvis',
+    'created': 'Oprettet',
+    'creating': 'Opretter...',
+    'create': 'Opret',
+    'creativeCount': '{count} kreativ',
+    'creativeCountPlural': '{count} kreative',
+    'sort': 'Sorter:',
+    'spend': 'Forbrug',
+    'impressions': 'Visninger',
+    'clicks': 'Klik',
+    'name': 'Navn',
+    'allCountries': 'Alle lande',
+    'backToCreativeClusters': 'Tilbage til kreative klynger',
+    'aiGenerated': 'AI-genereret',
+    'periodYesterday': 'I går',
+    'periodLast7Days': 'Sidste 7 dage',
+    'periodLast30Days': 'Sidste 30 dage',
+    'periodAllTime': 'Al tid',
+    'dailyPerformance': 'Daglig ydelse',
+    'noCreativesInCampaign': 'Ingen kreative i denne kampagne',
+    'country': 'Land',
+    'disapproved': 'Afvist'
+};
+
+export default value;
