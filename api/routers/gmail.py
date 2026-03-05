@@ -3,8 +3,8 @@
 Handles Gmail import status and triggering manual imports.
 """
 
-import hmac
 import logging
+import secrets
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -127,7 +127,7 @@ async def trigger_gmail_import_scheduled(
     """
     secret = get_secrets_manager().get("GMAIL_IMPORT_SECRET")
     header_secret = request.headers.get("X-Gmail-Import-Secret")
-    if not secret or not header_secret or not hmac.compare_digest(header_secret, secret):
+    if not secret or not header_secret or not secrets.compare_digest(header_secret, secret):
         raise HTTPException(status_code=403, detail="Invalid scheduler secret")
 
     try:
