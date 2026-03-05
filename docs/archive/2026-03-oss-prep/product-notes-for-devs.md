@@ -16,7 +16,7 @@ A common issue is ingesting ~50,000 QPS.
 (Think of it like waterfall.)
 About 30,000 of that QPS can be low‑value signal that your bidder ignores because the media buyer doesn’t want that inventory.
 
-![QPS Funnel](../qps-funnel.svg)
+![QPS Funnel](../../qps-funnel.svg)
 
 
 In Google Authorized Buyers platform you only get 10 pretargeting settings per seat, plus a broad geo bucket (EUS, WUS, EU, Asia).
