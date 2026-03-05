@@ -3,6 +3,21 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   output: "standalone",
   devIndicators: false,
+  async redirects() {
+    const docsBase = (process.env.NEXT_PUBLIC_DOCS_SITE_URL || "https://docs.rtb.cat").replace(/\/+$/, "");
+    return [
+      {
+        source: "/docs",
+        destination: docsBase,
+        permanent: true,
+      },
+      {
+        source: "/docs/:path*",
+        destination: `${docsBase}/:path*`,
+        permanent: true,
+      },
+    ];
+  },
   async rewrites() {
     // When OAUTH2_PROXY_MODE is set (GCP deployment), don't rewrite API calls.
     // Let them go through nginx → OAuth2 Proxy → API so the X-Email header is set.

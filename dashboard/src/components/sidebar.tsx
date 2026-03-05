@@ -41,6 +41,7 @@ import {
   toBuyerScopedPath,
 } from "@/lib/buyer-routes";
 import { isRestrictedUser } from "@/lib/feature-gates";
+import { getDocsHomeUrl } from "@/lib/docs-url";
 
 const SIDEBAR_COLLAPSED_KEY = "rtbcat-sidebar-collapsed";
 const SIDEBAR_SETTINGS_EXPANDED_KEY = "rtbcat-sidebar-settings-expanded";
@@ -806,7 +807,7 @@ export function Sidebar() {
                 </span>
                 <span>·</span>
                 <a
-                  href="/docs"
+                  href={getDocsHomeUrl()}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="hover:text-primary-600 transition-colors"
