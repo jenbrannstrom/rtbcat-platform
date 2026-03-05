@@ -24,7 +24,11 @@ import httpx
 from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import RedirectResponse
 
-from api.auth_bootstrap import is_bootstrap_token_required, is_bootstrap_completed
+from api.auth_bootstrap import (
+    is_bootstrap_token_required,
+    is_bootstrap_completed,
+    get_bootstrap_token,
+)
 from api.auth_providers import is_authing_login_enabled
 from services.auth_service import AuthService
 from services.secrets_manager import get_secrets_manager
@@ -95,14 +99,32 @@ def _is_auto_user_provisioning_enabled() -> bool:
 
 
 def _is_trusted_proxy_request(request: Request) -> bool:
-    """Return True when request appears to come from a trusted local/private proxy."""
+    """Return True for loopback or explicitly trusted proxy IPs/CIDRs."""
     if not request.client or not request.client.host:
         return False
     try:
         client_ip = ipaddress.ip_address(request.client.host)
     except ValueError:
         return False
-    return client_ip.is_loopback or client_ip.is_private
+
+    trusted = os.environ.get("OAUTH2_PROXY_TRUSTED_IPS", "").strip()
+    if trusted:
+        for entry in trusted.split(","):
+            token = entry.strip()
+            if not token:
+                continue
+            try:
+                if "/" in token:
+                    if client_ip in ipaddress.ip_network(token, strict=False):
+                        return True
+                else:
+                    if client_ip == ipaddress.ip_address(token):
+                        return True
+            except ValueError:
+                continue
+        return False
+
+    return client_ip.is_loopback
 
 
 def _get_request_scheme(request: Request) -> str:
@@ -333,8 +355,17 @@ async def authing_callback(
         user_id = str(uuid.uuid4())
         user_count = await auth_svc.count_users()
         if user_count == 0 and is_bootstrap_token_required() and not await is_bootstrap_completed():
+            if not get_bootstrap_token():
+                logger.error(
+                    "Blocked Authing first-user auto-sudo for %s (CATSCAN_REQUIRE_BOOTSTRAP_TOKEN=true but CATSCAN_BOOTSTRAP_TOKEN is missing)",
+                    email,
+                )
+                return RedirectResponse(
+                    url="/login?error=Server+bootstrap+token+is+not+configured.+Contact+administrator",
+                    status_code=302,
+                )
             logger.warning(
-                "Blocked Authing first-user auto-sudo for %s (CATSCAN_BOOTSTRAP_TOKEN is set, use /auth/bootstrap)",
+                "Blocked Authing first-user auto-sudo for %s (bootstrap guard enabled; use /auth/bootstrap)",
                 email,
             )
             return RedirectResponse(

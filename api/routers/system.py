@@ -433,7 +433,10 @@ async def health_check(
 
 
 @router.get("/thumbnails/{creative_id}.jpg", tags=["Thumbnails"])
-async def get_thumbnail(creative_id: str) -> FileResponse:
+async def get_thumbnail(
+    creative_id: str,
+    _user: User = Depends(get_current_user),
+) -> FileResponse:
     """Serve locally-generated video thumbnail."""
     thumb_path = Path.home() / ".catscan" / "thumbnails" / f"{creative_id}.jpg"
     if not thumb_path.exists():

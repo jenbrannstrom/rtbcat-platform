@@ -29,6 +29,7 @@ alibabacloud-tea-openapi>=0.3.12
 # Security & Encryption
 cryptography>=41.0.0
 bcrypt>=4.0.0
+passlib[bcrypt]>=1.7.4
 
 # Configuration
 pyyaml>=6.0.1

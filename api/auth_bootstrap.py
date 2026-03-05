@@ -1,12 +1,11 @@
 """Bootstrap endpoint for first-sudo provisioning.
 
-When CATSCAN_BOOTSTRAP_TOKEN is set, the first admin must be created via
-POST /auth/bootstrap with the correct token.  This prevents an attacker
-from racing to become admin on a fresh deploy.
+By default, fresh deployments require a bootstrap token:
+- set CATSCAN_BOOTSTRAP_TOKEN
+- create first admin via POST /auth/bootstrap
 
-When CATSCAN_BOOTSTRAP_TOKEN is *not* set, the legacy behaviour (first
-OAuth/password user auto-promoted to sudo) remains active for dev-friendly
-local workflows.
+Legacy auto-sudo behavior is only available when explicitly enabled with
+CATSCAN_REQUIRE_BOOTSTRAP_TOKEN=false (local/dev workflows).
 """
 
 import logging
@@ -34,13 +33,24 @@ def _get_auth_service() -> AuthService:
     return _auth_service
 
 
+def _env_enabled(name: str, default: bool) -> bool:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in ("1", "true", "yes", "on")
+
+
+def get_bootstrap_token() -> str:
+    return os.environ.get("CATSCAN_BOOTSTRAP_TOKEN", "").strip()
+
+
 # ---------------------------------------------------------------------------
 # Shared helpers (imported by session_middleware, auth_password, auth_authing)
 # ---------------------------------------------------------------------------
 
 def is_bootstrap_token_required() -> bool:
-    """Return True when CATSCAN_BOOTSTRAP_TOKEN is set (production mode)."""
-    return bool(os.environ.get("CATSCAN_BOOTSTRAP_TOKEN", "").strip())
+    """Return True when first-user bootstrap guard is enabled."""
+    return _env_enabled("CATSCAN_REQUIRE_BOOTSTRAP_TOKEN", True)
 
 
 async def is_bootstrap_completed() -> bool:
@@ -86,15 +96,23 @@ async def bootstrap_first_admin(
     """Create the first sudo user using the bootstrap token.
 
     Requires:
-    - CATSCAN_BOOTSTRAP_TOKEN env var is set
+    - bootstrap guard enabled and CATSCAN_BOOTSTRAP_TOKEN set
     - No users exist yet (bootstrap not completed)
     - Token in request matches env var
     """
-    expected_token = os.environ.get("CATSCAN_BOOTSTRAP_TOKEN", "").strip()
+    expected_token = get_bootstrap_token()
     if not expected_token:
+        if is_bootstrap_token_required():
+            raise HTTPException(
+                status_code=503,
+                detail=(
+                    "Bootstrap token is required but missing. "
+                    "Set CATSCAN_BOOTSTRAP_TOKEN to initialize the first admin."
+                ),
+            )
         raise HTTPException(
             status_code=403,
-            detail="Bootstrap endpoint is disabled (no CATSCAN_BOOTSTRAP_TOKEN configured).",
+            detail="Bootstrap endpoint is disabled (set CATSCAN_REQUIRE_BOOTSTRAP_TOKEN=true to enable).",
         )
 
     if await is_bootstrap_completed():

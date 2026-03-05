@@ -10,12 +10,14 @@ Password hashing uses bcrypt via passlib.
 import os
 import uuid
 import logging
+import threading
+import time
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Request, Response
 from pydantic import BaseModel, EmailStr
 
-from api.auth_bootstrap import is_bootstrap_token_required, is_bootstrap_completed
+from api.auth_bootstrap import is_bootstrap_token_required, is_bootstrap_completed, get_bootstrap_token
 from api.auth_providers import is_password_login_enabled
 from services.auth_service import AuthService
 
@@ -29,38 +31,25 @@ router = APIRouter(prefix="/auth", tags=["Password Authentication"])
 
 # ==================== Password Hashing ====================
 
-# Try to import passlib, fall back to hashlib if not available
 try:
     from passlib.context import CryptContext
-    pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
-    def hash_password(password: str) -> str:
-        """Hash a password using bcrypt."""
-        return pwd_context.hash(password)
-
-    def verify_password(plain_password: str, hashed_password: str) -> bool:
-        """Verify a password against a hash."""
-        return pwd_context.verify(plain_password, hashed_password)
-
 except ImportError:
-    # Fallback to hashlib (less secure but works without extra deps)
-    import hashlib
+    raise RuntimeError(
+        "passlib is required for secure password hashing. Install dependency: passlib[bcrypt]."
+    )
 
-    def hash_password(password: str) -> str:
-        """Hash a password using SHA-256 (fallback)."""
-        salt = os.urandom(32)
-        hash_obj = hashlib.pbkdf2_hmac('sha256', password.encode(), salt, 100000)
-        return f"{salt.hex()}:{hash_obj.hex()}"
 
-    def verify_password(plain_password: str, hashed_password: str) -> bool:
-        """Verify a password against a hash (fallback)."""
-        try:
-            salt_hex, hash_hex = hashed_password.split(":")
-            salt = bytes.fromhex(salt_hex)
-            hash_obj = hashlib.pbkdf2_hmac('sha256', plain_password.encode(), salt, 100000)
-            return hash_obj.hex() == hash_hex
-        except (ValueError, AttributeError):
-            return False
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+
+def hash_password(password: str) -> str:
+    """Hash a password using bcrypt."""
+    return pwd_context.hash(password)
+
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    """Verify a password against a hash."""
+    return pwd_context.verify(plain_password, hashed_password)
 
 
 # ==================== Request/Response Models ====================
@@ -125,6 +114,81 @@ def _is_single_user_mode() -> bool:
     return raw in ("1", "true", "yes")
 
 
+def _parse_positive_int(name: str, default: int) -> int:
+    raw = os.environ.get(name, "").strip()
+    if not raw:
+        return default
+    try:
+        value = int(raw)
+        return value if value > 0 else default
+    except ValueError:
+        return default
+
+
+_LOGIN_RATE_LIMIT_MAX_ATTEMPTS = _parse_positive_int("CATSCAN_LOGIN_MAX_ATTEMPTS", 10)
+_LOGIN_RATE_LIMIT_WINDOW_SECONDS = _parse_positive_int("CATSCAN_LOGIN_WINDOW_SECONDS", 900)
+_LOGIN_RATE_LIMIT_LOCKOUT_SECONDS = _parse_positive_int("CATSCAN_LOGIN_LOCKOUT_SECONDS", 900)
+_login_rate_limit_lock = threading.Lock()
+_login_attempts: dict[str, list[float]] = {}
+_login_lockouts: dict[str, float] = {}
+
+
+def _login_rate_limit_keys(email: str, client_ip: Optional[str]) -> tuple[str, str]:
+    return f"email:{email}", f"ip:{client_ip or 'unknown'}"
+
+
+def _prune_login_rate_limit_state(now: float) -> None:
+    cutoff = now - _LOGIN_RATE_LIMIT_WINDOW_SECONDS
+
+    for key in list(_login_attempts.keys()):
+        recent = [ts for ts in _login_attempts[key] if ts >= cutoff]
+        if recent:
+            _login_attempts[key] = recent
+        else:
+            _login_attempts.pop(key, None)
+
+    for key in list(_login_lockouts.keys()):
+        if _login_lockouts[key] <= now:
+            _login_lockouts.pop(key, None)
+
+
+def _check_login_rate_limit(email: str, client_ip: Optional[str]) -> None:
+    now = time.time()
+    with _login_rate_limit_lock:
+        _prune_login_rate_limit_state(now)
+        lockout_until = max(
+            (_login_lockouts.get(key, 0.0) for key in _login_rate_limit_keys(email, client_ip)),
+            default=0.0,
+        )
+
+    if lockout_until > now:
+        retry_after = max(1, int(lockout_until - now))
+        raise HTTPException(
+            status_code=429,
+            detail="Too many login attempts. Please try again later.",
+            headers={"Retry-After": str(retry_after)},
+        )
+
+
+def _record_login_failure(email: str, client_ip: Optional[str]) -> None:
+    now = time.time()
+    with _login_rate_limit_lock:
+        _prune_login_rate_limit_state(now)
+        for key in _login_rate_limit_keys(email, client_ip):
+            attempts = _login_attempts.setdefault(key, [])
+            attempts.append(now)
+            if len(attempts) >= _LOGIN_RATE_LIMIT_MAX_ATTEMPTS:
+                _login_lockouts[key] = now + _LOGIN_RATE_LIMIT_LOCKOUT_SECONDS
+                _login_attempts.pop(key, None)
+
+
+def _clear_login_failures(email: str, client_ip: Optional[str]) -> None:
+    with _login_rate_limit_lock:
+        for key in _login_rate_limit_keys(email, client_ip):
+            _login_attempts.pop(key, None)
+            _login_lockouts.pop(key, None)
+
+
 # ==================== Auth Endpoints ====================
 
 @router.post("/login", response_model=AuthResponse)
@@ -138,11 +202,15 @@ async def login(request: Request, response: Response, login_data: LoginRequest):
 
     auth_svc = get_auth_service()
     email = login_data.email.lower().strip()
+    client_ip = _get_client_ip(request)
+
+    _check_login_rate_limit(email, client_ip)
 
     # Find user by email
     user = await auth_svc.get_user_by_email(email)
 
     if not user:
+        _record_login_failure(email, client_ip)
         # Don't reveal whether email exists
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
@@ -158,6 +226,7 @@ async def login(request: Request, response: Response, login_data: LoginRequest):
 
     # Verify password
     if not verify_password(login_data.password, password_hash):
+        _record_login_failure(email, client_ip)
         # Log failed attempt
         await auth_svc.log_audit(
             audit_id=str(uuid.uuid4()),
@@ -165,13 +234,15 @@ async def login(request: Request, response: Response, login_data: LoginRequest):
             user_id=user.id,
             resource_type="auth",
             details="invalid_password",
-            ip_address=_get_client_ip(request),
+            ip_address=client_ip,
         )
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
     # Check if user is active
     if not user.is_active:
         raise HTTPException(status_code=403, detail="Account is deactivated")
+
+    _clear_login_failures(email, client_ip)
 
     # Update last login
     await auth_svc.update_last_login(user.id)
@@ -181,7 +252,7 @@ async def login(request: Request, response: Response, login_data: LoginRequest):
     await auth_svc.create_session(
         session_id=session_id,
         user_id=user.id,
-        ip_address=_get_client_ip(request),
+        ip_address=client_ip,
         user_agent=request.headers.get("User-Agent"),
         duration_days=30,
     )
@@ -193,7 +264,7 @@ async def login(request: Request, response: Response, login_data: LoginRequest):
         user_id=user.id,
         resource_type="auth",
         details="password",
-        ip_address=_get_client_ip(request),
+        ip_address=client_ip,
     )
 
     # Set session cookie
@@ -246,6 +317,14 @@ async def register(request: Request, response: Response, register_data: Register
     is_first_user = user_count == 0
 
     if is_first_user and is_bootstrap_token_required() and not await is_bootstrap_completed():
+        if not get_bootstrap_token():
+            raise HTTPException(
+                status_code=503,
+                detail=(
+                    "Server bootstrap is required but not configured. "
+                    "Set CATSCAN_BOOTSTRAP_TOKEN and create the first admin via /auth/bootstrap."
+                ),
+            )
         raise HTTPException(
             status_code=403,
             detail="First admin must be created via /auth/bootstrap with the bootstrap token.",

@@ -41,7 +41,7 @@ def generate_api_key() -> str:
 
 def is_public_path(path: str) -> bool:
     """Check if the path is public (no auth required)."""
-    return path in PUBLIC_PATHS or path.startswith("/docs") or path.startswith("/redoc") or path.startswith("/thumbnails/")
+    return path in PUBLIC_PATHS or path.startswith("/docs") or path.startswith("/redoc")
 
 
 class APIKeyAuthMiddleware(BaseHTTPMiddleware):

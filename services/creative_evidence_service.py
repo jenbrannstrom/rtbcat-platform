@@ -20,6 +20,8 @@ from pathlib import Path
 from typing import Optional
 from xml.etree import ElementTree
 
+from services.url_safety import is_safe_public_http_url
+
 logger = logging.getLogger(__name__)
 
 
@@ -304,6 +306,10 @@ class CreativeEvidenceService:
         return match.group(0) if match else None
 
     def _get_video_duration(self, video_url: str) -> Optional[float]:
+        if not is_safe_public_http_url(video_url):
+            logger.warning("Blocked ffprobe duration check for unsafe video URL")
+            return None
+
         ffprobe = shutil.which("ffprobe")
         if not ffprobe:
             return None
@@ -327,6 +333,13 @@ class CreativeEvidenceService:
         self, creative_id: str, video_url: str, max_frames: int = 4
     ) -> list[str]:
         """Extract evenly-spaced frames from a video. Returns list of file paths."""
+        if not is_safe_public_http_url(video_url):
+            logger.warning(
+                "Blocked video frame extraction for unsafe URL",
+                extra={"creative_id": creative_id},
+            )
+            return []
+
         ffmpeg_path = shutil.which("ffmpeg")
         if not ffmpeg_path:
             logger.debug("ffmpeg not available, skipping video frame extraction")
