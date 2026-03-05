@@ -25,6 +25,7 @@ from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import RedirectResponse
 
 from api.auth_bootstrap import is_bootstrap_token_required, is_bootstrap_completed
+from api.auth_providers import is_authing_login_enabled
 from services.auth_service import AuthService
 from services.secrets_manager import get_secrets_manager
 
@@ -165,6 +166,9 @@ async def authing_login(request: Request, callback_url: str = "/"):
     Args:
         callback_url: URL to redirect to after successful login (default: /)
     """
+    if not is_authing_login_enabled():
+        raise HTTPException(status_code=404, detail="Authing login is disabled")
+
     config = get_authing_config()
     safe_callback_url = _sanitize_callback_url(callback_url)
 
@@ -209,6 +213,12 @@ async def authing_callback(
 
     Exchanges authorization code for tokens, creates/updates user, creates session.
     """
+    if not is_authing_login_enabled():
+        return RedirectResponse(
+            url="/login?error=Authing+login+is+disabled",
+            status_code=302,
+        )
+
     # Handle errors from Authing
     if error:
         logger.error(f"Authing error: {error} - {error_description}")

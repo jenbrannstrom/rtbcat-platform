@@ -7,12 +7,88 @@
  * - Username/Password
  */
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Mail, Lock, AlertCircle, Loader2 } from "lucide-react";
 import { useTranslation } from "@/contexts/i18n-context";
 
-type AuthMethod = "select" | "password" | "authing" | "google";
+type ProviderMethod = "password" | "authing" | "google";
+type AuthMethod = "select" | "password";
+
+interface AuthProvidersResponse {
+  password: boolean;
+  authing: boolean;
+  google: boolean;
+  enabled_methods: ProviderMethod[];
+  default_method: ProviderMethod;
+}
+
+const METHOD_ORDER: ProviderMethod[] = ["authing", "google", "password"];
+
+function getBuildTimeProviderDefaults(): AuthProvidersResponse {
+  const authing = process.env.NEXT_PUBLIC_ENABLE_AUTHING_LOGIN === "true";
+  const google = process.env.NEXT_PUBLIC_ENABLE_GOOGLE_LOGIN === "true";
+  const password = true;
+
+  const enabled_methods = METHOD_ORDER.filter((method) => {
+    if (method === "authing") return authing;
+    if (method === "google") return google;
+    return password;
+  });
+
+  const default_method = enabled_methods[0] || "password";
+
+  return {
+    password,
+    authing,
+    google,
+    enabled_methods,
+    default_method,
+  };
+}
+
+function normalizeProviderResponse(
+  value: unknown,
+  fallback: AuthProvidersResponse,
+): AuthProvidersResponse {
+  if (!value || typeof value !== "object") {
+    return fallback;
+  }
+
+  const record = value as Record<string, unknown>;
+  const password = typeof record.password === "boolean" ? record.password : fallback.password;
+  const authing = typeof record.authing === "boolean" ? record.authing : fallback.authing;
+  const google = typeof record.google === "boolean" ? record.google : fallback.google;
+
+  const enabled_methods = METHOD_ORDER.filter((method) => {
+    if (method === "authing") return authing;
+    if (method === "google") return google;
+    return password;
+  });
+
+  const requestedDefault = typeof record.default_method === "string"
+    ? (record.default_method as ProviderMethod)
+    : fallback.default_method;
+
+  const default_method = enabled_methods.includes(requestedDefault)
+    ? requestedDefault
+    : (enabled_methods[0] || "password");
+
+  return {
+    password,
+    authing,
+    google,
+    enabled_methods,
+    default_method,
+  };
+}
+
+function getInitialAuthMethod(providers: AuthProvidersResponse): AuthMethod {
+  if (!providers.authing && !providers.google && providers.password) {
+    return "password";
+  }
+  return "select";
+}
 
 export default function LoginPage() {
   const router = useRouter();
@@ -20,21 +96,83 @@ export default function LoginPage() {
   const { t } = useTranslation();
   const callbackUrl = searchParams.get("callbackUrl") || "/";
   const error = searchParams.get("error");
-  const enableAuthingLogin = process.env.NEXT_PUBLIC_ENABLE_AUTHING_LOGIN === "true";
-  const enableGoogleLogin = process.env.NEXT_PUBLIC_ENABLE_GOOGLE_LOGIN === "true";
-  const showExternalLogins = enableAuthingLogin || enableGoogleLogin;
 
+  const buildTimeDefaults = useMemo(() => getBuildTimeProviderDefaults(), []);
+  const [providers, setProviders] = useState<AuthProvidersResponse>(buildTimeDefaults);
   const [authMethod, setAuthMethod] = useState<AuthMethod>(
-    showExternalLogins ? "select" : "password"
+    getInitialAuthMethod(buildTimeDefaults),
   );
+  const [authMethodManuallyChosen, setAuthMethodManuallyChosen] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState(error || "");
 
+  const enableAuthingLogin = providers.authing;
+  const enableGoogleLogin = providers.google;
+  const enablePasswordLogin = providers.password;
+  const showExternalLogins = enableAuthingLogin || enableGoogleLogin;
+  const noLoginMethods = !showExternalLogins && !enablePasswordLogin;
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadProviders = async () => {
+      try {
+        const response = await fetch("/api/auth/providers", {
+          credentials: "include",
+        });
+
+        if (!response.ok) {
+          return;
+        }
+
+        const json = await response.json().catch(() => null);
+        if (!cancelled) {
+          setProviders(normalizeProviderResponse(json, buildTimeDefaults));
+        }
+      } catch {
+        // Keep build-time fallback when provider discovery fails.
+      }
+    };
+
+    loadProviders();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [buildTimeDefaults]);
+
+  useEffect(() => {
+    if (!authMethodManuallyChosen && authMethod === "password" && showExternalLogins) {
+      setAuthMethod("select");
+      return;
+    }
+
+    if (authMethod === "password" && !enablePasswordLogin) {
+      setAuthMethod("select");
+      return;
+    }
+
+    if (authMethod === "select" && !showExternalLogins && enablePasswordLogin) {
+      setAuthMethod("password");
+    }
+  }, [
+    authMethod,
+    authMethodManuallyChosen,
+    enablePasswordLogin,
+    showExternalLogins,
+  ]);
+
   // Handle password login
   const handlePasswordLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!enablePasswordLogin) {
+      setErrorMessage("Email/password login is disabled on this deployment.");
+      return;
+    }
+
     setIsLoading(true);
     setErrorMessage("");
 
@@ -74,6 +212,11 @@ export default function LoginPage() {
 
   // Handle Authing login - redirect to Authing OIDC
   const handleAuthingLogin = () => {
+    if (!enableAuthingLogin) {
+      setErrorMessage("Authing login is not available on this deployment.");
+      return;
+    }
+
     setIsLoading(true);
     // Redirect to backend Authing auth endpoint
     window.location.href = `/api/auth/authing/login?callback_url=${encodeURIComponent(callbackUrl)}`;
@@ -81,6 +224,11 @@ export default function LoginPage() {
 
   // Handle Google login - redirect to OAuth2 Proxy
   const handleGoogleLogin = () => {
+    if (!enableGoogleLogin) {
+      setErrorMessage("Google login is not available on this deployment.");
+      return;
+    }
+
     setIsLoading(true);
     // Redirect to OAuth2 Proxy sign-in
     window.location.href = `/oauth2/sign_in?rd=${encodeURIComponent(callbackUrl)}`;
@@ -108,7 +256,15 @@ export default function LoginPage() {
             </div>
           )}
 
-          {authMethod === "select" && (
+          {noLoginMethods && (
+            <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
+              <p className="text-sm text-amber-800">
+                No login methods are enabled. Configure Authing, Google OAuth2 Proxy, or password login.
+              </p>
+            </div>
+          )}
+
+          {authMethod === "select" && !noLoginMethods && (
             <div className="space-y-4">
               <h2 className="text-lg font-semibold text-gray-900 text-center mb-6">
                 {t.auth.signInToContinue}
@@ -165,30 +321,37 @@ export default function LoginPage() {
                     </button>
                   )}
 
-                  <div className="relative my-6">
-                    <div className="absolute inset-0 flex items-center">
-                      <div className="w-full border-t border-gray-200" />
+                  {enablePasswordLogin && (
+                    <div className="relative my-6">
+                      <div className="absolute inset-0 flex items-center">
+                        <div className="w-full border-t border-gray-200" />
+                      </div>
+                      <div className="relative flex justify-center text-sm">
+                        <span className="px-2 bg-white text-gray-500">{t.auth.orSeparator}</span>
+                      </div>
                     </div>
-                    <div className="relative flex justify-center text-sm">
-                      <span className="px-2 bg-white text-gray-500">{t.auth.orSeparator}</span>
-                    </div>
-                  </div>
+                  )}
                 </>
               )}
 
               {/* Password Login Button */}
-              <button
-                onClick={() => setAuthMethod("password")}
-                disabled={isLoading}
-                className="w-full flex items-center justify-center gap-3 px-4 py-3 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50"
-              >
-                <Mail className="w-5 h-5" />
-                {t.auth.signInWithEmail}
-              </button>
+              {enablePasswordLogin && (
+                <button
+                  onClick={() => {
+                    setAuthMethodManuallyChosen(true);
+                    setAuthMethod("password");
+                  }}
+                  disabled={isLoading}
+                  className="w-full flex items-center justify-center gap-3 px-4 py-3 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50"
+                >
+                  <Mail className="w-5 h-5" />
+                  {t.auth.signInWithEmail}
+                </button>
+              )}
             </div>
           )}
 
-          {authMethod === "password" && (
+          {authMethod === "password" && enablePasswordLogin && (
             <form onSubmit={handlePasswordLogin} className="space-y-4">
               {showExternalLogins && (
                 <button

@@ -10,7 +10,7 @@ Cat-Scan supports three login methods. All three produce the same session cookie
 | **Google (OAuth2 Proxy)** | Redirects through `/oauth2/sign_in` | Teams already on Google Workspace |
 | **Authing (OIDC)** | Redirects through `/api/auth/authing/login` | Teams using Authing identity pool |
 
-The login page at `/login` presents all three options.
+The login page at `/login` discovers enabled providers from `GET /api/auth/providers` at runtime and shows only valid options.
 
 ## Who can log in?
 
@@ -84,7 +84,7 @@ Registration is already locked down by default:
 | **Disable self-registration** | Automatic -- after the first user, only admins can call `/api/auth/register` |
 | **Restrict Google login domains** | Edit `email_domains` in `/etc/oauth2-proxy.cfg` on the VM (currently `["rtb.cat"]`) |
 | **Restrict Authing login** | Configure allowed users/groups in your Authing application settings |
-| **Disable a login method entirely** | Remove the env vars (e.g. unset `AUTHING_APP_ID` to hide Authing, or stop the `oauth2-proxy` service to disable Google) |
+| **Disable a login method entirely** | Set `CATSCAN_ENABLE_AUTHING_LOGIN=false`, `CATSCAN_ENABLE_GOOGLE_LOGIN=false`, or `CATSCAN_ENABLE_PASSWORD_LOGIN=false` |
 | **Deactivate a specific user** | Set `is_active = false` via admin panel at `/admin/users` -- they'll get `403 Account is deactivated` |
 
 ## Password requirements
@@ -135,6 +135,10 @@ The nginx config is stored in the repo at `terraform/gcp_sg_vm2/nginx-catscan.co
 
 | Variable | Required for | Example |
 |----------|-------------|---------|
+| `CATSCAN_ENABLE_PASSWORD_LOGIN` | Password login toggle | `true` |
+| `CATSCAN_ENABLE_GOOGLE_LOGIN` | Google login toggle | `true` |
+| `CATSCAN_ENABLE_AUTHING_LOGIN` | Authing login toggle | `true` |
+| `CATSCAN_DEFAULT_LOGIN_METHOD` | Preferred default when multiple enabled | `authing` |
 | `OAUTH2_PROXY_ENABLED` | Google login | `true` |
 | `AUTHING_APP_ID` | Authing login | `6abc...` |
 | `AUTHING_APP_SECRET` | Authing login | `secret...` |

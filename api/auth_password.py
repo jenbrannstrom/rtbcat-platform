@@ -16,6 +16,7 @@ from fastapi import APIRouter, HTTPException, Request, Response
 from pydantic import BaseModel, EmailStr
 
 from api.auth_bootstrap import is_bootstrap_token_required, is_bootstrap_completed
+from api.auth_providers import is_password_login_enabled
 from services.auth_service import AuthService
 
 logger = logging.getLogger(__name__)
@@ -132,6 +133,9 @@ async def login(request: Request, response: Response, login_data: LoginRequest):
 
     Returns session cookie on success.
     """
+    if not is_password_login_enabled():
+        raise HTTPException(status_code=404, detail="Password login is disabled")
+
     auth_svc = get_auth_service()
     email = login_data.email.lower().strip()
 
@@ -222,6 +226,9 @@ async def register(request: Request, response: Response, register_data: Register
     First user becomes sudo. Subsequent registrations require sudo approval
     (via admin user management) or can be done by sudo users.
     """
+    if not is_password_login_enabled():
+        raise HTTPException(status_code=404, detail="Password login is disabled")
+
     auth_svc = get_auth_service()
     email = register_data.email.lower().strip()
 
@@ -332,6 +339,9 @@ async def set_password(request: Request, password_data: dict):
 
     Allows users who logged in via OAuth to set a password for direct login.
     """
+    if not is_password_login_enabled():
+        raise HTTPException(status_code=404, detail="Password login is disabled")
+
     if not hasattr(request.state, "user") or not request.state.user:
         raise HTTPException(status_code=401, detail="Authentication required")
 

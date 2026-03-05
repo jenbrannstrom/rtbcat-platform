@@ -15,6 +15,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Request, Response
 from pydantic import BaseModel
 
+from api.auth_providers import get_auth_provider_status
 from services.auth_service import AuthService
 
 # Session cookie name (used by OAuth2 Proxy flow)
@@ -37,6 +38,16 @@ class UserInfo(BaseModel):
     # RBAC v2 fields
     global_role: Optional[str] = None  # "sudo" for global users, else None
     seat_permissions: Optional[dict[str, str]] = None  # {buyer_id: "read"|"admin"}
+
+
+class AuthProvidersResponse(BaseModel):
+    """Runtime auth provider availability for the login page."""
+
+    password: bool
+    google: bool
+    authing: bool
+    enabled_methods: list[str]
+    default_method: str
 
 
 # ==================== Helper Functions ====================
@@ -176,6 +187,12 @@ async def check_auth_status(request: Request):
         "authenticated": False,
         "user": None,
     }
+
+
+@router.get("/providers", response_model=AuthProvidersResponse)
+async def get_auth_providers():
+    """Return enabled login providers so UI can present valid choices."""
+    return AuthProvidersResponse(**get_auth_provider_status())
 
 
 # ==================== Maintenance Functions ====================

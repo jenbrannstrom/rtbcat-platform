@@ -47,6 +47,10 @@ services:
       - RTBCAT_ADMIN_EMAIL=${RTBCAT_ADMIN_EMAIL:-}
       - RTBCAT_ADMIN_PASSWORD=${RTBCAT_ADMIN_PASSWORD:-}
       - APP_VERSION=${IMAGE_TAG:-unknown}
+      - CATSCAN_ENABLE_PASSWORD_LOGIN=${CATSCAN_ENABLE_PASSWORD_LOGIN:-true}
+      - CATSCAN_ENABLE_GOOGLE_LOGIN=${CATSCAN_ENABLE_GOOGLE_LOGIN:-true}
+      - CATSCAN_ENABLE_AUTHING_LOGIN=${CATSCAN_ENABLE_AUTHING_LOGIN:-true}
+      - CATSCAN_DEFAULT_LOGIN_METHOD=${CATSCAN_DEFAULT_LOGIN_METHOD:-}
     restart: always
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
