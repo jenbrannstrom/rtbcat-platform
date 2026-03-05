@@ -157,6 +157,7 @@ async def refresh_home_summaries(
                 SUM(auctions_won) AS auctions_won
             FROM `{bidstream_table}`
             WHERE metric_date IN UNNEST(@dates)
+              AND report_type = 'rtb_bidstream_publisher'
               AND buyer_account_id IS NOT NULL
               AND buyer_account_id != ''{buyer_clause}
             GROUP BY metric_date, buyer_account_id
@@ -186,6 +187,7 @@ async def refresh_home_summaries(
                 SUM(auctions_won) AS auctions_won
             FROM `{bidstream_table}`
             WHERE metric_date IN UNNEST(@dates)
+              AND report_type = 'rtb_bidstream_publisher'
               AND buyer_account_id IS NOT NULL
               AND buyer_account_id != ''
               AND publisher_id IS NOT NULL
@@ -216,6 +218,7 @@ async def refresh_home_summaries(
                 SUM(auctions_won) AS auctions_won
             FROM `{bidstream_table}`
             WHERE metric_date IN UNNEST(@dates)
+              AND report_type = 'rtb_bidstream_publisher'
               AND buyer_account_id IS NOT NULL
               AND buyer_account_id != ''
               AND country IS NOT NULL
