@@ -667,6 +667,8 @@ Legend: ☐ = not started, ☑ = done, ◐ = in progress.
 - [ ] **Publisher Performance (rescoped)** - Objective: guarantee correct publisher labeling across sources; Current: title behavior is implemented; Acceptance: blank-name fallback is correct across all source variants.
 - [ ] **Size Analysis (rescoped)** - Objective: finalize seat-wide/two-column analysis behavior; Current: baseline behavior exists; Acceptance: acceptance criteria and edge-case validations pass.
 - [ ] **Geographic Performance (rescoped)** - Objective: finalize geo totals/sorting presentation; Current: title/sort behaviors exist; Acceptance: totals integrity and iconography match spec.
+  - [x] P2 root-cause fix (2026-03-04): `home_precompute` bidstream aggregates now explicitly scope to `report_type='rtb_bidstream_publisher'` for seat/publisher/geo rollups (commit `55369c7`), preventing mixed report semantics from inflating wins/impressions against zero/low reached rows.
+  - [ ] Post-fix operational closeout: rerun home precompute backfill for recent windows and verify invariants (`geo win_rate <= 100`, `auctions_won <= bids` where applicable, stable observed QPS feed coverage).
 
 ### Home Validation
 - [ ] **Data correctness checks** - Objective: enforce key metric invariants; Current: checks are not uniformly codified; Acceptance: `bids <= reached` (where applicable) plus inconsistency warnings are automated.
