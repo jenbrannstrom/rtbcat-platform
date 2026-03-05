@@ -83,6 +83,7 @@ Temporary waiver note (March 5, 2026):
 
 - `CATSCAN_RUNTIME_HEALTH_MAX_HOME_ENDPOINT_EFFICIENCY_LATENCY_MS=30000` may be used only while 168h QPS page SLO history still contains pre-fix `/analytics/home/endpoint-efficiency` outliers.
 - Waiver expiry: **March 12, 2026**.
+- Workflow guardrail variable: `CATSCAN_RUNTIME_HEALTH_ENDPOINT_EFFICIENCY_BUDGET_WAIVER_EXPIRES_ON` (defaults to `2026-03-12`).
 - On/after expiry, restore `CATSCAN_RUNTIME_HEALTH_MAX_HOME_ENDPOINT_EFFICIENCY_LATENCY_MS=12000` and rerun:
 
 ```bash
