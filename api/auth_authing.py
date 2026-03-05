@@ -17,6 +17,7 @@ import secrets
 import urllib.parse
 import re
 import os
+import ipaddress
 from typing import Optional
 
 import httpx
@@ -128,23 +129,83 @@ def _sanitize_callback_url(callback_url: str) -> str:
 def _normalize_host(value: str) -> Optional[str]:
     """Normalize and validate Host header style values."""
     host = (value or "").strip()
-    if not host or "/" in host or "\\" in host or " " in host:
+    if not host or "/" in host or "\\" in host or " " in host or "@" in host:
         return None
-    if not re.fullmatch(r"[A-Za-z0-9.\-:]+", host):
+
+    try:
+        parsed = urllib.parse.urlsplit(f"//{host}")
+    except ValueError:
         return None
-    return host
+
+    hostname = parsed.hostname
+    if not hostname:
+        return None
+
+    try:
+        port = parsed.port
+    except ValueError:
+        return None
+
+    try:
+        ipaddress.ip_address(hostname)
+    except ValueError:
+        # Domain validation
+        if not re.fullmatch(r"[A-Za-z0-9.\-]+", hostname):
+            return None
+        if hostname.startswith(".") or hostname.endswith("."):
+            return None
+
+    normalized_host = hostname
+    if ":" in hostname and not hostname.startswith("["):
+        # Bracket IPv6 literals when reconstructing host:port.
+        normalized_host = f"[{hostname}]"
+
+    if port:
+        return f"{normalized_host}:{port}"
+    return normalized_host
+
+
+def _get_public_base_url() -> Optional[str]:
+    """Optional fixed public base URL for auth redirects.
+
+    When configured, this is preferred over Host/X-Forwarded-Host to avoid
+    host-header-derived callback URLs.
+    """
+    raw = os.environ.get("CATSCAN_PUBLIC_BASE_URL", "").strip()
+    if not raw:
+        return None
+
+    parsed = urllib.parse.urlparse(raw)
+    if parsed.scheme not in {"http", "https"}:
+        logger.warning("Ignoring CATSCAN_PUBLIC_BASE_URL with invalid scheme")
+        return None
+
+    host = _normalize_host(parsed.netloc)
+    if not host:
+        logger.warning("Ignoring CATSCAN_PUBLIC_BASE_URL with invalid host")
+        return None
+
+    return f"{parsed.scheme}://{host}"
 
 
 def _get_callback_url(request: Request) -> str:
     """Build the callback URL for Authing redirect."""
+    configured_base = _get_public_base_url()
+    if configured_base:
+        return f"{configured_base}/api/auth/authing/callback"
+
     scheme = _get_request_scheme(request)
-    host = _normalize_host(request.url.netloc) or request.url.netloc
+    host = _normalize_host(request.url.netloc)
     if _is_trusted_proxy_request(request):
         forwarded_host = request.headers.get("X-Forwarded-Host")
         if forwarded_host:
             # RFC7239-style forwarding can include multiple hosts; use left-most
             forwarded_value = forwarded_host.split(",")[0].strip()
             host = _normalize_host(forwarded_value) or host
+
+    if not host:
+        raise HTTPException(status_code=400, detail="Invalid Host header")
+
     return f"{scheme}://{host}/api/auth/authing/callback"
 
 
