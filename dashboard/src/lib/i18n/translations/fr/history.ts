@@ -6,7 +6,7 @@ const value: PartialTranslations['history'] = {
     'trackAndRollback': 'Suivez et annulez les modifications de configuration du pretargeting',
     'noChanges': 'Aucune modification enregistrée',
     'noChangesFound': 'Aucune modification trouvée',
-    'tryAdjustingFilters': 'Essayez d'ajuster vos filtres.',
+    'tryAdjustingFilters': 'Essayez d\'ajuster vos filtres.',
     'changesWillAppear': 'Les modifications de configuration apparaîtront ici.',
     'change': 'Modification',
     'user': 'Utilisateur',
@@ -32,10 +32,10 @@ const value: PartialTranslations['history'] = {
     'rollbackWarning': 'Cela restaurera le paramètre précédent. Vous devrez appliquer la modification manuellement dans Google Authorized Buyers.',
     'noSnapshotAvailableForChange': 'Aucun snapshot disponible pour cette modification.',
     'previewingRollback': 'Aperçu de la restauration…',
-    'failedToPreviewRollback': 'Échec de l'aperçu de la restauration',
+    'failedToPreviewRollback': 'Échec de l\'aperçu de la restauration',
     'noDifferencesFoundBetweenCurrentAndSnapshot': 'Aucune différence trouvée entre la config actuelle et le snapshot.',
     'changesWillBeReversedOnGoogle': 'Ces modifications seront annulées sur Google :',
-    'rollbackPushesToGoogleImmediately': 'Cela envoie à Google immédiatement. Une entrée \'ROLLBACK\' sera enregistrée dans l'historique.',
+    'rollbackPushesToGoogleImmediately': 'Cela envoie à Google immédiatement. Une entrée \'ROLLBACK\' sera enregistrée dans l\'historique.',
     'reasonForRollback': 'Raison de la restauration',
     'whyRollingBack': 'Pourquoi restaurez-vous cette modification ?',
     'cancel': 'Annuler',
@@ -46,7 +46,7 @@ const value: PartialTranslations['history'] = {
     'daysAgo': 'j',
     'hoursAgo': 'h',
     'minutesAgo': 'min',
-    'justNow': 'à l'instant',
+    'justNow': 'à l\'instant',
     'rollbackFailed': 'La restauration a échoué'
 };
 

@@ -9,7 +9,7 @@ const value: PartialTranslations['admin'] = {
     'users': 'Користувачі',
     'user': 'Користувач',
     'email': 'Електронна пошта',
-    'displayName': 'Відображуване ім'я',
+    'displayName': 'Відображуване ім\'я',
     'active': 'Активний',
     'role': 'Роль',
     'permissions': 'Дозволи',

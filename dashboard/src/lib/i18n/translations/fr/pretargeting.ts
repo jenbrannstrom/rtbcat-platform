@@ -16,7 +16,7 @@ const value: PartialTranslations['pretargeting'] = {
     'historyShort': 'Historique',
     'fullEditor': 'Éditeur complet',
     'lastPushed': 'Dernier envoi :',
-    'adSizes': 'Tailles d'annonces',
+    'adSizes': 'Tailles d\'annonces',
     'geographicTargeting': 'Ciblage géographique',
     'formats': 'Formats',
     'excludedGeos': 'Géos exclues',

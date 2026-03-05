@@ -43,9 +43,9 @@ const value: PartialTranslations['history'] = {
     'on': 'ב',
     'value': 'ערך:',
     'manual': 'ידני',
-    'daysAgo': 'י' לפני',
-    'hoursAgo': 'ש' לפני',
-    'minutesAgo': 'ד' לפני',
+    'daysAgo': 'י\' לפני',
+    'hoursAgo': 'ש\' לפני',
+    'minutesAgo': 'ד\' לפני',
     'justNow': 'עכשיו',
     'rollbackFailed': 'החזרה נכשלה'
 };

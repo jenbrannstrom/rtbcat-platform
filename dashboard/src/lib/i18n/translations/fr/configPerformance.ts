@@ -2,7 +2,7 @@ import type { PartialTranslations } from '../../types';
 
 const value: PartialTranslations['configPerformance'] = {
     'failedToLoad': 'Échec du chargement des données de performance de config',
-    'noDataAvailable': 'Aucune donnée de config disponible. Importez un CSV avec les métriques d'enchères avec la dimension pretargeting config (`billing_id`).',
+    'noDataAvailable': 'Aucune donnée de config disponible. Importez un CSV avec les métriques d\'enchères avec la dimension pretargeting config (`billing_id`).',
     'pretargetingConfigs': 'Configs de pretargeting',
     'clickToExpand': 'Cliquez pour développer les paramètres et la répartition par taille',
     'total': 'Total',

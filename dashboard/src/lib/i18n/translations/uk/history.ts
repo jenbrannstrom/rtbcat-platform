@@ -7,7 +7,7 @@ const value: PartialTranslations['history'] = {
     'noChanges': 'Немає записаних змін',
     'noChangesFound': 'Змін не знайдено',
     'tryAdjustingFilters': 'Спробуйте змінити фільтри.',
-    'changesWillAppear': 'Зміни конфігурації з'являться тут.',
+    'changesWillAppear': 'Зміни конфігурації з\'являться тут.',
     'change': 'Зміна',
     'user': 'Користувач',
     'timestamp': 'Мітка часу',
