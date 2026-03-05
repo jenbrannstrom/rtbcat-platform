@@ -23,6 +23,8 @@ from services.secrets_manager import get_secrets_manager
 PUBLIC_PATHS = {
     "/health",
     "/auth/providers",
+    "/auth/check",
+    "/auth/me",
 }
 
 

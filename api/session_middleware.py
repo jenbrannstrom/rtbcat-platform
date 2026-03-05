@@ -167,13 +167,16 @@ class SessionAuthMiddleware(BaseHTTPMiddleware):
 
         return self._multi_user_enabled
 
-    async def _validate_session(self, session_id: str) -> Optional[User]:
+    async def _validate_session(self, session_id: str, request: Request | None = None) -> Optional[User]:
         """Validate session and return user if valid."""
         try:
             auth_svc = get_auth_service()
             return await auth_svc.validate_session(session_id)
         except Exception as e:
-            logger.warning(f"Session validation failed: {e}")
+            logger.warning("Session validation failed", exc_info=True)
+            if request is not None:
+                request.state.auth_error = "database_unavailable"
+                request.state.auth_error_detail = f"Session validation failure: {type(e).__name__}"
             return None
 
     async def _get_or_create_oauth2_user(self, email: str, request: Request) -> tuple[Optional[User], bool]:
@@ -248,7 +251,7 @@ class SessionAuthMiddleware(BaseHTTPMiddleware):
                     request.state.user = user
                     request.state.oauth2_authenticated = True
             elif request.cookies.get(SESSION_COOKIE_NAME):
-                user = await self._validate_session(request.cookies[SESSION_COOKIE_NAME])
+                user = await self._validate_session(request.cookies[SESSION_COOKIE_NAME], request)
                 if user:
                     request.state.user = user
             return await call_next(request)
@@ -281,7 +284,7 @@ class SessionAuthMiddleware(BaseHTTPMiddleware):
             # Still try to attach user if session exists (for audit logging)
             session_id = request.cookies.get(SESSION_COOKIE_NAME)
             if session_id:
-                user = await self._validate_session(session_id)
+                user = await self._validate_session(session_id, request)
                 if user:
                     request.state.user = user
             # Provide a default local user so route dependencies don't fail
@@ -318,9 +321,17 @@ class SessionAuthMiddleware(BaseHTTPMiddleware):
             )
 
         # Validate session
-        user = await self._validate_session(session_id)
+        user = await self._validate_session(session_id, request)
 
         if not user:
+            if getattr(request.state, "auth_error", None):
+                return JSONResponse(
+                    status_code=503,
+                    content={
+                        "detail": "Authentication service temporarily unavailable.",
+                        "error": request.state.auth_error,
+                    },
+                )
             return JSONResponse(
                 status_code=401,
                 content={"detail": "Session expired or invalid. Please log in again."},
