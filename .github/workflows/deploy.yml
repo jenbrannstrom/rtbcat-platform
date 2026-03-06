@@ -60,14 +60,20 @@ jobs:
     environment: ${{ github.event.inputs.target }}
     runs-on: ubuntu-latest
 
-    env:
-      VM_NAME: ${{ github.event.inputs.target == 'production' && env.GCP_VM_PRODUCTION || env.GCP_VM_STAGING }}
-
     steps:
+      - name: Set VM name
+        id: vm
+        run: |
+          if [ "${{ github.event.inputs.target }}" = "production" ]; then
+            echo "name=${{ env.GCP_VM_PRODUCTION }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "name=${{ env.GCP_VM_STAGING }}" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Show deployment intent
         run: |
           echo "Manual deploy approved."
-          echo "Target: ${{ github.event.inputs.target }} (${{ env.VM_NAME }})"
+          echo "Target: ${{ github.event.inputs.target }} (${{ steps.vm.outputs.name }})"
           echo "Reason: ${{ github.event.inputs.reason }}"
 
       - name: Checkout code
@@ -88,7 +94,7 @@ jobs:
           # Get the short SHA for image tag
           SHORT_SHA="${GITHUB_SHA::7}"
 
-          gcloud compute ssh ${{ env.VM_NAME }} \
+          gcloud compute ssh ${{ steps.vm.outputs.name }} \
             --zone=${{ env.GCP_ZONE }} \
             --tunnel-through-iap \
             --quiet \
@@ -169,7 +175,7 @@ jobs:
           ATTEMPTS=$(( (MAX_WAIT_SECONDS + POLL_SECONDS - 1) / POLL_SECONDS ))
 
           # Health check with early-exit polling.
-          gcloud compute ssh ${{ env.VM_NAME }} \
+          gcloud compute ssh ${{ steps.vm.outputs.name }} \
             --zone=${{ env.GCP_ZONE }} \
             --tunnel-through-iap \
             --quiet \
@@ -231,7 +237,7 @@ jobs:
         run: |
           SHORT_SHA="${GITHUB_SHA::7}"
           TIMESTAMP="$(date -u +%Y%m%dT%H%M%SZ)"
-          ARTIFACT_NAME="contracts_${SHORT_SHA}_${{ env.VM_NAME }}_${TIMESTAMP}.json"
+          ARTIFACT_NAME="contracts_${SHORT_SHA}_${{ steps.vm.outputs.name }}_${TIMESTAMP}.json"
           ARTIFACT_PATH="/tmp/${ARTIFACT_NAME}"
           echo "ARTIFACT_PATH=${ARTIFACT_PATH}" >> "$GITHUB_ENV"
           echo "ARTIFACT_NAME=${ARTIFACT_NAME}" >> "$GITHUB_ENV"
@@ -239,7 +245,7 @@ jobs:
           echo "::group::Contract check (${ARTIFACT_NAME})"
 
           set +e
-          gcloud compute ssh ${{ env.VM_NAME }} \
+          gcloud compute ssh ${{ steps.vm.outputs.name }} \
             --zone=${{ env.GCP_ZONE }} \
             --tunnel-through-iap \
             --quiet \
@@ -255,7 +261,7 @@ jobs:
 
           # Copy JSON artifact from VM
           set +e
-          gcloud compute scp ${{ env.VM_NAME }}:/tmp/contracts_post_deploy.json \
+          gcloud compute scp ${{ steps.vm.outputs.name }}:/tmp/contracts_post_deploy.json \
             "${ARTIFACT_PATH}" \
             --zone=${{ env.GCP_ZONE }} \
             --tunnel-through-iap \
@@ -269,7 +275,7 @@ jobs:
             cat > "${ARTIFACT_PATH}" <<FALLBACK
           {
             "timestamp": "${TIMESTAMP}",
-            "vm": "${{ env.VM_NAME }}",
+            "vm": "${{ steps.vm.outputs.name }}",
             "sha": "${SHORT_SHA}",
             "check_exit": ${CHECK_EXIT},
             "error": "artifact_copy_failed",
@@ -296,7 +302,7 @@ jobs:
         if: ${{ always() && github.event.inputs.run_contract_check != 'false' }}
         uses: actions/upload-artifact@v4
         with:
-          name: contracts-${{ env.VM_NAME }}-${{ github.sha }}
+          name: contracts-${{ steps.vm.outputs.name }}-${{ github.sha }}
           path: ${{ env.ARTIFACT_PATH }}
           retention-days: 90
           if-no-files-found: warn
