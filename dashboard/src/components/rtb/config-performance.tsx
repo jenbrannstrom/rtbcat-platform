@@ -2,7 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
-import { cn } from '@/lib/utils';
+import { cn, asNumber } from '@/lib/utils';
 import { ChevronRight } from 'lucide-react';
 import { useTranslation } from '@/contexts/i18n-context';
 
@@ -107,10 +107,10 @@ export function ConfigPerformanceSection() {
               data.overall_win_rate_pct < 20 && 'text-red-600'
             )}
           >
-            {t.configPerformance.winPctValue.replace("{pct}", data.overall_win_rate_pct.toFixed(1))}
+            {t.configPerformance.winPctValue.replace("{pct}", asNumber(data.overall_win_rate_pct).toFixed(1))}
           </span>
           <span className="text-red-600">
-            {t.configPerformance.wastePctValue.replace("{pct}", data.overall_waste_pct.toFixed(1))}
+            {t.configPerformance.wastePctValue.replace("{pct}", asNumber(data.overall_waste_pct).toFixed(1))}
           </span>
         </div>
       </div>
@@ -160,10 +160,10 @@ function ConfigRow({ config }: { config: ConfigData }) {
               config.win_rate_pct < 20 && 'text-red-600'
             )}
           >
-            {t.configPerformance.winPctValue.replace("{pct}", config.win_rate_pct.toFixed(1))}
+            {t.configPerformance.winPctValue.replace("{pct}", asNumber(config.win_rate_pct).toFixed(1))}
           </span>
           <span className="text-red-600 w-16 text-right">
-            {config.waste_pct.toFixed(1)}%
+            {asNumber(config.waste_pct).toFixed(1)}%
           </span>
           <WasteMiniBar pct={config.waste_pct} />
         </div>
@@ -221,9 +221,9 @@ function ConfigRow({ config }: { config: ConfigData }) {
                       size.win_rate_pct < 20 && 'text-red-600'
                     )}
                   >
-                    {size.win_rate_pct.toFixed(1)}%
+                    {asNumber(size.win_rate_pct).toFixed(1)}%
                   </span>
-                  <span className="text-right text-red-500">{size.waste_pct.toFixed(1)}%</span>
+                  <span className="text-right text-red-500">{asNumber(size.waste_pct).toFixed(1)}%</span>
                   <WasteMiniBar pct={size.waste_pct} />
                 </div>
               ))}
