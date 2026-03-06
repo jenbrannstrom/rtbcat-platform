@@ -6,6 +6,7 @@ import {
   getConfigBreakdown,
   getConfigCreatives,
   getCreative,
+  getBatchPerformance,
   getPretargetingConfigDetail,
   createPendingChange,
   cancelPendingChange,
@@ -33,7 +34,7 @@ import { useTranslation } from '@/contexts/i18n-context';
 import { asNumber } from '@/lib/utils';
 import type { Translations } from '@/lib/i18n/types';
 import { PreviewModal } from '@/components/preview-modal';
-import type { Creative } from '@/types/api';
+import type { Creative, CreativePerformanceSummary, PerformancePeriod } from '@/types/api';
 
 interface ConfigBreakdownPanelProps {
   billing_id: string;
@@ -44,6 +45,10 @@ interface ConfigBreakdownPanelProps {
 
 const TABS: ConfigBreakdownType[] = ['creative', 'size', 'geo', 'publisher'];
 type MajorChangeType = 'targeting' | 'publisher' | 'qps' | 'mixed';
+type SelectedCreativeState = {
+  id: string;
+  performance?: CreativePerformanceSummary;
+};
 
 // Format large numbers with K/M suffix
 function formatNumber(n: number): string {
@@ -126,7 +131,7 @@ export function ConfigBreakdownPanel({
   const [selectedSize, setSelectedSize] = useState<string | null>(null);
   const [sizeCreatives, setSizeCreatives] = useState<ConfigCreativesItem[]>([]);
   const [sizeCreativesMessage, setSizeCreativesMessage] = useState<string | null>(null);
-  const [selectedCreative, setSelectedCreative] = useState<null | { id: string }>(null);
+  const [selectedCreative, setSelectedCreative] = useState<SelectedCreativeState | null>(null);
   const [isLoadingCreative, setIsLoadingCreative] = useState(false);
   const [creativeLoadError, setCreativeLoadError] = useState<string | null>(null);
   const [fullCreative, setFullCreative] = useState<Creative | null>(null);
@@ -211,6 +216,17 @@ export function ConfigBreakdownPanel({
     queryFn: () => getConfigCreatives(billing_id, selectedSize || undefined, selectedBuyerId || undefined, days),
     enabled: isExpanded && activeTab === 'size' && !!selectedSize,
     staleTime: 30000,
+  });
+
+  const performancePeriod: PerformancePeriod = days >= 30 ? '30d' : days >= 14 ? '14d' : '7d';
+  const { data: previewPerformanceResponse } = useQuery({
+    queryKey: ['preview-performance', selectedCreative?.id, performancePeriod],
+    queryFn: () => {
+      if (!selectedCreative) return null;
+      return getBatchPerformance([selectedCreative.id], performancePeriod);
+    },
+    enabled: !!selectedCreative,
+    staleTime: 60000,
   });
 
   const createChangeMutation = useMutation({
@@ -336,6 +352,29 @@ export function ConfigBreakdownPanel({
       })
       .finally(() => setIsLoadingCreative(false));
   }, [selectedCreative]);
+
+  const buildPreviewPerformanceFromBreakdown = (item: ConfigBreakdownItem): CreativePerformanceSummary => {
+    const totalImpressions = asNumber(item.impressions);
+    const totalSpendMicros = Math.round(asNumber(item.spend_usd) * 1_000_000);
+    const reached = asNumber(item.reached);
+    const hasData = totalImpressions > 0 || totalSpendMicros > 0 || reached > 0;
+    const avgCpmMicros =
+      totalImpressions > 0 ? Math.round((totalSpendMicros / totalImpressions) * 1000) : null;
+
+    return {
+      creative_id: item.name,
+      total_impressions: totalImpressions,
+      total_clicks: 0,
+      total_spend_micros: totalSpendMicros,
+      avg_cpm_micros: avgCpmMicros,
+      avg_cpc_micros: null,
+      ctr_percent: null,
+      days_with_data: days,
+      has_data: hasData,
+      metric_source: 'pretarg_creative_daily',
+      clicks_available: false,
+    };
+  };
 
   useEffect(() => {
     if (activeTab !== 'geo') {
@@ -1664,7 +1703,10 @@ export function ConfigBreakdownPanel({
                         onClick={(event) => {
                           if (activeTab !== "creative") return;
                           event.stopPropagation();
-                          setSelectedCreative({ id: item.name });
+                          setSelectedCreative({
+                            id: item.name,
+                            performance: buildPreviewPerformanceFromBreakdown(item),
+                          });
                         }}
                       >
 	                        {activeTab === 'publisher' && item.target_value && item.target_value !== item.name ? (
@@ -1693,7 +1735,10 @@ export function ConfigBreakdownPanel({
                           <button
                             onClick={(event) => {
                               event.stopPropagation();
-                              setSelectedCreative({ id: item.name });
+                              setSelectedCreative({
+                                id: item.name,
+                                performance: buildPreviewPerformanceFromBreakdown(item),
+                              });
                             }}
                             className="p-1 text-gray-400 hover:text-gray-600"
                             title={t.creatives.viewCreative}
@@ -2256,7 +2301,7 @@ export function ConfigBreakdownPanel({
                 </button>
                 <button
                   className="px-3 py-1.5 text-sm rounded bg-blue-600 text-white hover:bg-blue-700"
-                  onClick={() => setSelectedCreative({ id: selectedCreative.id })}
+                  onClick={() => setSelectedCreative({ ...selectedCreative })}
                 >
                   {t.import.tryAgain}
                 </button>
@@ -2267,6 +2312,10 @@ export function ConfigBreakdownPanel({
         {fullCreative && selectedCreative && (
           <PreviewModal
             creative={fullCreative}
+            performance={
+              previewPerformanceResponse?.performance?.[selectedCreative.id] ||
+              selectedCreative.performance
+            }
             onClose={() => {
               setSelectedCreative(null);
               setFullCreative(null);
