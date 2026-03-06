@@ -283,6 +283,8 @@ export interface DataHealthResponse {
 export interface PaginationMeta {
   timeframe_days?: number | null;
   total: number;
+  approved_count?: number | null;
+  not_approved_count?: number | null;
   returned: number;
   limit: number;
   offset: number;

@@ -287,11 +287,7 @@ class PostgresStore:
         search: Optional[str] = None,
         include_raw_data: bool = True,
     ) -> list[Creative]:
-        """List creatives with optional filters.
-
-        TODO: Implement full filtering logic.
-        """
-        # TODO: Implement full filtering - basic version for now
+        """List creatives with optional filters."""
         select_columns = (
             "*"
             if include_raw_data
@@ -322,8 +318,23 @@ class PostgresStore:
             conditions.append("buyer_id = %s")
             params.append(buyer_id)
         if approval_status:
-            conditions.append("approval_status = %s")
-            params.append(approval_status)
+            if approval_status.upper() == "NOT_APPROVED":
+                conditions.append("(approval_status IS NULL OR approval_status != 'APPROVED')")
+            else:
+                conditions.append("approval_status = %s")
+                params.append(approval_status)
+        search_term = (search or "").strip()
+        if search_term:
+            pattern = f"%{search_term}%"
+            conditions.append(
+                "("
+                "id ILIKE %s OR "
+                "COALESCE(name, '') ILIKE %s OR "
+                "COALESCE(advertiser_name, '') ILIKE %s OR "
+                "COALESCE(utm_campaign, '') ILIKE %s"
+                ")"
+            )
+            params.extend([pattern, pattern, pattern, pattern])
 
         if conditions:
             sql += " WHERE " + " AND ".join(conditions)
@@ -338,6 +349,10 @@ class PostgresStore:
         self,
         buyer_id: Optional[str] = None,
         format: Optional[str] = None,
+        campaign_id: Optional[str] = None,
+        cluster_id: Optional[str] = None,
+        approval_status: Optional[str] = None,
+        search: Optional[str] = None,
     ) -> int:
         """Get total count of creatives matching filters."""
         sql = "SELECT COUNT(*) as count FROM creatives"
@@ -350,6 +365,30 @@ class PostgresStore:
         if format:
             conditions.append("format = %s")
             params.append(format)
+        if campaign_id:
+            conditions.append("campaign_id = %s")
+            params.append(campaign_id)
+        if cluster_id:
+            conditions.append("cluster_id = %s")
+            params.append(cluster_id)
+        if approval_status:
+            if approval_status.upper() == "NOT_APPROVED":
+                conditions.append("(approval_status IS NULL OR approval_status != 'APPROVED')")
+            else:
+                conditions.append("approval_status = %s")
+                params.append(approval_status)
+        search_term = (search or "").strip()
+        if search_term:
+            pattern = f"%{search_term}%"
+            conditions.append(
+                "("
+                "id ILIKE %s OR "
+                "COALESCE(name, '') ILIKE %s OR "
+                "COALESCE(advertiser_name, '') ILIKE %s OR "
+                "COALESCE(utm_campaign, '') ILIKE %s"
+                ")"
+            )
+            params.extend([pattern, pattern, pattern, pattern])
 
         if conditions:
             sql += " WHERE " + " AND ".join(conditions)

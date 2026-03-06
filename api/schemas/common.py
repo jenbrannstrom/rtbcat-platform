@@ -10,6 +10,8 @@ class PaginationMeta(BaseModel):
     """Pagination metadata for list responses."""
     timeframe_days: Optional[int] = None
     total: int
+    approved_count: Optional[int] = None
+    not_approved_count: Optional[int] = None
     returned: int
     limit: int
     offset: int

@@ -48,6 +48,8 @@ export async function getCreativesPaginated(params?: {
   cluster_id?: string;
   buyer_id?: string;
   format?: string;
+  search?: string;
+  approval_filter?: "all" | "approved" | "not_approved";
   limit?: number;
   offset?: number;
   slim?: boolean;
@@ -57,6 +59,8 @@ export async function getCreativesPaginated(params?: {
   if (params?.cluster_id) searchParams.set("cluster_id", params.cluster_id);
   if (params?.buyer_id) searchParams.set("buyer_id", params.buyer_id);
   if (params?.format) searchParams.set("format", params.format);
+  if (params?.search) searchParams.set("search", params.search);
+  if (params?.approval_filter) searchParams.set("approval_filter", params.approval_filter);
   if (params?.limit) searchParams.set("limit", String(params.limit));
   if (params?.offset) searchParams.set("offset", String(params.offset));
   if (params?.slim !== undefined) searchParams.set("slim", String(params.slim));

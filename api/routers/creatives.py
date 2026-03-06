@@ -47,6 +47,12 @@ async def list_creatives(
     cluster_id: Optional[str] = Query(None, description="Filter by cluster ID"),
     buyer_id: Optional[str] = Query(None, description="Filter by buyer seat ID"),
     format: Optional[str] = Query(None, description="Filter by creative format"),
+    search: Optional[str] = Query(None, description="Search by creative ID/name/advertiser/UTM campaign"),
+    approval_filter: str = Query(
+        "all",
+        pattern="^(all|approved|not_approved)$",
+        description="Filter by approval status",
+    ),
     limit: int = Query(100, ge=1, le=5000, description="Maximum results"),
     offset: int = Query(0, ge=0, description="Results offset"),
     slim: bool = Query(True, description="Exclude large fields (vast_xml, html snippets) for faster loading"),
@@ -57,11 +63,18 @@ async def list_creatives(
 ) -> list[CreativeResponse]:
     """List creatives with optional filtering."""
     buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
+    approval_status = None
+    if approval_filter == "approved":
+        approval_status = "APPROVED"
+    elif approval_filter == "not_approved":
+        approval_status = "NOT_APPROVED"
     creatives = await store.list_creatives(
         campaign_id=campaign_id,
         cluster_id=cluster_id,
         buyer_id=buyer_id,
         format=format,
+        search=search,
+        approval_status=approval_status,
         limit=limit if not active_only else limit * 3,
         offset=offset,
         include_raw_data=not slim,
@@ -100,6 +113,12 @@ async def list_creatives_paginated(
     cluster_id: Optional[str] = Query(None, description="Filter by cluster ID"),
     buyer_id: Optional[str] = Query(None, description="Filter by buyer seat ID"),
     format: Optional[str] = Query(None, description="Filter by creative format"),
+    search: Optional[str] = Query(None, description="Search by creative ID/name/advertiser/UTM campaign"),
+    approval_filter: str = Query(
+        "all",
+        pattern="^(all|approved|not_approved)$",
+        description="Filter by approval status",
+    ),
     limit: int = Query(50, ge=1, le=200, description="Page size (max 200)"),
     offset: int = Query(0, ge=0, description="Results offset"),
     slim: bool = Query(True, description="Exclude large fields for faster loading"),
@@ -110,10 +129,35 @@ async def list_creatives_paginated(
 ) -> PaginatedCreativesResponse:
     """List creatives with pagination metadata."""
     buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
+    approval_status = None
+    if approval_filter == "approved":
+        approval_status = "APPROVED"
+    elif approval_filter == "not_approved":
+        approval_status = "NOT_APPROVED"
 
     total = await store.get_creative_count(
         buyer_id=buyer_id,
         format=format,
+        campaign_id=campaign_id,
+        cluster_id=cluster_id,
+        approval_status=approval_status,
+        search=search,
+    )
+    approved_total = await store.get_creative_count(
+        buyer_id=buyer_id,
+        format=format,
+        campaign_id=campaign_id,
+        cluster_id=cluster_id,
+        approval_status="APPROVED",
+        search=search,
+    )
+    not_approved_total = await store.get_creative_count(
+        buyer_id=buyer_id,
+        format=format,
+        campaign_id=campaign_id,
+        cluster_id=cluster_id,
+        approval_status="NOT_APPROVED",
+        search=search,
     )
 
     creatives = await store.list_creatives(
@@ -121,6 +165,8 @@ async def list_creatives_paginated(
         cluster_id=cluster_id,
         buyer_id=buyer_id,
         format=format,
+        search=search,
+        approval_status=approval_status,
         limit=limit if not active_only else limit * 3,
         offset=offset,
         include_raw_data=not slim,
@@ -157,6 +203,8 @@ async def list_creatives_paginated(
         meta=PaginationMeta(
             timeframe_days=days,
             total=total,
+            approved_count=approved_total,
+            not_approved_count=not_approved_total,
             returned=len(data),
             limit=limit,
             offset=offset,

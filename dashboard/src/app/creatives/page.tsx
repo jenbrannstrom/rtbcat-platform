@@ -281,11 +281,13 @@ function VirtualizedGrid({
   creatives,
   onPreview,
   performanceData,
+  performanceLoading,
   sortField,
 }: {
   creatives: Creative[];
   onPreview: (creative: Creative) => void;
   performanceData?: Record<string, CreativePerformanceSummary>;
+  performanceLoading?: boolean;
   sortField?: "spend" | "impressions" | "clicks" | "ctr" | null;
 }) {
   const parentRef = useRef<HTMLDivElement>(null);
@@ -335,6 +337,7 @@ function VirtualizedGrid({
                   creative={creative}
                   onPreview={onPreview}
                   performance={performanceData?.[creative.id]}
+                  performanceLoading={performanceLoading}
                   sortField={sortField}
                 />
               ))}
@@ -370,12 +373,14 @@ function CreativesContent() {
     error,
     refetch,
   } = useQuery({
-    queryKey: ["creatives", selectedSeatId, CREATIVES_PAGE_SIZE, creativesOffset],
+    queryKey: ["creatives", selectedSeatId, CREATIVES_PAGE_SIZE, creativesOffset, search, approvalFilter],
     queryFn: () =>
       getCreativesPaginated({
         limit: CREATIVES_PAGE_SIZE,
         offset: creativesOffset,
         buyer_id: selectedSeatId ?? undefined,
+        search: search.trim() || undefined,
+        approval_filter: approvalFilter,
         slim: true,
       }),
   });
@@ -388,14 +393,8 @@ function CreativesContent() {
     queryFn: getSizes,
   });
 
-  const approvedCount = useMemo(
-    () => creatives?.filter((c) => c.approval_status === "APPROVED").length ?? 0,
-    [creatives]
-  );
-  const notApprovedCount = useMemo(
-    () => creatives?.filter((c) => c.approval_status !== "APPROVED").length ?? 0,
-    [creatives]
-  );
+  const approvedCount = creativesMeta?.approved_count ?? (creatives?.filter((c) => c.approval_status === "APPROVED").length ?? 0);
+  const notApprovedCount = creativesMeta?.not_approved_count ?? (creatives?.filter((c) => c.approval_status !== "APPROVED").length ?? 0);
 
   // Always fetch performance data for the selected period
   const period = PERIOD_OPTIONS.find((o) => o.value === days)?.period ?? "7d";
@@ -790,6 +789,7 @@ function CreativesContent() {
           creatives={filteredCreatives}
           onPreview={setPreviewCreative}
           performanceData={performanceData}
+          performanceLoading={isLoadingPerformance}
           sortField={sortBySpend ? "spend" : null}
         />
       ) : (

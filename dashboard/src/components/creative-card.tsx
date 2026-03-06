@@ -13,6 +13,7 @@ interface CreativeCardProps {
   creative: Creative;
   onPreview?: (creative: Creative) => void;
   performance?: CreativePerformanceSummary;
+  performanceLoading?: boolean;
   sortField?: "spend" | "impressions" | "clicks" | "ctr" | null;
 }
 
@@ -185,12 +186,19 @@ function PreviewThumbnail({ creative }: { creative: Creative }) {
   );
 }
 
-export function CreativeCard({ creative, onPreview, performance, sortField }: CreativeCardProps) {
+export function CreativeCard({
+  creative,
+  onPreview,
+  performance,
+  performanceLoading = false,
+  sortField,
+}: CreativeCardProps) {
   const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
   const [htmlCopied, setHtmlCopied] = useState(false);
   const hasPreview = true; // Modal fetches full data on open; slim mode strips preview fields
   const hasData = performance?.has_data;
+  const isPerformancePending = performanceLoading && !performance;
 
   // Get Google Console URL
   const buyerId = creative.buyer_id || extractBuyerIdFromName(creative.name);
@@ -249,7 +257,11 @@ export function CreativeCard({ creative, onPreview, performance, sortField }: Cr
               <>
                 {/* Spend first when sorted by spend */}
                 <div className="text-base font-medium text-gray-900">
-                  {hasData ? `${formatSpend(performance?.total_spend_micros)} ${t.creatives.spentSuffix}` : t.creatives.noData}
+                  {isPerformancePending
+                    ? (t.common.loading || "Loading...")
+                    : (hasData
+                      ? `${formatSpend(performance?.total_spend_micros)} ${t.creatives.spentSuffix}`
+                      : t.creatives.noData)}
                 </div>
                 <div className="text-sm text-gray-500 font-mono truncate" title={creative.id}>
                   #{creative.id}
@@ -265,7 +277,11 @@ export function CreativeCard({ creative, onPreview, performance, sortField }: Cr
                   "text-base font-medium",
                   hasData ? "text-gray-900" : "text-gray-400"
                 )}>
-                  {hasData ? `${formatSpend(performance?.total_spend_micros)} ${t.creatives.spentSuffix}` : t.creatives.noPerformanceData}
+                  {isPerformancePending
+                    ? (t.common.loading || "Loading...")
+                    : (hasData
+                      ? `${formatSpend(performance?.total_spend_micros)} ${t.creatives.spentSuffix}`
+                      : t.creatives.noPerformanceData)}
                 </div>
               </>
             )}
