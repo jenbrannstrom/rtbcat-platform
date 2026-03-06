@@ -3,6 +3,9 @@
 #
 # SECURITY: This config does NOT expose ports 3000/8000 directly.
 # All traffic goes through nginx/Caddy on ports 80/443.
+#
+# NOTE: Secret versions are managed externally via gcloud / GSM console.
+# Terraform manages the secret *resources* and IAM, not the secret *data*.
 
 terraform {
   required_version = ">= 1.0"
@@ -11,15 +14,6 @@ terraform {
       source  = "hashicorp/google"
       version = "~> 5.0"
     }
-    random = {
-      source  = "hashicorp/random"
-      version = "~> 3.0"
-    }
-    # Cloudflare provider commented out - uncomment if needed for DNS management
-    # cloudflare = {
-    #   source  = "cloudflare/cloudflare"
-    #   version = "~> 4.0"
-    # }
   }
 }
 
@@ -28,48 +22,14 @@ provider "google" {
   region  = var.gcp_region
 }
 
-# Random suffix for globally unique resource names
-resource "random_id" "suffix" {
-  byte_length = 4
-}
-
-resource "random_password" "precompute_refresh_secret" {
-  length  = 32
-  special = false
-}
-
-resource "random_password" "precompute_monitor_secret" {
-  length  = 32
-  special = false
-}
-
-resource "random_password" "gmail_import_secret" {
-  length  = 32
-  special = false
-}
-
-resource "random_password" "creative_cache_refresh_secret" {
-  length  = 32
-  special = false
-}
-
 locals {
-  precompute_refresh_url = (var.enable_https && var.domain_name != "") ? "https://${var.domain_name}/api/precompute/refresh/scheduled" : "http://${google_compute_address.catscan.address}/api/precompute/refresh/scheduled"
-
-  precompute_health_url = (var.enable_https && var.domain_name != "") ? "https://${var.domain_name}/api/precompute/health" : "http://${google_compute_address.catscan.address}/api/precompute/health"
-
-  gmail_import_url           = (var.enable_https && var.domain_name != "") ? "https://${var.domain_name}/api/gmail/import/scheduled" : "http://${google_compute_address.catscan.address}/api/gmail/import/scheduled"
-  creative_cache_refresh_url = (var.enable_https && var.domain_name != "") ? "https://${var.domain_name}/api/creatives/cache/refresh/scheduled" : "http://${google_compute_address.catscan.address}/api/creatives/cache/refresh/scheduled"
-
-  precompute_health_host = var.domain_name != "" ? var.domain_name : google_compute_address.catscan.address
-  precompute_health_port = (var.enable_https && var.domain_name != "") ? 443 : 80
+  gmail_import_url = (var.enable_https && var.domain_name != "") ? "https://${var.domain_name}/api/gmail/import/scheduled" : "http://${google_compute_address.catscan.address}/api/gmail/import/scheduled"
 }
 
 # =============================================================================
 # NETWORK - VPC and Firewall
 # =============================================================================
 
-# Use default VPC for simplicity (like AWS setup)
 data "google_compute_network" "default" {
   name = "default"
 }
@@ -78,10 +38,8 @@ data "google_compute_network" "default" {
 # FIREWALL RULES - SECURE CONFIGURATION
 # -----------------------------------------------------------------------------
 # CRITICAL: We ONLY expose 80/443. Ports 3000/8000 are NEVER exposed.
-# This is what prevented attacks on AWS and what was MISSING on GCP.
 # -----------------------------------------------------------------------------
 
-# Allow HTTP (for redirect to HTTPS and Let's Encrypt challenges)
 resource "google_compute_firewall" "allow_http" {
   name    = "${var.app_name}-${var.environment}-allow-http"
   network = data.google_compute_network.default.name
@@ -97,7 +55,6 @@ resource "google_compute_firewall" "allow_http" {
   description = "Allow HTTP for HTTPS redirect and ACME challenges"
 }
 
-# Allow HTTPS (main application access)
 resource "google_compute_firewall" "allow_https" {
   count   = var.enable_https ? 1 : 0
   name    = "${var.app_name}-${var.environment}-allow-https"
@@ -114,8 +71,6 @@ resource "google_compute_firewall" "allow_https" {
   description = "Allow HTTPS traffic"
 }
 
-# Allow SSH - ONLY if explicitly configured with allowed CIDRs
-# Default: No SSH access (use GCP Console serial console or IAP)
 resource "google_compute_firewall" "allow_ssh" {
   count   = length(var.allowed_ssh_cidrs) > 0 ? 1 : 0
   name    = "${var.app_name}-${var.environment}-allow-ssh"
@@ -126,15 +81,12 @@ resource "google_compute_firewall" "allow_ssh" {
     ports    = ["22"]
   }
 
-  # Restrict to specific IPs only
   source_ranges = var.allowed_ssh_cidrs
   target_tags   = ["${var.app_name}-server"]
 
   description = "Allow SSH from specific IPs only"
 }
 
-# Allow IAP (Identity-Aware Proxy) for secure SSH tunneling
-# This is more secure than direct SSH - requires Google auth
 resource "google_compute_firewall" "allow_iap" {
   name    = "${var.app_name}-${var.environment}-allow-iap"
   network = data.google_compute_network.default.name
@@ -144,84 +96,16 @@ resource "google_compute_firewall" "allow_iap" {
     ports    = ["22"]
   }
 
-  # IAP's IP range
   source_ranges = ["35.235.240.0/20"]
   target_tags   = ["${var.app_name}-server"]
 
   description = "Allow SSH via Identity-Aware Proxy (secure)"
 }
 
-# -----------------------------------------------------------------------------
-# DANGEROUS PORTS - EXPLICITLY BLOCKED
-# -----------------------------------------------------------------------------
-# We create NO rules for 3000/8000. They are blocked by default.
-# This comment exists to make it explicit that this is intentional.
-#
-# DO NOT ADD:
-# - Port 3000 (Next.js) - CVE-2025-66478 RCE vulnerability
-# - Port 8000 (FastAPI) - Should only be accessed via nginx
-# -----------------------------------------------------------------------------
-
 # =============================================================================
-# STORAGE - Cloud Storage for backups and CSV archive
+# STORAGE - Raw Parquet Bucket
 # =============================================================================
 
-resource "google_storage_bucket" "catscan" {
-  name     = "${var.app_name}-${var.environment}-data-${random_id.suffix.hex}"
-  location = var.gcp_region
-
-  # Prevent accidental deletion
-  force_destroy = false
-
-  # Enable versioning for backup recovery
-  versioning {
-    enabled = true
-  }
-
-  # Lifecycle rule: Delete old backups after 30 days
-  lifecycle_rule {
-    condition {
-      age = 30
-    }
-    action {
-      type = "Delete"
-    }
-  }
-
-  # Lifecycle rule: Delete Parquet exports after retention window
-  lifecycle_rule {
-    condition {
-      age            = var.parquet_retention_days
-      matches_prefix = ["parquet/"]
-    }
-    action {
-      type = "Delete"
-    }
-  }
-
-  # Lifecycle rule: Delete BigQuery exports after retention window
-  lifecycle_rule {
-    condition {
-      age            = var.bigquery_partition_retention_days
-      matches_prefix = ["bigquery/"]
-    }
-    action {
-      type = "Delete"
-    }
-  }
-
-  # Block public access
-  public_access_prevention = "enforced"
-
-  uniform_bucket_level_access = true
-
-  labels = {
-    app         = var.app_name
-    environment = var.environment
-  }
-}
-
-# Raw parquet bucket for analytics ingestion
 resource "google_storage_bucket" "raw_parquet" {
   name     = var.raw_parquet_bucket_name
   location = var.gcp_region
@@ -270,25 +154,46 @@ resource "google_bigquery_dataset" "rtbcat_analytics" {
 }
 
 resource "google_bigquery_table" "raw_facts" {
-  dataset_id = google_bigquery_dataset.rtbcat_analytics.dataset_id
-  table_id   = var.bigquery_raw_facts_table_id
+  dataset_id          = google_bigquery_dataset.rtbcat_analytics.dataset_id
+  table_id            = var.bigquery_raw_facts_table_id
+  deletion_protection = true
 
   schema = jsonencode([
-    {
-      name = "event_timestamp"
-      type = "TIMESTAMP"
-      mode = "REQUIRED"
-    },
-    {
-      name = "payload"
-      type = "JSON"
-      mode = "NULLABLE"
-    }
+    { name = "metric_date",          type = "DATE",    mode = "NULLABLE" },
+    { name = "billing_id",           type = "STRING",  mode = "NULLABLE" },
+    { name = "creative_id",          type = "STRING",  mode = "NULLABLE" },
+    { name = "creative_size",        type = "STRING",  mode = "NULLABLE" },
+    { name = "creative_format",      type = "STRING",  mode = "NULLABLE" },
+    { name = "buyer_account_id",     type = "STRING",  mode = "NULLABLE" },
+    { name = "reached_queries",      type = "INTEGER", mode = "NULLABLE" },
+    { name = "impressions",          type = "INTEGER", mode = "NULLABLE" },
+    { name = "spend_buyer_currency", type = "FLOAT",   mode = "NULLABLE" },
+    { name = "active_view_viewable",    type = "INTEGER", mode = "NULLABLE" },
+    { name = "active_view_measurable",  type = "INTEGER", mode = "NULLABLE" },
+    { name = "report_type",          type = "STRING",  mode = "NULLABLE" },
+    { name = "country",              type = "STRING",  mode = "NULLABLE" },
+    { name = "bid_filtering_reason", type = "STRING",  mode = "NULLABLE" },
+    { name = "bids",                 type = "INTEGER", mode = "NULLABLE" },
+    { name = "hour",                 type = "INTEGER", mode = "NULLABLE" },
+    { name = "publisher_id",         type = "STRING",  mode = "NULLABLE" },
+    { name = "publisher_name",       type = "STRING",  mode = "NULLABLE" },
+    { name = "bid_requests",         type = "INTEGER", mode = "NULLABLE" },
+    { name = "inventory_matches",    type = "INTEGER", mode = "NULLABLE" },
+    { name = "successful_responses", type = "INTEGER", mode = "NULLABLE" },
+    { name = "bids_in_auction",      type = "INTEGER", mode = "NULLABLE" },
+    { name = "auctions_won",         type = "INTEGER", mode = "NULLABLE" },
+    { name = "clicks",               type = "INTEGER", mode = "NULLABLE" },
   ])
 
   time_partitioning {
     type  = "DAY"
-    field = "event_timestamp"
+    field = "metric_date"
+  }
+
+  clustering = ["buyer_account_id"]
+
+  lifecycle {
+    ignore_changes = [schema]
   }
 }
 
@@ -302,29 +207,10 @@ resource "google_service_account" "catscan" {
   description  = "Service account for Cat-Scan application"
 }
 
-# Grant storage access to service account
-resource "google_storage_bucket_iam_member" "catscan_storage" {
-  bucket = google_storage_bucket.catscan.name
-  role   = "roles/storage.objectAdmin"
-  member = "serviceAccount:${google_service_account.catscan.email}"
-}
-
 resource "google_storage_bucket_iam_member" "raw_parquet_storage" {
   bucket = google_storage_bucket.raw_parquet.name
   role   = "roles/storage.objectAdmin"
   member = "serviceAccount:${google_service_account.catscan.email}"
-}
-
-resource "google_project_iam_member" "bigquery_job_user" {
-  project = var.gcp_project
-  role    = "roles/bigquery.jobUser"
-  member  = "serviceAccount:${google_service_account.catscan.email}"
-}
-
-resource "google_bigquery_dataset_iam_member" "bigquery_data_editor" {
-  dataset_id = google_bigquery_dataset.rtbcat_analytics.dataset_id
-  role       = "roles/bigquery.dataEditor"
-  member     = "serviceAccount:${google_service_account.catscan.email}"
 }
 
 resource "google_project_iam_member" "cloudsql_client" {
@@ -333,7 +219,6 @@ resource "google_project_iam_member" "cloudsql_client" {
   member  = "serviceAccount:${google_service_account.catscan.email}"
 }
 
-# Grant logging access
 resource "google_project_iam_member" "catscan_logging" {
   project = var.gcp_project
   role    = "roles/logging.logWriter"
@@ -375,6 +260,10 @@ resource "google_sql_database_instance" "rtbcat_serving" {
   deletion_protection = var.environment == "production"
 
   depends_on = [google_project_service.sqladmin]
+
+  lifecycle {
+    ignore_changes = [settings[0].disk_size]
+  }
 }
 
 resource "google_sql_database" "serving_db" {
@@ -382,30 +271,28 @@ resource "google_sql_database" "serving_db" {
   instance = google_sql_database_instance.rtbcat_serving.name
 }
 
-resource "random_password" "serving_db_password" {
-  length  = 24
-  special = true
-}
-
 resource "google_sql_user" "serving_user" {
   name     = var.cloudsql_user_name
   instance = google_sql_database_instance.rtbcat_serving.name
-  password = random_password.serving_db_password.result
+
+  lifecycle {
+    ignore_changes = [password]
+  }
 }
 
 # =============================================================================
-# COMPUTE - GCE Instance
+# COMPUTE - GCE Instance (primary SG)
 # =============================================================================
 
 resource "google_compute_address" "catscan" {
-  name   = "${var.app_name}-${var.environment}-ip"
+  name   = "${var.app_name}-${var.environment}-sg-ip"
   region = var.gcp_region
 
-  description = "Static IP for Cat-Scan"
+  description = "Static IP for Cat-Scan (SG migration)"
 }
 
 resource "google_compute_instance" "catscan" {
-  name         = "${var.app_name}-${var.environment}"
+  name         = "${var.app_name}-${var.environment}-sg"
   machine_type = var.machine_type
   zone         = var.gcp_zone
 
@@ -432,111 +319,21 @@ resource "google_compute_instance" "catscan" {
     scopes = ["cloud-platform"]
   }
 
-  # Startup script - hardened setup with OAuth2 Proxy
   metadata_startup_script = templatefile("${path.module}/startup.sh", {
-    app_name                      = var.app_name
-    environment                   = var.environment
-    domain_name                   = var.domain_name
-    enable_https                  = var.enable_https
-    github_repo                   = var.github_repo
-    github_branch                 = var.github_branch
-    gcp_region                    = var.gcp_region
-    gcs_bucket                    = google_storage_bucket.catscan.name
-    google_oauth_client_id        = var.google_oauth_client_id
-    google_oauth_client_secret    = ""
-    allowed_email_domains         = var.allowed_email_domains
-    allow_any_google_accounts     = var.allow_any_google_accounts
-    precompute_refresh_secret     = ""
-    precompute_monitor_secret     = ""
-    gmail_import_secret           = ""
-    creative_cache_refresh_secret = ""
-    oauth_client_secret_id        = "${var.app_name}-oauth-client-secret"
-    precompute_refresh_days       = var.precompute_refresh_days
-    precompute_refresh_max_age    = var.precompute_refresh_max_age_hours
-  })
-
-  # Enable deletion protection in production
-  deletion_protection = var.environment == "production"
-
-  labels = {
-    app         = var.app_name
-    environment = var.environment
-  }
-
-  # Shielded VM for extra security
-  shielded_instance_config {
-    enable_secure_boot          = true
-    enable_vtpm                 = true
-    enable_integrity_monitoring = true
-  }
-
-  lifecycle {
-    create_before_destroy = true
-  }
-}
-
-# =============================================================================
-# COMPUTE - Parallel SG Instance (for migration, keeps EU intact)
-# =============================================================================
-
-resource "google_compute_address" "catscan_sg" {
-  count  = var.create_sg_instance ? 1 : 0
-  name   = "${var.app_name}-${var.environment}-sg-ip"
-  region = var.gcp_region
-
-  description = "Static IP for Cat-Scan (SG migration)"
-}
-
-resource "google_compute_instance" "catscan_sg" {
-  count        = var.create_sg_instance ? 1 : 0
-  name         = "${var.app_name}-${var.environment}-sg"
-  machine_type = var.machine_type
-  zone         = var.gcp_zone
-
-  tags = ["${var.app_name}-server"]
-
-  boot_disk {
-    initialize_params {
-      image = "ubuntu-os-cloud/ubuntu-2404-lts-amd64"
-      size  = var.boot_disk_size
-      type  = "pd-ssd"
-    }
-  }
-
-  network_interface {
-    network = data.google_compute_network.default.name
-
-    access_config {
-      nat_ip = google_compute_address.catscan_sg[0].address
-    }
-  }
-
-  service_account {
-    email  = google_service_account.catscan.email
-    scopes = ["cloud-platform"]
-  }
-
-  # Startup script - hardened setup with OAuth2 Proxy
-  metadata_startup_script = templatefile("${path.module}/startup.sh", {
-    app_name                      = var.app_name
-    environment                   = var.environment
-    domain_name                   = var.domain_name
-    enable_https                  = var.enable_https
-    github_repo                   = var.github_repo
-    github_branch                 = var.github_branch
-    gcp_region                    = var.gcp_region
-    gcs_bucket                    = google_storage_bucket.catscan.name
-    google_oauth_client_id        = var.google_oauth_client_id
-    google_oauth_client_secret    = ""
-    allowed_email_domains         = var.allowed_email_domains
-    allow_any_google_accounts     = var.allow_any_google_accounts
-    precompute_refresh_secret     = ""
-    precompute_monitor_secret     = ""
-    gmail_import_secret           = ""
-    creative_cache_refresh_secret = ""
-    oauth_client_secret_id        = "${var.app_name}-oauth-client-secret"
-    precompute_refresh_days       = var.precompute_refresh_days
-    precompute_refresh_max_age    = var.precompute_refresh_max_age_hours
+    app_name                  = var.app_name
+    environment               = var.environment
+    domain_name               = var.domain_name
+    enable_https              = var.enable_https
+    github_repo               = var.github_repo
+    github_branch             = var.github_branch
+    gcp_region                = var.gcp_region
+    gcs_bucket                = var.raw_parquet_bucket_name
+    google_oauth_client_id    = var.google_oauth_client_id
+    allowed_email_domains     = var.allowed_email_domains
+    allow_any_google_accounts = var.allow_any_google_accounts
+    oauth_client_secret_id    = "${var.app_name}-oauth-client-secret"
+    precompute_refresh_days   = var.precompute_refresh_days
+    precompute_refresh_max_age = var.precompute_refresh_max_age_hours
   })
 
   deletion_protection = var.environment == "production"
@@ -554,16 +351,20 @@ resource "google_compute_instance" "catscan_sg" {
 
   lifecycle {
     create_before_destroy = true
+    ignore_changes = [
+      metadata_startup_script,
+      metadata,
+      boot_disk[0].initialize_params[0].image,
+    ]
   }
 }
 
 # =============================================================================
 # SECRET MANAGER - Credentials Storage
 # =============================================================================
-# Store credentials in Secret Manager so they persist across deployments.
-# ONE-TIME SETUP: Upload credentials once, they're always available.
+# Secret *resources* and IAM are managed here.
+# Secret *versions* (data) are managed externally via gcloud.
 
-# Enable Secret Manager API
 resource "google_project_service" "secretmanager" {
   service            = "secretmanager.googleapis.com"
   disable_on_destroy = false
@@ -584,9 +385,6 @@ resource "google_project_service" "logging" {
   disable_on_destroy = false
 }
 
-# BigQuery API already enabled above (line 245)
-
-# Gmail OAuth Client (gmail-oauth-client.json)
 resource "google_secret_manager_secret" "gmail_oauth_client" {
   secret_id = "${var.app_name}-gmail-oauth-client"
 
@@ -603,7 +401,6 @@ resource "google_secret_manager_secret" "gmail_oauth_client" {
   depends_on = [google_project_service.secretmanager]
 }
 
-# Gmail Token (gmail-token.json) - created after first auth
 resource "google_secret_manager_secret" "gmail_token" {
   secret_id = "${var.app_name}-gmail-token"
 
@@ -620,7 +417,6 @@ resource "google_secret_manager_secret" "gmail_token" {
   depends_on = [google_project_service.secretmanager]
 }
 
-# Service Account for Authorized Buyers API
 resource "google_secret_manager_secret" "ab_service_account" {
   secret_id = "${var.app_name}-ab-service-account"
 
@@ -637,13 +433,6 @@ resource "google_secret_manager_secret" "ab_service_account" {
   depends_on = [google_project_service.secretmanager]
 }
 
-# =============================================================================
-# SCHEDULER + OAUTH SECRETS (GSM-managed, Phase 1)
-# =============================================================================
-# These secrets were previously injected only via templatefile() into the
-# startup script, exposing them in tfstate and VM metadata.  Now they are
-# stored in GSM so the VM can fetch them at boot without metadata exposure.
-
 resource "google_secret_manager_secret" "precompute_refresh_secret" {
   secret_id = "${var.app_name}-precompute-refresh-secret"
 
@@ -658,11 +447,6 @@ resource "google_secret_manager_secret" "precompute_refresh_secret" {
   }
 
   depends_on = [google_project_service.secretmanager]
-}
-
-resource "google_secret_manager_secret_version" "precompute_refresh_secret" {
-  secret      = google_secret_manager_secret.precompute_refresh_secret.id
-  secret_data = random_password.precompute_refresh_secret.result
 }
 
 resource "google_secret_manager_secret" "precompute_monitor_secret" {
@@ -681,11 +465,6 @@ resource "google_secret_manager_secret" "precompute_monitor_secret" {
   depends_on = [google_project_service.secretmanager]
 }
 
-resource "google_secret_manager_secret_version" "precompute_monitor_secret" {
-  secret      = google_secret_manager_secret.precompute_monitor_secret.id
-  secret_data = random_password.precompute_monitor_secret.result
-}
-
 resource "google_secret_manager_secret" "gmail_import_secret" {
   secret_id = "${var.app_name}-gmail-import-secret"
 
@@ -700,11 +479,6 @@ resource "google_secret_manager_secret" "gmail_import_secret" {
   }
 
   depends_on = [google_project_service.secretmanager]
-}
-
-resource "google_secret_manager_secret_version" "gmail_import_secret" {
-  secret      = google_secret_manager_secret.gmail_import_secret.id
-  secret_data = random_password.gmail_import_secret.result
 }
 
 resource "google_secret_manager_secret" "creative_cache_refresh_secret" {
@@ -723,11 +497,6 @@ resource "google_secret_manager_secret" "creative_cache_refresh_secret" {
   depends_on = [google_project_service.secretmanager]
 }
 
-resource "google_secret_manager_secret_version" "creative_cache_refresh_secret" {
-  secret      = google_secret_manager_secret.creative_cache_refresh_secret.id
-  secret_data = random_password.creative_cache_refresh_secret.result
-}
-
 resource "google_secret_manager_secret" "oauth_client_secret" {
   secret_id = "${var.app_name}-oauth-client-secret"
 
@@ -743,15 +512,6 @@ resource "google_secret_manager_secret" "oauth_client_secret" {
 
   depends_on = [google_project_service.secretmanager]
 }
-
-resource "google_secret_manager_secret_version" "oauth_client_secret" {
-  secret      = google_secret_manager_secret.oauth_client_secret.id
-  secret_data = var.google_oauth_client_secret
-}
-
-# =============================================================================
-# SERVING DB CREDENTIALS (for Postgres read-routing)
-# =============================================================================
 
 resource "google_secret_manager_secret" "serving_db_credentials" {
   secret_id = "${var.app_name}-serving-db-credentials"
@@ -769,191 +529,6 @@ resource "google_secret_manager_secret" "serving_db_credentials" {
   depends_on = [google_project_service.secretmanager]
 }
 
-resource "google_secret_manager_secret_version" "serving_db_credentials" {
-  secret = google_secret_manager_secret.serving_db_credentials.id
-
-  secret_data = jsonencode({
-    instance_connection_name = google_sql_database_instance.rtbcat_serving.connection_name
-    database                 = google_sql_database.serving_db.name
-    username                 = google_sql_user.serving_user.name
-    password                 = random_password.serving_db_password.result
-  })
-}
-
-# =============================================================================
-# BIGQUERY - Optional Dataset (Partition Retention)
-# =============================================================================
-
-resource "google_bigquery_dataset" "catscan" {
-  count                           = var.bigquery_dataset_id != "" ? 1 : 0
-  dataset_id                      = var.bigquery_dataset_id
-  location                        = var.gcp_region
-  default_partition_expiration_ms = var.bigquery_partition_retention_days * 86400000
-
-  labels = {
-    app         = var.app_name
-    environment = var.environment
-  }
-
-  depends_on = [google_project_service.bigquery]
-}
-
-# =============================================================================
-# CLOUD SCHEDULER - Precompute Refresh
-# =============================================================================
-
-resource "google_cloud_scheduler_job" "precompute_refresh" {
-  name        = "${var.app_name}-precompute-refresh"
-  description = "Daily precompute refresh for dashboard caches"
-  schedule    = var.precompute_refresh_schedule
-  time_zone   = "Etc/UTC"
-  region      = var.gcp_region
-
-  http_target {
-    http_method = "POST"
-    uri         = local.precompute_refresh_url
-    headers = {
-      X-Precompute-Refresh-Secret = random_password.precompute_refresh_secret.result
-    }
-  }
-
-  depends_on = [google_project_service.cloudscheduler]
-}
-
-# =============================================================================
-# CLOUD SCHEDULER - Gmail Import
-# =============================================================================
-
-resource "google_cloud_scheduler_job" "gmail_import" {
-  name        = "${var.app_name}-gmail-import"
-  description = "Daily Gmail report import - 1h after emails arrive (~11:00 UTC)"
-  schedule    = "0 12 * * *"
-  time_zone   = "Etc/UTC"
-  region      = var.gcp_region
-
-  http_target {
-    http_method = "POST"
-    uri         = local.gmail_import_url
-    headers = {
-      X-Gmail-Import-Secret = random_password.gmail_import_secret.result
-    }
-  }
-
-  retry_config {
-    retry_count          = 3
-    min_backoff_duration = "60s"
-    max_backoff_duration = "600s"
-  }
-
-  depends_on = [google_project_service.cloudscheduler]
-}
-
-# =============================================================================
-# CLOUD SCHEDULER - Creative Cache Refresh
-# =============================================================================
-
-resource "google_cloud_scheduler_job" "creative_cache_refresh" {
-  name        = "${var.app_name}-creative-cache-refresh"
-  description = "Off-hours live creative cache refresh + HTML thumbnail extraction"
-  schedule    = var.creative_cache_refresh_schedule
-  time_zone   = "Etc/UTC"
-  region      = var.gcp_region
-
-  http_target {
-    http_method = "POST"
-    uri         = local.creative_cache_refresh_url
-    headers = {
-      X-Creative-Cache-Refresh-Secret = random_password.creative_cache_refresh_secret.result
-    }
-  }
-
-  depends_on = [google_project_service.cloudscheduler]
-}
-
-# =============================================================================
-# MONITORING - Precompute Health + Scheduler Failures
-# =============================================================================
-
-resource "google_monitoring_uptime_check_config" "precompute_health" {
-  display_name = "${var.app_name}-precompute-health"
-  timeout      = "10s"
-  period       = "300s"
-
-  http_check {
-    path         = "/api/precompute/health"
-    port         = local.precompute_health_port
-    use_ssl      = var.enable_https && var.domain_name != ""
-    validate_ssl = var.enable_https && var.domain_name != ""
-    headers = {
-      X-Precompute-Monitor-Secret = random_password.precompute_monitor_secret.result
-    }
-  }
-
-  monitored_resource {
-    type = "uptime_url"
-    labels = {
-      host = local.precompute_health_host
-    }
-  }
-
-  depends_on = [google_project_service.monitoring]
-}
-
-resource "google_logging_metric" "precompute_refresh_failures" {
-  name   = "${var.app_name}-precompute-refresh-failures"
-  filter = "resource.type=\"cloud_scheduler_job\" AND resource.labels.job_id=\"${google_cloud_scheduler_job.precompute_refresh.name}\" AND severity>=ERROR"
-
-  metric_descriptor {
-    metric_kind = "DELTA"
-    value_type  = "INT64"
-  }
-
-  depends_on = [google_project_service.logging]
-}
-
-resource "google_monitoring_alert_policy" "precompute_health_gap" {
-  display_name = "${var.app_name}-precompute-health-gap"
-  combiner     = "OR"
-
-  conditions {
-    display_name = "Precompute health check failing"
-    condition_threshold {
-      filter          = "metric.type=\"monitoring.googleapis.com/uptime_check/check_passed\" AND metric.label.check_id=\"${google_monitoring_uptime_check_config.precompute_health.uptime_check_id}\""
-      comparison      = "COMPARISON_LT"
-      threshold_value = 1
-      duration        = "300s"
-      trigger {
-        count = 1
-      }
-    }
-  }
-
-  depends_on = [google_project_service.monitoring]
-}
-
-resource "google_monitoring_alert_policy" "precompute_refresh_failures" {
-  display_name = "${var.app_name}-precompute-refresh-failures"
-  combiner     = "OR"
-
-  conditions {
-    display_name = "Precompute refresh failed"
-    condition_threshold {
-      filter          = "metric.type=\"logging.googleapis.com/user/${google_logging_metric.precompute_refresh_failures.name}\""
-      comparison      = "COMPARISON_GT"
-      threshold_value = 0
-      duration        = "60s"
-      trigger {
-        count = 1
-      }
-    }
-  }
-
-  depends_on = [
-    google_project_service.monitoring,
-    google_project_service.logging,
-  ]
-}
-
 # Grant VM service account access to read secrets
 resource "google_secret_manager_secret_iam_member" "gmail_oauth_client_access" {
   secret_id = google_secret_manager_secret.gmail_oauth_client.id
@@ -969,12 +544,6 @@ resource "google_secret_manager_secret_iam_member" "gmail_token_access" {
 
 resource "google_secret_manager_secret_iam_member" "ab_service_account_access" {
   secret_id = google_secret_manager_secret.ab_service_account.id
-  role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${google_service_account.catscan.email}"
-}
-
-resource "google_secret_manager_secret_iam_member" "serving_db_credentials_access" {
-  secret_id = google_secret_manager_secret.serving_db_credentials.id
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${google_service_account.catscan.email}"
 }
@@ -1010,22 +579,33 @@ resource "google_secret_manager_secret_iam_member" "oauth_client_secret_access" 
 }
 
 # =============================================================================
-# DNS - Cloudflare (Optional)
+# CLOUD SCHEDULER - Gmail Import
 # =============================================================================
-# NOTE: Cloudflare provider removed to avoid initialization errors when not used.
-# If you want to manage DNS via Terraform, uncomment and configure cloudflare_api_token.
-# For now, manage DNS manually in your DNS provider.
-#
-# provider "cloudflare" {
-#   api_token = var.cloudflare_api_token
-# }
-#
-# resource "cloudflare_record" "catscan" {
-#   count   = var.cloudflare_api_token != "" && var.cloudflare_zone_id != "" ? 1 : 0
-#   zone_id = var.cloudflare_zone_id
-#   name    = var.domain_name
-#   content = google_compute_address.catscan.address
-#   type    = "A"
-#   ttl     = 1
-#   proxied = false
-# }
+
+resource "google_cloud_scheduler_job" "gmail_import" {
+  name        = "gmail-import"
+  description = "Daily Gmail report import - 1h after emails arrive (~11:00 UTC)"
+  schedule    = "0 12 * * *"
+  time_zone   = "Etc/UTC"
+  region      = var.gcp_region
+
+  http_target {
+    http_method = "POST"
+    uri         = local.gmail_import_url
+  }
+
+  retry_config {
+    retry_count          = 3
+    min_backoff_duration = "60s"
+    max_backoff_duration = "600s"
+  }
+
+  depends_on = [google_project_service.cloudscheduler]
+
+  lifecycle {
+    ignore_changes = [
+      http_target[0].headers,
+      http_target[0].uri,
+    ]
+  }
+}

@@ -68,12 +68,6 @@ variable "google_oauth_client_id" {
   type        = string
 }
 
-variable "google_oauth_client_secret" {
-  description = "Google OAuth Client Secret"
-  type        = string
-  sensitive   = true
-}
-
 variable "allowed_email_domains" {
   description = "Email domains allowed to access"
   type        = list(string)

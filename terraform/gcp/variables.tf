@@ -39,11 +39,11 @@ variable "machine_type" {
 variable "boot_disk_size" {
   description = "Boot disk size in GB"
   type        = number
-  default     = 30
+  default     = 80
 }
 
 variable "domain_name" {
-  description = "Domain name for the application (e.g., your-deployment.example.com)"
+  description = "Domain name for the application (e.g., scan.rtb.cat)"
   type        = string
   default     = ""
 }
@@ -72,28 +72,12 @@ variable "github_branch" {
   default     = "main"
 }
 
-# Optional: Cloudflare integration
-variable "cloudflare_api_token" {
-  description = "Cloudflare API token for DNS management (optional)"
-  type        = string
-  default     = ""
-  sensitive   = true
-}
-
-variable "cloudflare_zone_id" {
-  description = "Cloudflare Zone ID for DNS records (optional)"
-  type        = string
-  default     = ""
-}
-
 # =============================================================================
 # OAuth2 Proxy - Google Authentication (REQUIRED)
 # =============================================================================
-# All users must authenticate with Google before accessing the app.
-# Create OAuth credentials at: https://console.cloud.google.com/apis/credentials
 
 variable "google_oauth_client_id" {
-  description = "Google OAuth Client ID (from GCP Console → APIs & Services → Credentials)"
+  description = "Google OAuth Client ID (from GCP Console)"
   type        = string
 
   validation {
@@ -102,19 +86,8 @@ variable "google_oauth_client_id" {
   }
 }
 
-variable "google_oauth_client_secret" {
-  description = "Google OAuth Client Secret"
-  type        = string
-  sensitive   = true
-
-  validation {
-    condition     = length(var.google_oauth_client_secret) > 10
-    error_message = "Google OAuth Client Secret must not be empty"
-  }
-}
-
 variable "allowed_email_domains" {
-  description = "Email domains allowed to access (e.g., ['example.com', 'company.com']). Empty list is denied by default unless allow_any_google_accounts=true."
+  description = "Email domains allowed to access (e.g., ['rtb.cat', 'company.com'])."
   type        = list(string)
   default     = []
 }
@@ -174,21 +147,21 @@ variable "cloudsql_database_version" {
 }
 
 variable "cloudsql_tier" {
-  description = "Cloud SQL instance tier (use performance-optimized tier for high I/O)"
+  description = "Cloud SQL instance tier"
   type        = string
-  default     = "db-perf-optimized-N-2"
+  default     = "db-custom-1-3840"
 }
 
 variable "cloudsql_availability_type" {
   description = "Cloud SQL availability type (ZONAL or REGIONAL)"
   type        = string
-  default     = "REGIONAL"
+  default     = "ZONAL"
 }
 
 variable "cloudsql_disk_size_gb" {
   description = "Cloud SQL disk size in GB"
   type        = number
-  default     = 100
+  default     = 118
 }
 
 variable "cloudsql_database_name" {
@@ -204,7 +177,7 @@ variable "cloudsql_user_name" {
 }
 
 # =============================================================================
-# Precompute Scheduler + Monitoring
+# Precompute Scheduler
 # =============================================================================
 
 variable "precompute_refresh_days" {
@@ -217,32 +190,4 @@ variable "precompute_refresh_max_age_hours" {
   description = "Maximum age in hours before precompute data is considered stale"
   type        = number
   default     = 36
-}
-
-variable "precompute_refresh_schedule" {
-  description = "Cron schedule for Cloud Scheduler precompute refresh"
-  type        = string
-  default     = "0 3 * * *"
-}
-
-variable "creative_cache_refresh_schedule" {
-  description = "Cron schedule for Cloud Scheduler creative cache refresh"
-  type        = string
-  default     = "10 3 * * *"
-}
-
-# =============================================================================
-# Data Retention (GCS Parquet + BigQuery partitions)
-# =============================================================================
-
-variable "parquet_retention_days" {
-  description = "Retention period for Parquet objects in GCS"
-  type        = number
-  default     = 90
-}
-
-variable "bigquery_partition_retention_days" {
-  description = "Retention period for BigQuery partitions (days)"
-  type        = number
-  default     = 90
 }

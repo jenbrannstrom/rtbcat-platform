@@ -39,7 +39,7 @@ ALLOW_ANY_GOOGLE_ACCOUNTS="${allow_any_google_accounts}"
 if [ -z "$DOMAIN_NAME" ] && [ -f /etc/nginx/sites-enabled/catscan ]; then
     DOMAIN_NAME=$(awk '/server_name/ {print $2; exit}' /etc/nginx/sites-enabled/catscan | tr -d ';')
 fi
-if [ -z "${ENABLE_HTTPS:-}" ] && [ -n "$DOMAIN_NAME" ] && [ -f "/etc/letsencrypt/live/$DOMAIN_NAME/fullchain.pem" ]; then
+if [ -z "$${ENABLE_HTTPS:-}" ] && [ -n "$DOMAIN_NAME" ] && [ -f "/etc/letsencrypt/live/$DOMAIN_NAME/fullchain.pem" ]; then
     ENABLE_HTTPS="true"
 fi
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getRTBEndpoints, updateEndpointQps } from '@/lib/api';
 import { Server, Globe, Info, Loader2, RefreshCw, X, Pencil, Undo2 } from 'lucide-react';
 import { useAccount } from '@/contexts/account-context';
@@ -98,6 +98,7 @@ export function AccountEndpointsHeader({
 }: AccountEndpointsHeaderProps) {
   const { t, language } = useTranslation();
   const { selectedBuyerId, selectedServiceAccountId } = useAccount();
+  const queryClient = useQueryClient();
   const [showQpsInfo, setShowQpsInfo] = useState(false);
 
   // Pending QPS edits (endpoint_id -> new value)
@@ -113,12 +114,17 @@ export function AccountEndpointsHeader({
   // Refresh state
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  const fetchMeasuredEndpoints = useCallback(async () => {
+  const queryKey = useMemo(
+    () => ['rtb-endpoints', selectedBuyerId] as const,
+    [selectedBuyerId]
+  );
+
+  const fetchMeasuredEndpoints = useCallback(async (live = false) => {
     const startedAtMs = typeof window !== 'undefined' && window.performance
       ? window.performance.now()
       : Date.now();
     try {
-      return await getRTBEndpoints({ buyer_id: selectedBuyerId || undefined, live: true });
+      return await getRTBEndpoints({ buyer_id: selectedBuyerId || undefined, live });
     } finally {
       if (onApiLatencyMeasured) {
         const endedAtMs = typeof window !== 'undefined' && window.performance
@@ -135,8 +141,9 @@ export function AccountEndpointsHeader({
   );
 
   const { data, isLoading, error, refetch, isFetchedAfterMount } = useQuery({
-    queryKey: ['rtb-endpoints', selectedBuyerId],
-    queryFn: fetchMeasuredEndpoints,
+    queryKey,
+    // Fast path on page load: read DB-backed endpoint snapshot.
+    queryFn: () => fetchMeasuredEndpoints(false),
     enabled: false,
     initialData: () => endpointsCacheSeed,
     initialDataUpdatedAt: () => 0,
@@ -174,6 +181,13 @@ export function AccountEndpointsHeader({
     writeEndpointsCache(selectedBuyerId, data);
   }, [data, isFetchedAfterMount, selectedBuyerId]);
 
+  const refreshWithLiveData = useCallback(async () => {
+    const fresh = await fetchMeasuredEndpoints(true);
+    queryClient.setQueryData(queryKey, fresh);
+    writeEndpointsCache(selectedBuyerId, fresh);
+    return fresh;
+  }, [fetchMeasuredEndpoints, queryClient, queryKey, selectedBuyerId]);
+
   const hasPendingEdits = Object.keys(pendingQpsEdits).length > 0;
   const pendingCount = Object.keys(pendingQpsEdits).length;
 
@@ -200,11 +214,11 @@ export function AccountEndpointsHeader({
     setShowCommitConfirm(false);
     setCommitResult(null);
     try {
-      await refetch();
+      await refreshWithLiveData();
     } finally {
       setIsRefreshing(false);
     }
-  }, [refetch]);
+  }, [refreshWithLiveData]);
 
   const handleStartEdit = useCallback((endpointId: string, currentQps: number | null) => {
     if (currentQps === null) return; // Don't edit unlimited
@@ -289,7 +303,7 @@ export function AccountEndpointsHeader({
 
     try {
       // Live-refetch to get server truth
-      await refetch();
+      await refreshWithLiveData();
 
       if (failed) {
         // Reconcile: remove successfully applied edits from pending
@@ -321,7 +335,7 @@ export function AccountEndpointsHeader({
     } finally {
       setIsCommitting(false);
     }
-  }, [data, pendingQpsEdits, selectedBuyerId, selectedServiceAccountId, refetch, t]);
+  }, [data, pendingQpsEdits, refreshWithLiveData, selectedBuyerId, selectedServiceAccountId, t]);
 
   if (!selectedBuyerId) {
     return (

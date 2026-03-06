@@ -1,6 +1,6 @@
 # Cat-Scan Roadmap
 
-**Last Updated:** March 4, 2026
+**Last Updated:** March 5, 2026
 
 ## Priority Buckets (2026-02-27)
 
@@ -29,9 +29,9 @@
     - Deployed `version/git_sha` mismatch vs expected image SHA.
     - Secrets-health exit 2 or 3 when `SECRETS_HEALTH_STRICT=true`.
   - Warning-only when `SECRETS_HEALTH_STRICT=false` (non-strict mode).
-- [ ] **Deploy regression guardrail: fail on Artifact Registry auth errors**
-  - Add explicit workflow log assertion that fails if pull output contains `Unauthenticated request`.
-  - Acceptance: no deploy run can pass while silently falling through AR auth failures.
+- [x] **Deploy regression guardrail: fail on Artifact Registry auth errors**
+  - Deploy workflow now hard-fails if pull output contains `Unauthenticated request` (`.github/workflows/deploy.yml`).
+  - Acceptance met: deploy cannot pass while silently falling through AR auth failures.
 
 ---
 
@@ -132,7 +132,7 @@
     - DB: added migration `062_rtb_fact_query_indexes` for buyer/date composite indexes on `rtb_daily`, `rtb_quality`, `rtb_bidstream`, and `rtb_bid_filtering`.
   - [ ] Apply migration `062_rtb_fact_query_indexes` on production and rerun strict closeout to confirm timeout reduction.
   - Progress (2026-03-05): endpoint-efficiency latency regression closed on `unified-platform` (`a4c50dc`) with live latency improving from ~29s to sub-200ms.
-    - Evidence: runtime strict run `22727303377` is green for pilot buyer `<pilot_buyer_id>`.
+    - Evidence: runtime strict run `22727303377` is green for pilot buyer `1487810529`.
     - Temporary release waiver (time-boxed): repo variable `CATSCAN_RUNTIME_HEALTH_MAX_HOME_ENDPOINT_EFFICIENCY_LATENCY_MS=30000` was used so 168h historical rollup can age out pre-fix samples.
     - Waiver expiry: **2026-03-12**. Required action on expiry: set the variable back to `12000` and rerun strict with `--since-hours 168`.
 

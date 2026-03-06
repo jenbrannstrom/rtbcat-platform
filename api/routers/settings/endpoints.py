@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -24,6 +25,50 @@ from .models import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["RTB Settings"])
+
+_LIVE_ENDPOINTS_CACHE_TTL_SECONDS = 300.0
+_LIVE_ENDPOINTS_CACHE: dict[str, tuple[float, list[dict]]] = {}
+_LIVE_ENDPOINTS_CACHE_LOCK = asyncio.Lock()
+
+
+def _store_live_endpoints_cache(bidder_id: str, endpoints: list[dict]) -> None:
+    """Store live endpoint payload for a bidder with TTL."""
+    _LIVE_ENDPOINTS_CACHE[bidder_id] = (
+        time.monotonic() + _LIVE_ENDPOINTS_CACHE_TTL_SECONDS,
+        [dict(row) for row in endpoints],
+    )
+
+
+def _invalidate_live_endpoints_cache(bidder_id: Optional[str] = None) -> None:
+    """Invalidate live endpoints cache for one bidder or all bidders."""
+    if bidder_id:
+        _LIVE_ENDPOINTS_CACHE.pop(bidder_id, None)
+        return
+    _LIVE_ENDPOINTS_CACHE.clear()
+
+
+async def _get_live_endpoints_cached(
+    bidder_id: str,
+    creds_path: Optional[str],
+    endpoint_service: EndpointsService,
+) -> list[dict]:
+    """Fetch live endpoints with process-local TTL caching."""
+    now = time.monotonic()
+    cached = _LIVE_ENDPOINTS_CACHE.get(bidder_id)
+    if cached and cached[0] > now:
+        return [dict(row) for row in cached[1]]
+
+    async with _LIVE_ENDPOINTS_CACHE_LOCK:
+        now = time.monotonic()
+        cached = _LIVE_ENDPOINTS_CACHE.get(bidder_id)
+        if cached and cached[0] > now:
+            return [dict(row) for row in cached[1]]
+
+        client = EndpointsClient(credentials_path=creds_path, account_id=bidder_id)
+        api_endpoints = await client.list_endpoints()
+        await endpoint_service.sync_endpoints(bidder_id, api_endpoints)
+        _store_live_endpoints_cache(bidder_id, api_endpoints)
+        return [dict(row) for row in api_endpoints]
 
 
 def get_seats_service() -> SeatsService:
@@ -191,6 +236,7 @@ async def sync_rtb_endpoints(
 
         endpoint_service = EndpointsService()
         count = await endpoint_service.sync_endpoints(bidder_id, endpoints)
+        _store_live_endpoints_cache(bidder_id, endpoints)
 
         # Refresh observed QPS from bidstream data for this bidder
         await endpoint_service.refresh_endpoints_current(bidder_id=bidder_id)
@@ -234,11 +280,11 @@ async def get_rtb_endpoints(
                 seats_service, buyer_id=buyer_id, service_account_id=service_account_id,
             )
 
-            client = EndpointsClient(credentials_path=creds_path, account_id=bidder_id)
-            api_endpoints = await client.list_endpoints()
-
-            # Upsert into local DB so it stays in sync
-            await endpoint_service.sync_endpoints(bidder_id, api_endpoints)
+            api_endpoints = await _get_live_endpoints_cached(
+                bidder_id=bidder_id,
+                creds_path=creds_path,
+                endpoint_service=endpoint_service,
+            )
 
             endpoints, total_qps, synced_at_value = _build_endpoint_items(api_endpoints)
 
@@ -325,6 +371,7 @@ async def update_endpoint_qps(
         all_endpoints = await client.list_endpoints()
         endpoint_service = EndpointsService()
         await endpoint_service.sync_endpoints(bidder_id, all_endpoints)
+        _store_live_endpoints_cache(bidder_id, all_endpoints)
 
         return RTBEndpointItem(
             endpoint_id=updated["endpointId"],
