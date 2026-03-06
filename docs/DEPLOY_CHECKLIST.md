@@ -52,7 +52,35 @@ sudo bash /opt/catscan/scripts/verify_secrets_health.sh --container catscan-api
 Strict mode is controlled by the `SECRETS_HEALTH_STRICT` env var (set in `.env` on the VM
 and as a repo variable for the deploy workflow).
 
-## 4) Verify runtime health + SLO readiness
+## 4) Verify Cloud SQL backup posture
+
+Required checks:
+
+- Cloud SQL deletion protection is enabled.
+- Automated backups are enabled with PITR.
+- Latest logical export exists in backup bucket.
+
+Commands:
+
+```bash
+gcloud sql instances describe catscan-production-serving \
+  --project catscan-prod-202601 \
+  --format='yaml(settings.deletionProtectionEnabled,settings.backupConfiguration)'
+
+gcloud sql operations list \
+  --instance=catscan-production-serving \
+  --project=catscan-prod-202601 \
+  --limit=5 --sort-by=~startTime \
+  --filter='operationType=EXPORT'
+
+gcloud storage ls gs://catscan-sql-backups-449322304772/catscan-production-serving/
+```
+
+Automation:
+
+- `.github/workflows/cloudsql-logical-backup.yml` runs a daily export to GCS.
+
+## 5) Verify runtime health + SLO readiness
 
 Run:
 
@@ -66,7 +94,7 @@ Required highlights:
 - `/optimizer/economics/efficiency` passes
 - QPS page SLO summary passes (P95 budgets)
 
-## 5) Run strict runtime gate
+## 6) Run strict runtime gate
 
 Run:
 
@@ -90,7 +118,7 @@ Temporary waiver note (March 5, 2026):
 scripts/run_v1_runtime_health_strict_dispatch.sh --buyer-id <PROD_BUYER_ID> --profile balanced --since-hours 168
 ```
 
-## 6) Release decision
+## 7) Release decision
 
 Release only if all of the following are true:
 
