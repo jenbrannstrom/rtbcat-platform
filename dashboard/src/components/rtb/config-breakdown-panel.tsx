@@ -382,31 +382,35 @@ export function ConfigBreakdownPanel({
     };
   }, [activeTab, geoSearchQuery, geoSearchType]);
 
-  // Sort breakdown by reached descending
+  // Sort breakdown by selected column; numeric fields are coerced for stable ordering.
   const sortedBreakdown = data?.breakdown
     ? [...data.breakdown].sort((a, b) => {
         const dir = sortDir === 'asc' ? 1 : -1;
-        const getValue = (item: ConfigBreakdownItem) => {
+        if (sortKey === 'name') {
+          return (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' }) * dir;
+        }
+
+        const getNumericValue = (item: ConfigBreakdownItem): number => {
           switch (sortKey) {
-            case 'name':
-              return item.name?.toLowerCase() || '';
             case 'spend':
-              return item.spend_usd ?? 0;
+              return asNumber(item.spend_usd);
             case 'impressions':
-              return item.impressions ?? 0;
+              return asNumber(item.impressions);
             case 'win_rate':
-              return item.win_rate ?? 0;
+              return asNumber(item.win_rate);
             case 'reached':
             default:
-              return item.reached ?? 0;
+              return asNumber(item.reached);
           }
         };
-        const aVal = getValue(a);
-        const bVal = getValue(b);
-        if (typeof aVal === 'string' && typeof bVal === 'string') {
-          return aVal.localeCompare(bVal) * dir;
+
+        const diff = (getNumericValue(a) - getNumericValue(b)) * dir;
+        if (diff !== 0) {
+          return diff;
         }
-        return ((aVal as number) - (bVal as number)) * dir;
+
+        // Stable tiebreaker for equal numeric values.
+        return (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' });
       })
     : [];
 
