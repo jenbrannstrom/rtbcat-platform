@@ -125,6 +125,7 @@ class RtbBidstreamRepository:
                 SUM(impressions) as impressions,
                 SUM(bids) as total_bids,
                 SUM(auctions_won) as auctions_won,
+                SUM(spend_micros) as spend_micros,
                 SUM(successful_responses) as successful_responses,
                 SUM(bid_requests) as bid_requests
             FROM rtb_publisher_daily

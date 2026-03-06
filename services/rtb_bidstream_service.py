@@ -293,6 +293,7 @@ class RtbBidstreamService:
             reached = row["reached"] or 0
             imps = row["total_impressions"] if "total_impressions" in row else row.get("impressions", 0) or 0
             bids = row["total_bids"] or 0
+            spend_micros = row.get("spend_micros") or 0
             win_rate = (imps / reached * 100) if reached > 0 else 0
             bid_rate = (bids / reached * 100) if reached > 0 else 0
 
@@ -308,6 +309,7 @@ class RtbBidstreamService:
                 "bids": bids,
                 "win_rate": round(win_rate, 2),
                 "bid_rate": round(bid_rate, 2),
+                "spend_usd": round(spend_micros / 1_000_000, 2),
                 "waste_pct": round(100 - win_rate, 2),
             })
 
@@ -1117,6 +1119,7 @@ class RtbBidstreamService:
             imps = row["impressions"] or 0
             bids = row["total_bids"] or 0
             wins = row.get("auctions_won") or 0
+            spend_micros = row.get("spend_micros") or 0
             win_rate = (imps / reached * 100) if reached > 0 else 0
 
             pub_name = self._normalize_publisher_name(
@@ -1130,6 +1133,7 @@ class RtbBidstreamService:
                 "bids": bids,
                 "impressions": imps,
                 "auctions_won": wins,
+                "spend_usd": round(spend_micros / 1_000_000, 2),
                 "win_rate": round(win_rate, 2),
             })
         return publishers

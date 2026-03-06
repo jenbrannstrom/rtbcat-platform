@@ -14,6 +14,15 @@ interface PublisherPerformanceSectionProps {
   seatName?: string;
 }
 
+function formatSpendUsd(value: number | null | undefined): string {
+  const amount = asNumber(value);
+  if (amount <= 0) return "$0";
+  if (amount >= 1_000_000) return `$${(amount / 1_000_000).toFixed(1)}M`;
+  if (amount >= 1_000) return `$${(amount / 1_000).toFixed(1)}K`;
+  if (amount >= 100) return `$${amount.toFixed(0)}`;
+  return `$${amount.toFixed(2)}`;
+}
+
 /**
  * Publisher Performance Section.
  * Shows publisher win rates categorized by performance tier.
@@ -128,6 +137,7 @@ export function PublisherPerformanceSection({ publishers, seatName }: PublisherP
                       {pub.publisher_name}
                     </span>
                     <div className="flex items-center gap-4">
+                      <span className="text-green-600">{formatSpendUsd(pub.spend_usd)} {t.campaigns.spend}</span>
                       <span className="text-green-600">{formatNumber(asNumber(pub.impressions))} {t.wasteAnalysis.imprShort}</span>
                       <span className="font-medium text-green-700">{asNumber(pub.win_rate).toFixed(1)}% {t.wasteAnalysis.winShort}</span>
                     </div>
@@ -153,6 +163,7 @@ export function PublisherPerformanceSection({ publishers, seatName }: PublisherP
                       {pub.publisher_name}
                     </span>
                     <div className="flex items-center gap-4">
+                      <span className="text-yellow-600">{formatSpendUsd(pub.spend_usd)} {t.campaigns.spend}</span>
                       <span className="text-yellow-600">{formatNumber(asNumber(pub.impressions))} {t.wasteAnalysis.imprShort}</span>
                       <span className="font-medium text-yellow-700">{asNumber(pub.win_rate).toFixed(1)}% {t.wasteAnalysis.winShort}</span>
                     </div>
@@ -178,6 +189,7 @@ export function PublisherPerformanceSection({ publishers, seatName }: PublisherP
                       {pub.publisher_name}
                     </span>
                     <div className="flex items-center gap-4">
+                      <span className="text-orange-600">{formatSpendUsd(pub.spend_usd)} {t.campaigns.spend}</span>
                       <span className="text-orange-600">{formatNumber(asNumber(pub.impressions))} {t.wasteAnalysis.imprShort}</span>
                       <span className="font-medium text-orange-700">{asNumber(pub.win_rate).toFixed(1)}% {t.wasteAnalysis.winShort}</span>
                     </div>
