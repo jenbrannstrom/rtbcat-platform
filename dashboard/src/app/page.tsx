@@ -18,7 +18,7 @@ import {
   type SpendStatsResponse,
   type EndpointEfficiencyResponse,
 } from "@/lib/api";
-import { cn } from "@/lib/utils";
+import { cn, asNumber } from "@/lib/utils";
 import { isSeatReadyForAnalytics } from "@/lib/seat-readiness";
 import { useAccount } from "@/contexts/account-context";
 import { useTranslation } from "@/contexts/i18n-context";
@@ -453,10 +453,10 @@ function transformConfigToProps(
 ): PretargetingConfig {
   const name = apiConfig.user_name || apiConfig.display_name || `Config ${apiConfig.billing_id}`;
   const hasPerformance = performanceData !== undefined;
-  const reached = performanceData?.reached || 0;
-  const impressions = performanceData?.impressions || 0;
-  const win_rate = performanceData?.win_rate || 0;
-  const waste_rate = performanceData?.waste_rate || 0;
+  const reached = asNumber(performanceData?.reached);
+  const impressions = asNumber(performanceData?.impressions);
+  const win_rate = asNumber(performanceData?.win_rate);
+  const waste_rate = asNumber(performanceData?.waste_rate);
 
   return {
     billing_id: apiConfig.billing_id || apiConfig.config_id,
@@ -1022,10 +1022,10 @@ function WasteAnalysisContent() {
     if (configPerformance?.configs) {
       for (const cfg of configPerformance.configs) {
         nextMap.set(cfg.billing_id, {
-          reached: cfg.reached || 0,
-          impressions: cfg.impressions || 0,
-          win_rate: cfg.win_rate_pct || 0,
-          waste_rate: cfg.waste_pct || 0,
+          reached: asNumber(cfg.reached),
+          impressions: asNumber(cfg.impressions),
+          win_rate: asNumber(cfg.win_rate_pct),
+          waste_rate: asNumber(cfg.waste_pct),
         });
       }
     }
@@ -1049,32 +1049,28 @@ function WasteAnalysisContent() {
       if (a.has_performance !== b.has_performance) {
         return a.has_performance ? -1 : 1;
       }
-      let aVal: number | string;
-      let bVal: number | string;
-
-      switch (sortColumn) {
-        case 'name':
-          aVal = a.name.toLowerCase();
-          bVal = b.name.toLowerCase();
-          break;
-        case 'reached':
-          aVal = a.reached;
-          bVal = b.reached;
-          break;
-        case 'win_rate':
-          aVal = a.win_rate;
-          bVal = b.win_rate;
-          break;
-        case 'waste_rate':
-        default:
-          aVal = a.waste_rate;
-          bVal = b.waste_rate;
-          break;
+      const dir = sortDirection === 'asc' ? 1 : -1;
+      if (sortColumn === 'name') {
+        return (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' }) * dir;
       }
 
-      if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
-      if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
-      return 0;
+      const getMetricValue = (item: PretargetingConfig): number => {
+        switch (sortColumn) {
+          case 'reached':
+            return asNumber(item.reached);
+          case 'win_rate':
+            return asNumber(item.win_rate);
+          case 'waste_rate':
+          default:
+            return asNumber(item.waste_rate);
+        }
+      };
+
+      const diff = (getMetricValue(a) - getMetricValue(b)) * dir;
+      if (diff !== 0) {
+        return diff;
+      }
+      return (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' });
     });
   }, [sortColumn, sortDirection, unsortedConfigs]);
   const initialVisibleConfigRows = useSummaryBootstrap
