@@ -15,6 +15,13 @@ All notable changes to Cat-Scan are documented in this file.
 - Runtime health and UI now expose both release and build identity for traceability.
 - Added release policy and preflight documentation for reproducible SemVer publishing.
 
+### Operational Follow-Up (2026-03-06)
+
+- Production incident: Authorized Buyers API calls failed with `invalid_grant: account not found` after the `catscan-api@catscan-prod-202601.iam.gserviceaccount.com` service account was disabled.
+- Error window observed in logs: `2026-03-06 03:17:21 UTC` to `2026-03-06 04:18:01 UTC`.
+- Remediation: re-enabled service account, verified token refresh success on both VMs, and verified AB endpoint listing resumed.
+- Post-deploy (`sha-7ba3af4`) contract check `C-EPT-001` initially failed due to stale endpoint data created during the outage window; manual endpoint sync on both VMs restored freshness.
+
 ## [17.0.0] - 2026-01-13
 
 ### Phase 17: RTB Bidstream & UTC Standardization

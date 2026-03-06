@@ -83,6 +83,8 @@ Updated defaults to match production:
 | Static IP | `google_compute_address.catscan_sg_vm2` | `catscan-production-sg2-ip` |
 | VM Instance | `google_compute_instance.catscan_sg_vm2` | `catscan-production-sg2` |
 
+**State composition:** `2` managed resources + `2` data sources (`google_service_account`, `google_compute_network`).
+
 ### Config Changes Made
 1. **Removed `random` provider** and all `random_*` resources
 2. **Removed `google_oauth_client_secret` variable** — not used in template
@@ -146,3 +148,26 @@ EXIT_CODE=0
 - **No production resources were modified**
 - State files are gitignored and not committed
 - tfvars files are gitignored and not committed
+
+---
+
+## 6. Production Incident Note (2026-03-06 UTC)
+
+### Incident
+- **Issue:** Authorized Buyers calls failed with `invalid_grant: Invalid grant: account not found`.
+- **Affected hosts:** `catscan-production-sg`, `catscan-production-sg2`.
+- **Observed error window:** first observed `2026-03-06 03:17:21 UTC`, last observed pre-fix `2026-03-06 04:18:01 UTC`.
+
+### Root Cause
+- Service account `catscan-api@catscan-prod-202601.iam.gserviceaccount.com` was disabled.
+- Both VMs share this SA for Authorized Buyers access.
+
+### Remediation
+- Re-enabled service account via `gcloud iam service-accounts enable`.
+- Verified token refresh succeeds on both VMs (`TOKEN_VALID=True`).
+- Verified AB endpoint listing succeeds again (`3` endpoints on SG bidder, `2` endpoints on SG2 bidder).
+
+### Post-Deploy Contract Check Context
+- After deploy `sha-7ba3af4`, contract check `C-EPT-001` failed due to stale endpoint snapshots accumulated during the outage window.
+- Manually synced endpoints for all 4 bidders on both VMs (`/settings/endpoints/sync`, HTTP `200`).
+- This is classified as **pre-existing data staleness from outage**, not a regression introduced by deploy `sha-7ba3af4`.
