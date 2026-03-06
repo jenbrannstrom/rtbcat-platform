@@ -1,0 +1,111 @@
+name: Cloud SQL Logical Backup
+
+on:
+  workflow_dispatch:
+    inputs:
+      instance:
+        description: "Cloud SQL instance name"
+        required: false
+        default: ""
+      database:
+        description: "Database name to export"
+        required: false
+        default: ""
+      bucket:
+        description: "GCS bucket for SQL dumps (without gs://)"
+        required: false
+        default: ""
+  schedule:
+    - cron: "20 9 * * *"
+
+concurrency:
+  group: cloudsql-logical-backup-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  GCP_PROJECT: ${{ vars.GCP_PROJECT || 'catscan-prod-202601' }}
+  CLOUDSQL_INSTANCE_DEFAULT: ${{ vars.CLOUDSQL_INSTANCE || 'catscan-production-serving' }}
+  CLOUDSQL_DATABASE_DEFAULT: ${{ vars.CLOUDSQL_DATABASE || 'rtbcat_serving' }}
+  CLOUDSQL_BACKUP_BUCKET_DEFAULT: ${{ vars.CLOUDSQL_BACKUP_BUCKET || 'catscan-sql-backups-449322304772' }}
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          INSTANCE="${{ github.event.inputs.instance }}"
+          DATABASE="${{ github.event.inputs.database }}"
+          BUCKET="${{ github.event.inputs.bucket }}"
+
+          if [ -z "$INSTANCE" ]; then
+            INSTANCE="${CLOUDSQL_INSTANCE_DEFAULT}"
+          fi
+          if [ -z "$DATABASE" ]; then
+            DATABASE="${CLOUDSQL_DATABASE_DEFAULT}"
+          fi
+          if [ -z "$BUCKET" ]; then
+            BUCKET="${CLOUDSQL_BACKUP_BUCKET_DEFAULT}"
+          fi
+
+          TS="$(date -u +%Y%m%dT%H%M%SZ)"
+          URI="gs://${BUCKET}/${INSTANCE}/${DATABASE}-${TS}.sql.gz"
+
+          echo "INSTANCE=$INSTANCE" >> "$GITHUB_ENV"
+          echo "DATABASE=$DATABASE" >> "$GITHUB_ENV"
+          echo "BUCKET=$BUCKET" >> "$GITHUB_ENV"
+          echo "EXPORT_URI=$URI" >> "$GITHUB_ENV"
+          echo "EXPORT_TS=$TS" >> "$GITHUB_ENV"
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.GCP_PROJECT }}
+
+      - name: Export SQL dump to GCS
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Exporting ${DATABASE} from ${INSTANCE} to ${EXPORT_URI}"
+          gcloud sql export sql "${INSTANCE}" "${EXPORT_URI}" \
+            --project "${GCP_PROJECT}" \
+            --database "${DATABASE}" \
+            --offload \
+            --quiet
+
+      - name: Verify backup object
+        shell: bash
+        run: |
+          set -euo pipefail
+          gcloud storage ls "${EXPORT_URI}"
+          SIZE_BYTES="$(gcloud storage objects describe "${EXPORT_URI}" --format='value(size)')"
+          if ! [[ "${SIZE_BYTES}" =~ ^[0-9]+$ ]] || [ "${SIZE_BYTES}" -le 0 ]; then
+            echo "Backup object size is invalid: ${SIZE_BYTES}"
+            exit 1
+          fi
+          echo "Backup size (bytes): ${SIZE_BYTES}"
+          echo "SIZE_BYTES=${SIZE_BYTES}" >> "$GITHUB_ENV"
+
+      - name: Write summary
+        shell: bash
+        run: |
+          {
+            echo "## Cloud SQL Logical Backup"
+            echo ""
+            echo "- Project: \`${GCP_PROJECT}\`"
+            echo "- Instance: \`${INSTANCE}\`"
+            echo "- Database: \`${DATABASE}\`"
+            echo "- Export URI: \`${EXPORT_URI}\`"
+            echo "- Size (bytes): \`${SIZE_BYTES}\`"
+            echo "- Timestamp (UTC): \`${EXPORT_TS}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
