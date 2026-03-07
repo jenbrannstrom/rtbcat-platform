@@ -13,6 +13,7 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 QUICK=false
 FAIL=0
+PIP_AUDIT_BIN=""
 
 [[ "${1:-}" == "--quick" ]] && QUICK=true
 
@@ -20,6 +21,12 @@ red()   { printf '\033[1;31m%s\033[0m\n' "$*"; }
 green() { printf '\033[1;32m%s\033[0m\n' "$*"; }
 info()  { printf '\033[0;36m[check]\033[0m %s\n' "$*"; }
 fail()  { red "FAIL: $*"; FAIL=1; }
+
+if command -v pip-audit &>/dev/null; then
+  PIP_AUDIT_BIN="pip-audit"
+elif [[ -x "$REPO_ROOT/.venv/bin/pip-audit" ]]; then
+  PIP_AUDIT_BIN="$REPO_ROOT/.venv/bin/pip-audit"
+fi
 
 # ── 1. Forbidden tracked files ──────────────────────────────────────
 
@@ -73,9 +80,9 @@ fi
 if [[ "$QUICK" == false ]]; then
   info "Running pip-audit on Python requirements files"
 
-  if command -v pip-audit &>/dev/null; then
+  if [[ -n "$PIP_AUDIT_BIN" ]]; then
     for req in requirements.txt requirements-ai.txt requirements-dev.txt; do
-      if pip-audit -r "$REPO_ROOT/$req" 2>&1; then
+      if "$PIP_AUDIT_BIN" -r "$REPO_ROOT/$req" 2>&1; then
         green "  pip-audit: $req is clean"
       else
         fail "pip-audit found vulnerabilities in $req"

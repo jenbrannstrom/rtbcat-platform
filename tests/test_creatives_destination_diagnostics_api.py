@@ -8,12 +8,12 @@ import pytest
 
 pytest.importorskip("fastapi")
 from fastapi import FastAPI
-from fastapi.testclient import TestClient
+from tests.support.asgi_client import SyncASGIClient
 
 from api.routers import creatives as creatives_router
 
 
-def _build_client(store: object) -> TestClient:
+def _build_client(store: object) -> SyncASGIClient:
     app = FastAPI()
     app.include_router(creatives_router.router, prefix="/api")
     app.dependency_overrides[creatives_router.get_store] = lambda: store
@@ -22,7 +22,7 @@ def _build_client(store: object) -> TestClient:
         role="sudo",
         email="admin@example.com",
     )
-    return TestClient(app)
+    return SyncASGIClient(app)
 
 
 class _StoreWithCreative:

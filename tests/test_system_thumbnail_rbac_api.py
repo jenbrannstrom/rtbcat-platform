@@ -8,7 +8,7 @@ import pytest
 
 pytest.importorskip("fastapi")
 from fastapi import FastAPI, HTTPException
-from fastapi.testclient import TestClient
+from tests.support.asgi_client import SyncASGIClient
 
 from api.routers import system as system_router
 from services.auth_service import User
@@ -50,13 +50,13 @@ class _StubThumbnailsService:
         ]
 
 
-def _build_client(monkeypatch: pytest.MonkeyPatch, seat_admin_override) -> TestClient:
+def _build_client(monkeypatch: pytest.MonkeyPatch, seat_admin_override) -> SyncASGIClient:
     app = FastAPI()
     app.include_router(system_router.router, prefix="/api")
     app.dependency_overrides[system_router.get_store] = _StubStore
     app.dependency_overrides[system_router.require_seat_admin_or_sudo] = seat_admin_override
     monkeypatch.setattr(system_router, "ThumbnailsService", _StubThumbnailsService)
-    return TestClient(app)
+    return SyncASGIClient(app)
 
 
 def test_generate_thumbnail_forbidden_without_seat_admin(

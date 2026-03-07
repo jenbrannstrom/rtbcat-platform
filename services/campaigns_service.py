@@ -199,5 +199,5 @@ class CampaignsService:
             status=row.get("status") or "active",
             created_at=str(row["created_at"]) if row.get("created_at") else None,
             updated_at=str(row["updated_at"]) if row.get("updated_at") else None,
-            creative_count=row.get("computed_count", 0) or 0,
+            creative_count=row.get("computed_count", row.get("creative_count", 0)) or 0,
         )

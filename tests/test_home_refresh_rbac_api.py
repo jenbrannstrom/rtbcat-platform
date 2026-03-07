@@ -8,7 +8,7 @@ import pytest
 
 pytest.importorskip("fastapi")
 from fastapi import FastAPI, HTTPException
-from fastapi.testclient import TestClient
+from tests.support.asgi_client import SyncASGIClient
 
 from api.routers.analytics import home as home_router
 from services.auth_service import User
@@ -18,7 +18,7 @@ def _build_client(
     monkeypatch: pytest.MonkeyPatch,
     require_admin_override,
     refresh_impl,
-) -> TestClient:
+) -> SyncASGIClient:
     app = FastAPI()
     app.include_router(home_router.router, prefix="/api")
     app.dependency_overrides[home_router.get_store] = lambda: SimpleNamespace()
@@ -34,7 +34,7 @@ def _build_client(
 
     monkeypatch.setattr(home_router, "resolve_buyer_id", _resolve_buyer_id)
     monkeypatch.setattr(home_router, "refresh_home_summaries", refresh_impl)
-    return TestClient(app)
+    return SyncASGIClient(app)
 
 
 def test_refresh_home_cache_forbidden_when_require_admin_denies(

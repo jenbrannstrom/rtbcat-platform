@@ -8,7 +8,7 @@ import pytest
 
 pytest.importorskip("fastapi")
 from fastapi import FastAPI
-from fastapi.testclient import TestClient
+from tests.support.asgi_client import SyncASGIClient
 
 from api.routers.settings import optimizer as optimizer_settings_router
 
@@ -34,16 +34,21 @@ class _StubStore:
 def _build_client(
     stub_store: _StubStore,
     monkeypatch: pytest.MonkeyPatch,
-) -> TestClient:
+) -> SyncASGIClient:
     app = FastAPI()
     app.include_router(optimizer_settings_router.router, prefix="/api")
     app.dependency_overrides[optimizer_settings_router.get_store] = lambda: stub_store
+    app.dependency_overrides[optimizer_settings_router.get_current_user] = lambda: SimpleNamespace(
+        id="u1",
+        role="sudo",
+        email="admin@example.com",
+    )
     app.dependency_overrides[optimizer_settings_router.require_admin] = lambda: SimpleNamespace(
         id="u1",
         role="sudo",
         email="admin@example.com",
     )
-    return TestClient(app)
+    return SyncASGIClient(app)
 
 
 def test_get_optimizer_setup_parses_monthly_cost(monkeypatch: pytest.MonkeyPatch):
@@ -95,4 +100,3 @@ def test_update_optimizer_setup_writes_setting_and_audit(monkeypatch: pytest.Mon
     assert len(stub.audit_calls) == 1
     assert stub.audit_calls[0]["action"] == "optimizer_setup_updated"
     assert stub.audit_calls[0]["resource_id"] == "optimizer_monthly_hosting_cost_usd"
-

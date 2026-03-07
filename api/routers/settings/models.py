@@ -60,6 +60,7 @@ class PretargetingConfigResponse(BaseModel):
     included_sizes: Optional[list[str]] = None
     included_geos: Optional[list[str]] = None
     excluded_geos: Optional[list[str]] = None
+    included_operating_systems: Optional[list[str]] = None
     maximum_qps: Optional[int] = None
     synced_at: Optional[str] = None
 

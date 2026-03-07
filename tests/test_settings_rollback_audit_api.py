@@ -17,7 +17,7 @@ if "collectors" not in sys.modules:
 
 pytest.importorskip("fastapi")
 from fastapi import FastAPI
-from fastapi.testclient import TestClient
+from tests.support.asgi_client import SyncASGIClient
 
 from api.routers.settings import actions as actions_router
 from api.routers.settings import pretargeting as pretargeting_router
@@ -42,14 +42,14 @@ class _StubActionsService:
 def _build_actions_client(
     stub_service: _StubActionsService,
     monkeypatch: pytest.MonkeyPatch,
-) -> TestClient:
+) -> SyncASGIClient:
     app = FastAPI()
     app.include_router(actions_router.router, prefix="/api")
-    app.dependency_overrides[actions_router.get_current_user] = lambda: SimpleNamespace(
+    app.dependency_overrides[actions_router.require_seat_admin_or_sudo] = lambda: SimpleNamespace(
         id="u123", role="sudo", email="admin@example.com"
     )
     monkeypatch.setattr(actions_router, "ActionsService", lambda: stub_service)
-    return TestClient(app)
+    return SyncASGIClient(app)
 
 
 def test_rollback_endpoint_forwards_proposal_context(monkeypatch: pytest.MonkeyPatch):
@@ -132,11 +132,16 @@ class _StubPretargetingService:
         ]
 
 
-def _build_pretargeting_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
+def _build_pretargeting_client(monkeypatch: pytest.MonkeyPatch) -> SyncASGIClient:
     app = FastAPI()
     app.include_router(pretargeting_router.router, prefix="/api")
+    app.dependency_overrides[pretargeting_router.get_current_user] = lambda: SimpleNamespace(
+        id="u123",
+        role="read",
+        email="user@example.com",
+    )
     monkeypatch.setattr(pretargeting_router, "PretargetingService", lambda: _StubPretargetingService())
-    return TestClient(app)
+    return SyncASGIClient(app)
 
 
 def test_history_endpoint_parses_rollback_context_from_dict_and_json(

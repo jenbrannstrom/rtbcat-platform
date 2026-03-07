@@ -9,19 +9,24 @@ import pytest
 
 pytest.importorskip("fastapi")
 from fastapi import FastAPI
-from fastapi.testclient import TestClient
 
 from api.routers import system as system_router
+from tests.support.asgi_client import SyncASGIClient
 
 
-def _build_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
+def _build_client(monkeypatch: pytest.MonkeyPatch) -> SyncASGIClient:
     app = FastAPI()
     app.include_router(system_router.router, prefix="/api")
-    app.dependency_overrides[system_router.get_store] = lambda: SimpleNamespace()
-    app.dependency_overrides[system_router.get_current_user] = lambda: SimpleNamespace(
-        id="u1", role="sudo", email="admin@example.com"
-    )
-    return TestClient(app)
+
+    async def _get_store():
+        return SimpleNamespace()
+
+    async def _get_current_user():
+        return SimpleNamespace(id="u1", role="sudo", email="admin@example.com")
+
+    app.dependency_overrides[system_router.get_store] = _get_store
+    app.dependency_overrides[system_router.get_current_user] = _get_current_user
+    return SyncASGIClient(app)
 
 
 def test_record_ui_page_load_metric_records_payload(monkeypatch: pytest.MonkeyPatch):

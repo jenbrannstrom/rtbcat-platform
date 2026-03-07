@@ -8,7 +8,7 @@ import pytest
 
 pytest.importorskip("fastapi")
 from fastapi import FastAPI
-from fastapi.testclient import TestClient
+from tests.support.asgi_client import SyncASGIClient
 
 from api.routers import optimizer_economics as optimizer_economics_router
 
@@ -98,7 +98,7 @@ class _StubOptimizerEconomicsService:
 def _build_client(
     stub_service: _StubOptimizerEconomicsService,
     monkeypatch: pytest.MonkeyPatch,
-) -> TestClient:
+) -> SyncASGIClient:
     app = FastAPI()
     app.include_router(optimizer_economics_router.router, prefix="/api")
     app.dependency_overrides[optimizer_economics_router.get_store] = lambda: SimpleNamespace()
@@ -115,7 +115,7 @@ def _build_client(
 
     monkeypatch.setattr(optimizer_economics_router, "resolve_buyer_id", _resolve_buyer_id)
     monkeypatch.setattr(optimizer_economics_router, "OptimizerEconomicsService", lambda: stub_service)
-    return TestClient(app)
+    return SyncASGIClient(app)
 
 
 def test_get_effective_cpm_endpoint(monkeypatch: pytest.MonkeyPatch):

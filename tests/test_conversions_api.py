@@ -11,9 +11,9 @@ import pytest
 
 pytest.importorskip("fastapi")
 from fastapi import FastAPI
-from fastapi.testclient import TestClient
 
 from api.routers import conversions as conversions_router
+from tests.support.asgi_client import SyncASGIClient
 
 
 def _hmac_sig(secret: str, payload: dict, timestamp: int | None = None) -> str:
@@ -415,14 +415,19 @@ def _build_client(
     store: object | None = None,
     user: object | None = None,
     attribution_stub: _StubConversionAttributionService | None = None,
-) -> TestClient:
+) -> SyncASGIClient:
     conversions_router._clear_webhook_rate_limit_state()
     app = FastAPI()
     app.include_router(conversions_router.router, prefix="/api")
-    app.dependency_overrides[conversions_router.get_store] = lambda: (store or SimpleNamespace())
-    app.dependency_overrides[conversions_router.get_current_user] = lambda: (
-        user or SimpleNamespace(id="u1", role="sudo", email="admin@example.com")
-    )
+
+    async def _get_store():
+        return store or SimpleNamespace()
+
+    async def _get_current_user():
+        return user or SimpleNamespace(id="u1", role="sudo", email="admin@example.com")
+
+    app.dependency_overrides[conversions_router.get_store] = _get_store
+    app.dependency_overrides[conversions_router.get_current_user] = _get_current_user
 
     async def _resolve_buyer_id(
         buyer_id: str | None,
@@ -439,7 +444,7 @@ def _build_client(
         "ConversionAttributionService",
         lambda: (attribution_stub or _StubConversionAttributionService()),
     )
-    return TestClient(app)
+    return SyncASGIClient(app)
 
 
 def test_get_conversion_aggregates_forwards_filters(monkeypatch: pytest.MonkeyPatch):

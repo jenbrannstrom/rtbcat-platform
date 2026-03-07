@@ -6,7 +6,7 @@ import pytest
 
 pytest.importorskip("fastapi")
 from fastapi import FastAPI, HTTPException
-from fastapi.testclient import TestClient
+from tests.support.asgi_client import SyncASGIClient
 
 from api.routers.settings import actions as actions_router
 from api.routers.settings import changes as changes_router
@@ -33,7 +33,7 @@ def test_actions_apply_all_preserves_http_exception_status(
     app.dependency_overrides[actions_router.require_seat_admin_or_sudo] = _allow_seat_admin()
     monkeypatch.setattr(actions_router, "ActionsService", _StubActionsService)
 
-    client = TestClient(app)
+    client = SyncASGIClient(app)
     response = client.post("/api/settings/pretargeting/123/apply-all")
 
     assert response.status_code == 409
@@ -83,7 +83,7 @@ def test_changes_create_pending_change_preserves_not_found_http_exception(
     monkeypatch.setattr(changes_router, "ChangesService", _StubChangesService)
     monkeypatch.setattr(changes_router, "PretargetingService", _StubPretargetingService)
 
-    client = TestClient(app)
+    client = SyncASGIClient(app)
     response = client.post(
         "/api/settings/pretargeting/pending-change",
         json={

@@ -8,7 +8,7 @@ import pytest
 
 pytest.importorskip("fastapi")
 from fastapi import FastAPI, HTTPException
-from fastapi.testclient import TestClient
+from tests.support.asgi_client import SyncASGIClient
 
 from api.routers import performance as performance_router
 from services.auth_service import User
@@ -34,7 +34,7 @@ def _build_client(
     require_admin_override=None,
     require_seat_admin_override=None,
     store: _StubStore | None = None,
-) -> TestClient:
+) -> SyncASGIClient:
     app = FastAPI()
     app.include_router(performance_router.router, prefix="/api")
 
@@ -48,7 +48,7 @@ def _build_client(
     if require_seat_admin_override is not None:
         app.dependency_overrides[performance_router.require_seat_admin_or_sudo] = require_seat_admin_override
 
-    return TestClient(app)
+    return SyncASGIClient(app)
 
 
 def test_import_stream_start_forbidden_when_seat_admin_dependency_denies() -> None:
