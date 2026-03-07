@@ -403,7 +403,6 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
   const isGoodWinRate = config.has_performance && config.win_rate >= 50;
 
   // Check if using display_name from Google (not user-defined)
-  const isGoogleName = !config.user_name && config.display_name;
   const stateMutationPending = suspendMutation.isPending || activateMutation.isPending;
   const qpsMutationPending = createChangeMutation.isPending || cancelChangeMutation.isPending;
   const configDetailHref = toBuyerScopedPath(

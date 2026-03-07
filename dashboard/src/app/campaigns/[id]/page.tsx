@@ -138,7 +138,7 @@ export default function CampaignDetailPage() {
       if (campaign) {
         setCampaign({ ...campaign, creative_count: campaign.creative_count - 1 });
       }
-    } catch (err) {
+    } catch {
       alert(t.campaigns.failedToRemoveCreative);
     }
     setRemovingId(null);
@@ -154,7 +154,7 @@ export default function CampaignDetailPage() {
         prev ? { ...prev, name: editName, description: editDescription } : null
       );
       setEditing(false);
-    } catch (err) {
+    } catch {
       alert(t.campaigns.failedToUpdateCampaign);
     }
   };
@@ -165,7 +165,7 @@ export default function CampaignDetailPage() {
     try {
       await deleteAICampaign(campaignId);
       router.push(campaignsHref);
-    } catch (err) {
+    } catch {
       alert(t.campaigns.failedToDeleteCampaign);
     }
   };
@@ -386,7 +386,7 @@ export default function CampaignDetailPage() {
             {t.campaigns.dailyPerformance}
           </h3>
           <div className="h-24 flex items-end gap-1">
-            {dailyTrend.slice(-14).map((day, i) => {
+            {dailyTrend.slice(-14).map((day) => {
               const maxSpend = Math.max(...dailyTrend.map((d) => d.spend), 1);
               const height = (day.spend / maxSpend) * 100;
               return (

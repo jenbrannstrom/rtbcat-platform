@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ExternalLink, Play, Image, FileCode, Copy, Check, Info, AlertTriangle } from "lucide-react";
+import { ExternalLink, Play, ImageIcon, FileCode, Copy, Check, Info, AlertTriangle } from "lucide-react";
 import type { Creative, CreativePerformanceSummary } from "@/types/api";
 import { useTranslation } from "@/contexts/i18n-context";
 import { cn, getFormatColor, getFormatLabel, getStatusColor } from "@/lib/utils";
@@ -117,7 +117,7 @@ function PreviewThumbnail({ creative }: { creative: Creative }) {
             }}
           />
         ) : (
-          <Image className="h-8 w-8 text-green-400" />
+          <ImageIcon className="h-8 w-8 text-green-400" />
         )}
         <span className={cn("absolute top-1 right-1 text-[10px] px-1.5 py-0.5 rounded border", sourceClass)}>
           {sourceLabel}
@@ -166,7 +166,7 @@ function PreviewThumbnail({ creative }: { creative: Creative }) {
             }}
           />
         ) : (
-          <Image className="h-8 w-8 text-blue-400" />
+          <ImageIcon className="h-8 w-8 text-blue-400" />
         )}
         <span className={cn("absolute top-1 right-1 text-[10px] px-1.5 py-0.5 rounded border", sourceClass)}>
           {sourceLabel}
@@ -178,7 +178,7 @@ function PreviewThumbnail({ creative }: { creative: Creative }) {
   // Default placeholder for unknown formats
   return (
     <div className="relative h-20 bg-gray-100 flex items-center justify-center text-gray-400">
-      <Image className="h-8 w-8" />
+      <ImageIcon className="h-8 w-8" />
       <span className={cn("absolute top-1 right-1 text-[10px] px-1.5 py-0.5 rounded border", sourceClass)}>
         {sourceLabel}
       </span>

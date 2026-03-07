@@ -78,12 +78,6 @@ export function CountrySection({ creativeId, detectedLanguage, detectedLanguageC
     );
   }
 
-  const formatSpendUsd = (micros: number) => {
-    const dollars = micros / 1_000_000;
-    if (dollars >= 1000) return `$${(dollars / 1000).toFixed(1)}K`;
-    return `$${dollars.toFixed(2)}`;
-  };
-
   // Check language match
   const servingCountryCodes = countryData.countries.map(c => c.country_code);
   const langMatch = checkLanguageCountryMatch(detectedLanguageCode || null, servingCountryCodes);

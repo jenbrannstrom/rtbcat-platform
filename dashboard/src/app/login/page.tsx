@@ -202,7 +202,7 @@ export default function LoginPage() {
 
       // Redirect to callback URL or home
       router.push(callbackUrl);
-    } catch (err) {
+    } catch {
       // True network failure -- fetch itself could not connect
       setErrorMessage(t.auth.cannotReachServerCheckConnection);
     } finally {

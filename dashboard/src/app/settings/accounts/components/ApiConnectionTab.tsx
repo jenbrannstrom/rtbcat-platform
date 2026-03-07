@@ -52,7 +52,7 @@ export function ApiConnectionTab() {
   const [editValue, setEditValue] = useState("");
   const [savingSeat, setSavingSeat] = useState(false);
 
-  const { data: health, refetch: refetchHealth } = useQuery({
+  const { refetch: refetchHealth } = useQuery({
     queryKey: ["health"],
     queryFn: getHealth,
   });
@@ -99,14 +99,14 @@ export function ApiConnectionTab() {
       try {
         await syncRTBEndpoints();
         queryClient.invalidateQueries({ queryKey: ["rtb-endpoints"] });
-      } catch (e) {
+      } catch {
         // Silently fail endpoint sync
       }
 
       try {
         await syncPretargetingConfigs();
         queryClient.invalidateQueries({ queryKey: ["pretargeting-configs"] });
-      } catch (e) {
+      } catch {
         // Silently fail pretargeting sync
       }
 
@@ -253,7 +253,7 @@ export function ApiConnectionTab() {
       queryClient.invalidateQueries({ queryKey: ["seats"] });
       setEditingId(null);
       setMessage({ type: "success", text: t.setup.seatNameUpdated });
-    } catch (error) {
+    } catch {
       setMessage({ type: "error", text: t.setup.failedToUpdateSeatName });
     }
     setSavingSeat(false);

@@ -446,16 +446,6 @@ function CreativesContent() {
     setSelectedFormats(newFormats);
   };
 
-  const toggleSize = (size: string) => {
-    const newSizes = new Set(selectedSizes);
-    if (newSizes.has(size)) {
-      newSizes.delete(size);
-    } else {
-      newSizes.add(size);
-    }
-    setSelectedSizes(newSizes);
-  };
-
   const clearFilters = () => {
     setSelectedFormats(new Set());
     setSelectedSizes(new Set());
