@@ -55,6 +55,20 @@ function formatTriggerLabel(trigger?: string | null): string {
   return "manual";
 }
 
+function formatImportAccount(item: ImportHistoryItem): { primary: string; secondary: string | null } {
+  const accountId = item.buyer_id || item.bidder_id || "unknown";
+  if (item.buyer_display_name && item.buyer_display_name !== accountId) {
+    return {
+      primary: item.buyer_display_name,
+      secondary: accountId,
+    };
+  }
+  return {
+    primary: accountId,
+    secondary: null,
+  };
+}
+
 export function ImportHistoryTable({
   history,
   loading,
@@ -107,6 +121,9 @@ export function ImportHistoryTable({
                   CSV
                 </th>
                 <th className="text-left font-medium text-gray-700 px-4 py-2">
+                  {t.import.importCoverageColumnAccount}
+                </th>
+                <th className="text-left font-medium text-gray-700 px-4 py-2">
                   {t.import.historyColumnRows}
                 </th>
                 <th className="text-left font-medium text-gray-700 px-4 py-2">
@@ -121,6 +138,7 @@ export function ImportHistoryTable({
                 const csvConfig = CSV_TYPE_CONFIG[reportType];
                 const isSuccess = item.status === "complete";
                 const triggerLabel = formatTriggerLabel(item.import_trigger);
+                const account = formatImportAccount(item);
 
                 return (
                   <tr key={item.batch_id} className="hover:bg-gray-50">
@@ -139,6 +157,14 @@ export function ImportHistoryTable({
                           {item.filename || "unknown"}
                         </span>
                       )}
+                    </td>
+                    <td className="px-4 py-2.5 text-gray-700 whitespace-nowrap">
+                      <div className="leading-tight">
+                        <div>{account.primary}</div>
+                        {account.secondary && (
+                          <div className="text-xs text-gray-500">{account.secondary}</div>
+                        )}
+                      </div>
                     </td>
                     <td className="px-4 py-2.5 text-gray-700 tabular-nums">
                       {item.rows_imported.toLocaleString(language)}

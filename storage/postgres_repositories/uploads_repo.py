@@ -42,29 +42,43 @@ class UploadsRepository:
         self,
         limit: int,
         offset: int,
+        buyer_id: Optional[str] = None,
         bidder_id: Optional[str] = None,
         allowed_bidder_ids: Optional[list[str]] = None,
     ) -> list[dict[str, Any]]:
         """Get import history records with optional filtering."""
-        if bidder_id:
+        base_select = """
+            SELECT ih.*, bs.display_name AS buyer_display_name
+            FROM import_history ih
+            LEFT JOIN buyer_seats bs ON bs.buyer_id = ih.buyer_id
+        """
+        if buyer_id:
             return await pg_query(
-                """SELECT * FROM import_history
-                WHERE bidder_id = %s
+                f"""{base_select}
+                WHERE ih.buyer_id = %s
+                ORDER BY imported_at DESC
+                LIMIT %s OFFSET %s""",
+                (buyer_id, limit, offset),
+            )
+        elif bidder_id:
+            return await pg_query(
+                f"""{base_select}
+                WHERE ih.bidder_id = %s
                 ORDER BY imported_at DESC
                 LIMIT %s OFFSET %s""",
                 (bidder_id, limit, offset),
             )
         elif allowed_bidder_ids is None:
             return await pg_query(
-                """SELECT * FROM import_history
+                f"""{base_select}
                 ORDER BY imported_at DESC
                 LIMIT %s OFFSET %s""",
                 (limit, offset),
             )
         else:
             return await pg_query(
-                """SELECT * FROM import_history
-                WHERE bidder_id = ANY(%s)
+                f"""{base_select}
+                WHERE ih.bidder_id = ANY(%s)
                 ORDER BY imported_at DESC
                 LIMIT %s OFFSET %s""",
                 (allowed_bidder_ids, limit, offset),

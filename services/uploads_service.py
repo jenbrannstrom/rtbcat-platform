@@ -42,6 +42,8 @@ class ImportHistoryEntry:
     file_size_mb: float
     status: str
     error_message: Optional[str]
+    buyer_id: Optional[str]
+    buyer_display_name: Optional[str]
     bidder_id: Optional[str]
     billing_ids_found: Optional[list[str]]
     columns_found: Optional[list[str]]
@@ -172,6 +174,7 @@ class UploadsService:
         self,
         limit: int,
         offset: int,
+        buyer_id: Optional[str] = None,
         bidder_id: Optional[str] = None,
         allowed_bidder_ids: Optional[list[str]] = None,
     ) -> list[ImportHistoryEntry]:
@@ -182,6 +185,7 @@ class UploadsService:
         rows = await self._repo.get_import_history(
             limit=limit,
             offset=offset,
+            buyer_id=buyer_id,
             bidder_id=bidder_id,
             allowed_bidder_ids=allowed_bidder_ids,
         )
@@ -211,6 +215,8 @@ class UploadsService:
                 file_size_mb=round(file_size_mb, 2),
                 status=row.get("status") or "unknown",
                 error_message=row.get("error_message"),
+                buyer_id=row.get("buyer_id"),
+                buyer_display_name=row.get("buyer_display_name"),
                 bidder_id=row.get("bidder_id"),
                 billing_ids_found=billing_ids,
                 columns_found=columns_found,

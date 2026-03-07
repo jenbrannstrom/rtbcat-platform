@@ -68,6 +68,8 @@ class ImportHistoryResponse(BaseModel):
     file_size_mb: float
     status: str
     error_message: Optional[str] = None
+    buyer_id: Optional[str] = None
+    buyer_display_name: Optional[str] = None
     bidder_id: Optional[str] = None
     billing_ids_found: Optional[list[str]] = None
     columns_found: Optional[list[str]] = None
@@ -217,12 +219,20 @@ async def get_upload_tracking(
 async def get_import_history(
     limit: int = Query(50, description="Maximum number of records to return", ge=1, le=500),
     offset: int = Query(0, description="Number of records to skip", ge=0),
+    buyer_id: Optional[str] = Query(None, description="Filter by seat (buyer_id)"),
     bidder_id: Optional[str] = Query(None, description="Filter by account (bidder_id)"),
     user: User = Depends(get_current_user),
     service: UploadsService = Depends(get_uploads_service),
 ) -> list[ImportHistoryResponse]:
     """Get import history records."""
     try:
+        allowed_buyer_ids = await get_allowed_buyer_ids(user=user)
+        if allowed_buyer_ids is not None:
+            if not allowed_buyer_ids:
+                return []
+            if buyer_id and buyer_id not in allowed_buyer_ids:
+                raise HTTPException(status_code=403, detail="You don't have access to this buyer seat.")
+
         allowed_bidder_ids = await get_allowed_bidder_ids(user=user)
         if allowed_bidder_ids is not None:
             if not allowed_bidder_ids:
@@ -233,6 +243,7 @@ async def get_import_history(
         entries = await service.get_import_history(
             limit=limit,
             offset=offset,
+            buyer_id=buyer_id,
             bidder_id=bidder_id,
             allowed_bidder_ids=allowed_bidder_ids,
         )

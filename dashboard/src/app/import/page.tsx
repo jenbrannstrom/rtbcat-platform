@@ -49,6 +49,14 @@ type ImportStep = "upload" | "preview" | "importing" | "success" | "error";
 // Threshold for using chunked upload (5MB)
 const CHUNKED_UPLOAD_THRESHOLD = 5 * 1024 * 1024;
 
+function formatImportSeatLabel(item: ImportHistoryItem): string {
+  const accountId = item.buyer_id || item.bidder_id || "unknown seat";
+  if (item.buyer_display_name && item.buyer_display_name !== accountId) {
+    return `${item.buyer_display_name} (${accountId})`;
+  }
+  return accountId;
+}
+
 export default function ImportPage() {
   const router = useRouter();
   const { selectedBuyerId } = useAccount();
@@ -74,6 +82,13 @@ export default function ImportPage() {
   // Import history state
   const [importHistory, setImportHistory] = useState<ImportHistoryItem[]>([]);
   const [historyLoading, setHistoryLoading] = useState(true);
+
+  const latestZeroRowGmailImport = importHistory.find(
+    (item) =>
+      item.import_trigger?.startsWith("gmail") &&
+      item.status === "complete" &&
+      item.rows_imported === 0
+  );
 
   // Load import history on mount and after successful imports
   const loadImportData = useCallback(async () => {
@@ -275,6 +290,36 @@ export default function ImportPage() {
   return (
     <div className="p-6 max-w-4xl mx-auto space-y-6">
       <GmailReportsTab />
+
+      <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
+        Gmail status above is mailbox-wide across all seats. Recent imports below are
+        {selectedBuyerId ? ` filtered to seat ${selectedBuyerId}.` : " seat-filtered when a seat is selected."}
+      </div>
+
+      {latestZeroRowGmailImport && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+          <div className="flex items-start gap-2">
+            <AlertTriangle className="mt-0.5 h-5 w-5 text-amber-600" />
+            <div className="text-sm text-amber-900">
+              <p className="font-medium">
+                Recent Gmail import completed with 0 rows for{" "}
+                {formatImportSeatLabel(latestZeroRowGmailImport)}.
+              </p>
+              <p className="mt-1">
+                Report type:{" "}
+                {detectReportType(
+                  latestZeroRowGmailImport.columns_found || [],
+                  latestZeroRowGmailImport.filename
+                )}
+                {" · "}
+                Imported at {new Date(latestZeroRowGmailImport.imported_at).toLocaleString()}.
+                This usually means an empty report, duplicate-only import, or wrong-seat email/report routing and should be investigated.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center gap-3">
         <h1 className="text-2xl font-bold text-gray-900">
