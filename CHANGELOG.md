@@ -4,6 +4,21 @@ All notable changes to Cat-Scan are documented in this file.
 
 > Versioning note (March 5, 2026): canonical OSS release versions use `VERSION` + git tags (`vX.Y.Z`). Historical entries below with `10.x`-`17.x` were internal milestone labels and were not published semver release tags.
 
+## [0.9.3] - 2026-03-07
+
+### Release
+
+- Completed OSS release hardening and publication gates:
+  - secret-history cleanup verified with `gitleaks`
+  - Python and dashboard dependency audits clean
+  - dashboard lint/build cleaned up for release
+  - OSS preflight now works with repo-local tooling
+- Stabilized API test verification by replacing hanging `TestClient` usage with a shared ASGI test client.
+- Fixed router import-order brittleness so the full suite is deterministic in clean environments.
+- Full automated verification now passes for the release candidate:
+  - full Python suite
+  - OSS release preflight
+
 ## [0.9.2] - 2026-03-05
 
 ### Release

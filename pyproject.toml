@@ -1,6 +1,6 @@
 [project]
 name = "rtbcat-platform"
-version = "0.9.2"
+version = "0.9.3"
 description = "QPS optimization platform for Google Authorized Buyers"
 readme = "README.md"
 license = {file = "LICENSE"}
