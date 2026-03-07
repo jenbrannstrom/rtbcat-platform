@@ -40,6 +40,10 @@ investigations/
 
 # Claude Code settings and agents (instance-specific)
 .claude/
+.mcp.json
+docs/internal/
+terraform/DRIFT_REPORT.md
+terraform/IMPORT_MAP.md
 worktrees/
 *.db
 catscan-ci-key.json

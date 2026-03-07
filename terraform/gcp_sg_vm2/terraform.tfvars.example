@@ -24,7 +24,7 @@ gcs_bucket = "your-catscan-data-bucket"
 
 # SG2 dedicated staging database isolation
 enable_dedicated_serving_db = false
-cloudsql_instance_name      = "catscan-production-sg2-serving"
+cloudsql_instance_name      = "catscan-staging-serving"
 cloudsql_database_version   = "POSTGRES_15"
 cloudsql_tier               = "db-custom-1-3840"
 cloudsql_availability_type  = "ZONAL"

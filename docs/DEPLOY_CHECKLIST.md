@@ -63,17 +63,21 @@ Required checks:
 Commands:
 
 ```bash
-gcloud sql instances describe catscan-production-serving \
-  --project catscan-prod-202601 \
+export GCP_PROJECT="<your-gcp-project>"
+export CLOUDSQL_INSTANCE="<your-cloudsql-instance>"
+export CLOUDSQL_BACKUP_BUCKET="<your-sql-backup-bucket>"
+
+gcloud sql instances describe "${CLOUDSQL_INSTANCE}" \
+  --project "${GCP_PROJECT}" \
   --format='yaml(settings.deletionProtectionEnabled,settings.backupConfiguration)'
 
 gcloud sql operations list \
-  --instance=catscan-production-serving \
-  --project=catscan-prod-202601 \
+  --instance="${CLOUDSQL_INSTANCE}" \
+  --project="${GCP_PROJECT}" \
   --limit=5 --sort-by=~startTime \
   --filter='operationType=EXPORT'
 
-gcloud storage ls gs://catscan-sql-backups-449322304772/catscan-production-serving/
+gcloud storage ls "gs://${CLOUDSQL_BACKUP_BUCKET}/${CLOUDSQL_INSTANCE}/"
 ```
 
 Automation:
@@ -106,17 +110,6 @@ Required:
 
 - strict run exits `0`
 - no `BLOCKED` / `FAIL` outcomes for required checks
-
-Temporary waiver note (March 5, 2026):
-
-- `CATSCAN_RUNTIME_HEALTH_MAX_HOME_ENDPOINT_EFFICIENCY_LATENCY_MS=30000` may be used only while 168h QPS page SLO history still contains pre-fix `/analytics/home/endpoint-efficiency` outliers.
-- Waiver expiry: **March 12, 2026**.
-- Workflow guardrail variable: `CATSCAN_RUNTIME_HEALTH_ENDPOINT_EFFICIENCY_BUDGET_WAIVER_EXPIRES_ON` (defaults to `2026-03-12`).
-- On/after expiry, restore `CATSCAN_RUNTIME_HEALTH_MAX_HOME_ENDPOINT_EFFICIENCY_LATENCY_MS=12000` and rerun:
-
-```bash
-scripts/run_v1_runtime_health_strict_dispatch.sh --buyer-id <PROD_BUYER_ID> --profile balanced --since-hours 168
-```
 
 ## 7) Release decision
 

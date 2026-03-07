@@ -6,12 +6,12 @@
 # 3) gcloud auth/account/token
 # 4) VM SSH/IAP path
 #
-# Default target matches current prod VM usage, but can be overridden.
+# Target VM must be provided explicitly or via CATSCAN_GCP_INSTANCE/CATSCAN_GCP_ZONE.
 
 set -u
 
-INSTANCE="catscan-production-sg"
-ZONE="asia-southeast1-b"
+INSTANCE="${CATSCAN_GCP_INSTANCE:-}"
+ZONE="${CATSCAN_GCP_ZONE:-}"
 PROJECT=""
 API_HOST="compute.googleapis.com"
 SSH_COMMAND="echo ok"
@@ -23,8 +23,8 @@ usage() {
 Usage: scripts/check_gcloud_ssh_health.sh [options]
 
 Options:
-  --instance NAME         VM instance name (default: catscan-production-sg)
-  --zone ZONE             GCE zone (default: asia-southeast1-b)
+  --instance NAME         VM instance name (required unless CATSCAN_GCP_INSTANCE is set)
+  --zone ZONE             GCE zone (required unless CATSCAN_GCP_ZONE is set)
   --project PROJECT       GCP project (optional)
   --api-host HOST         API hostname to test (default: compute.googleapis.com)
   --ssh-command CMD       Command to run over gcloud ssh (default: "echo ok")
@@ -124,6 +124,10 @@ done
 need_cmd timeout
 need_cmd gcloud
 need_cmd curl
+
+if [[ -z "${INSTANCE}" || -z "${ZONE}" ]]; then
+  fail 14 "instance and zone are required (use --instance/--zone or CATSCAN_GCP_INSTANCE/CATSCAN_GCP_ZONE)"
+fi
 
 log "Starting gcloud/SSH health check"
 log "Target VM: instance=$INSTANCE zone=$ZONE project=${PROJECT:-<default>}"

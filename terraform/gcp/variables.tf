@@ -43,7 +43,7 @@ variable "boot_disk_size" {
 }
 
 variable "domain_name" {
-  description = "Domain name for the application (e.g., scan.rtb.cat)"
+  description = "Domain name for the application (e.g., catscan.example.com)"
   type        = string
   default     = ""
 }

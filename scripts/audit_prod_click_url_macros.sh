@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-INSTANCE="${CATSCAN_GCP_INSTANCE:-catscan-production-sg}"
-ZONE="${CATSCAN_GCP_ZONE:-asia-southeast1-b}"
+INSTANCE="${CATSCAN_GCP_INSTANCE:-}"
+ZONE="${CATSCAN_GCP_ZONE:-}"
 PROJECT="${CATSCAN_GCP_PROJECT:-}"
 CONTAINER="${CATSCAN_API_CONTAINER:-catscan-api}"
 SEAT_LIMIT="${CATSCAN_AUDIT_SEAT_LIMIT:-4}"
@@ -22,8 +22,8 @@ By default, scans the 4 most recent active seats and the latest 40 creatives per
 the last 30 days.
 
 Options:
-  --instance <name>         VM instance (default: catscan-production-sg)
-  --zone <zone>             GCP zone (default: asia-southeast1-b)
+  --instance <name>         VM instance name (required unless CATSCAN_GCP_INSTANCE is set)
+  --zone <zone>             GCP zone (required unless CATSCAN_GCP_ZONE is set)
   --project <id>            Optional GCP project id
   --container <name>        Docker container name (default: catscan-api)
   --seat-limit <n>          Number of active seats to scan (default: 4)
@@ -35,8 +35,8 @@ Options:
   -h, --help                Show help
 
 Examples:
-  scripts/audit_prod_click_url_macros.sh
-  scripts/audit_prod_click_url_macros.sh --project your-project-id --days 14
+  CATSCAN_GCP_INSTANCE=your-vm CATSCAN_GCP_ZONE=your-zone scripts/audit_prod_click_url_macros.sh
+  scripts/audit_prod_click_url_macros.sh --instance your-vm --zone your-zone --project your-project-id --days 14
   scripts/audit_prod_click_url_macros.sh --buyer-ids 1111111111,1234567890 --per-seat-limit 80
 EOF
 }
@@ -102,6 +102,11 @@ fi
 
 if ! gcloud auth list --filter=status:ACTIVE --format='value(account)' | grep -q .; then
   echo "No active gcloud login found. Run: gcloud auth login" >&2
+  exit 2
+fi
+
+if [[ -z "${INSTANCE}" || -z "${ZONE}" || -z "${CONTAINER}" ]]; then
+  echo "instance/zone/container must be non-empty." >&2
   exit 2
 fi
 
