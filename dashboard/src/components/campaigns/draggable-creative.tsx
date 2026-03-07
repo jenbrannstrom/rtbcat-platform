@@ -1,5 +1,7 @@
 'use client';
 
+/* eslint-disable @next/next/no-img-element -- Creative thumbnails are arbitrary external media and are intentionally not routed through Next image optimization. */
+
 import { useRef, useEffect, useState, useCallback } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';

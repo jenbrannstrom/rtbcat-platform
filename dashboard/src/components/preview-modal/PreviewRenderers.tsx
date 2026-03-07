@@ -1,5 +1,7 @@
 "use client";
 
+/* eslint-disable @next/next/no-img-element -- Preview renderers display arbitrary creative assets and intentionally bypass Next image optimization. */
+
 import { useMemo, useRef } from "react";
 import { Play } from "lucide-react";
 import { useTranslation } from "@/contexts/i18n-context";

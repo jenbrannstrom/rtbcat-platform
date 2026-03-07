@@ -17,7 +17,7 @@ export function ImportDropzone({
   const [isDragging, setIsDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const validateFile = (file: File): string | null => {
+  const validateFile = useCallback((file: File): string | null => {
     if (!file.name.endsWith(".csv")) {
       return t.import.pleaseUploadCsvFile;
     }
@@ -28,9 +28,9 @@ export function ImportDropzone({
     }
 
     return null;
-  };
+  }, [maxSizeMB, t.import.fileSizeExceedsLimit, t.import.pleaseUploadCsvFile]);
 
-  const handleFile = (file: File) => {
+  const handleFile = useCallback((file: File) => {
     const validationError = validateFile(file);
 
     if (validationError) {
@@ -40,7 +40,7 @@ export function ImportDropzone({
 
     setError(null);
     onFileSelect(file);
-  };
+  }, [onFileSelect, validateFile]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -50,7 +50,7 @@ export function ImportDropzone({
     if (files.length > 0) {
       handleFile(files[0]);
     }
-  }, []);
+  }, [handleFile]);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();

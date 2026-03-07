@@ -1,5 +1,7 @@
 "use client";
 
+/* eslint-disable @next/next/no-img-element -- Creative previews render arbitrary external assets and intentionally bypass Next image optimization. */
+
 import { useState } from "react";
 import { ExternalLink, Play, ImageIcon, FileCode, Copy, Check, Info, AlertTriangle } from "lucide-react";
 import type { Creative, CreativePerformanceSummary } from "@/types/api";

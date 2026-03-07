@@ -298,6 +298,7 @@ function VirtualizedGrid({
   // Calculate rows (4 cards per row)
   const rowCount = Math.ceil(creatives.length / COLUMNS);
 
+  // eslint-disable-next-line react-hooks/incompatible-library -- TanStack Virtual is intentionally used for large creative grids.
   const virtualizer = useVirtualizer({
     count: rowCount,
     getScrollElement: () => parentRef.current,

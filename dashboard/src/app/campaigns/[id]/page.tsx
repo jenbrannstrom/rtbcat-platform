@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -85,7 +85,7 @@ export default function CampaignDetailPage() {
     }
   };
 
-  async function fetchCampaignData() {
+  const fetchCampaignData = useCallback(async () => {
     setLoading(true);
     setError(null);
 
@@ -120,13 +120,13 @@ export default function CampaignDetailPage() {
     }
 
     setLoading(false);
-  }
+  }, [campaignId, period, t.campaigns.failedToLoadCampaign]);
 
   useEffect(() => {
     if (campaignId) {
       fetchCampaignData();
     }
-  }, [campaignId, period]);
+  }, [campaignId, fetchCampaignData]);
 
   const handleRemoveCreative = async (creativeId: string) => {
     if (!confirm(t.campaigns.confirmRemoveCreative)) return;

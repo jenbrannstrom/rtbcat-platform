@@ -72,7 +72,7 @@ export function PreviewModal({ creative: initialCreative, performance, onClose }
         setPreviewMessage(t.previewModal.liveFetchUnavailableShowingCached);
       })
       .finally(() => setIsLoadingFull(false));
-  }, [initialCreative.id]);
+  }, [initialCreative.id, t.previewModal.liveFetchUnavailableShowingCached]);
 
   useEffect(() => {
     let cancelled = false;
