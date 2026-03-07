@@ -28,6 +28,8 @@ CREATIVE_CACHE_REFRESH_SECRET=""
 PRECOMPUTE_REFRESH_DAYS="${precompute_refresh_days}"
 PRECOMPUTE_REFRESH_MAX_AGE_HOURS="${precompute_refresh_max_age}"
 OAUTH_CLIENT_SECRET_ID="${oauth_client_secret_id}"
+SERVING_DB_SECRET_ID="${serving_db_secret_id}"
+CLOUDSQL_INSTANCE_NAME="${cloudsql_instance_name}"
 
 # OAuth2 Proxy - Google Authentication (REQUIRED)
 GOOGLE_OAUTH_CLIENT_ID="${google_oauth_client_id}"
@@ -349,7 +351,7 @@ echo "  Bootstrap token generated. Retrieve with: sudo grep CATSCAN_BOOTSTRAP_TO
 chmod 600 /etc/catscan.env
 
 # Append Postgres DSN (Cloud SQL Auth Proxy) if serving DB secret is available.
-SERVING_DB_JSON=$(gcloud secrets versions access latest --secret="${app_name}-serving-db-credentials" --project="$PROJECT_ID" 2>/dev/null || true)
+SERVING_DB_JSON=$(gcloud secrets versions access latest --secret="$SERVING_DB_SECRET_ID" --project="$PROJECT_ID" 2>/dev/null || true)
 if [ -n "$SERVING_DB_JSON" ]; then
     DB_ENV_LINES=$(SERVING_DB_JSON="$SERVING_DB_JSON" python3 - << 'PY'
 import json
@@ -428,7 +430,6 @@ chown catscan:catscan "$APP_DIR/docker-compose.override.yml"
 echo ">>> Installing Cloud SQL Auth Proxy..."
 
 CLOUDSQL_PROXY_VERSION="2.14.3"
-CLOUDSQL_INSTANCE_NAME="${app_name}-${environment}-serving"
 CLOUDSQL_CONNECTION_NAME="$${PROJECT_ID}:${gcp_region}:$${CLOUDSQL_INSTANCE_NAME}"
 
 CLOUDSQL_PROXY_URL="https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v$${CLOUDSQL_PROXY_VERSION}/cloud-sql-proxy.linux.amd64"
