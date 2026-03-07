@@ -10,8 +10,8 @@ rm -rf "$MIRROR_DIR"
 git clone --mirror "$SOURCE_REPO" "$MIRROR_DIR"
 
 cat > "$REPLACE_FILE" <<'EOF'
-REMOVED_CADDY_AUTH_TOKEN==>REMOVED_CADDY_AUTH_TOKEN
-demo-maskable-value-1234567890==>demo-maskable-value-1234567890
+REMOVED_EXPOSED_CREDENTIAL==>REMOVED_CADDY_AUTH_TOKEN
+sk-test-1234567890==>demo-maskable-value-1234567890
 EOF
 
 cp "$REPO_ROOT/.gitleaksignore" "$MIRROR_DIR/.gitleaksignore"
