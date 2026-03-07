@@ -42,7 +42,7 @@ Remove from history:
 Scrub from any surviving blobs:
 
 - old hardcoded Caddy auth token
-- old synthetic test fixture `demo-maskable-value-1234567890`
+- old synthetic test fixture `sk-test-1234567890`
 
 ## Rehearsal Script
 
