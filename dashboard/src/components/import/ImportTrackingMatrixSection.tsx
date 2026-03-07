@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { CheckCircle2, Clock, RefreshCw, XCircle } from "lucide-react";
 import { useTranslation } from "@/contexts/i18n-context";
 import type { ImportTrackingMatrixResponse, ImportMatrixCell } from "@/lib/api";
@@ -20,6 +21,7 @@ export function ImportTrackingMatrixSection({
   onRefresh,
 }: ImportTrackingMatrixSectionProps) {
   const { t, language } = useTranslation();
+  const [nowMs, setNowMs] = useState(() => Date.now());
   const csvTypeLabels: Record<string, string> = {
     quality: t.import.matrixCsvTypeQuality,
     bidsinauction: t.import.matrixCsvTypeBidsInAuction,
@@ -33,13 +35,23 @@ export function ImportTrackingMatrixSection({
     "gmail-manual": t.import.matrixSourceGmailManual,
   };
 
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setNowMs(Date.now());
+    }, 60_000);
+
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, []);
+
   const formatRelativeTime = (value?: string | null): string => {
     if (!value) return "-";
 
     const timestamp = new Date(value);
     if (Number.isNaN(timestamp.getTime())) return "-";
 
-    const diffMs = Date.now() - timestamp.getTime();
+    const diffMs = nowMs - timestamp.getTime();
     const minutes = Math.floor(diffMs / 60000);
     const hours = Math.floor(minutes / 60);
     const days = Math.floor(hours / 24);

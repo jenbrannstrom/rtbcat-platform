@@ -108,3 +108,55 @@ variable "precompute_refresh_max_age_hours" {
   type        = number
   default     = 36
 }
+
+# =============================================================================
+# Dedicated Serving DB for SG2
+# =============================================================================
+
+variable "enable_dedicated_serving_db" {
+  description = "Create and use a dedicated Cloud SQL serving database for SG2 instead of the shared serving DB."
+  type        = bool
+  default     = false
+}
+
+variable "cloudsql_instance_name" {
+  description = "Dedicated Cloud SQL instance name for SG2. Empty uses computed default."
+  type        = string
+  default     = ""
+}
+
+variable "cloudsql_database_version" {
+  description = "Cloud SQL Postgres version for SG2 dedicated DB"
+  type        = string
+  default     = "POSTGRES_15"
+}
+
+variable "cloudsql_tier" {
+  description = "Cloud SQL instance tier for SG2 dedicated DB"
+  type        = string
+  default     = "db-custom-1-3840"
+}
+
+variable "cloudsql_availability_type" {
+  description = "Cloud SQL availability type (ZONAL or REGIONAL) for SG2 dedicated DB"
+  type        = string
+  default     = "ZONAL"
+}
+
+variable "cloudsql_disk_size_gb" {
+  description = "Cloud SQL disk size in GB for SG2 dedicated DB"
+  type        = number
+  default     = 118
+}
+
+variable "cloudsql_database_name" {
+  description = "Cloud SQL database name for SG2 dedicated DB"
+  type        = string
+  default     = "rtbcat_serving_sg2"
+}
+
+variable "serving_db_secret_id" {
+  description = "Secret Manager secret id that stores SG2 DB credentials JSON. Empty uses computed default."
+  type        = string
+  default     = ""
+}

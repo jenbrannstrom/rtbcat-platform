@@ -103,7 +103,7 @@ function ThumbnailGenerationBanner({ buyerId }: { buyerId?: string | null }) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
 
-  const { data: status, refetch: refetchStatus } = useQuery({
+  const { data: status } = useQuery({
     queryKey: ["thumbnailStatus", buyerId],
     queryFn: () => getThumbnailStatus({ buyer_id: buyerId ?? undefined }),
     refetchInterval: (query) => {
@@ -115,8 +115,11 @@ function ThumbnailGenerationBanner({ buyerId }: { buyerId?: string | null }) {
   const [autoGenerate, setAutoGenerate] = useState(false);
   const autoGenerateRef = useRef(false);
   const emptyBatchCount = useRef(0);
-  // Keep ref in sync so mutation callbacks always read the latest value
-  autoGenerateRef.current = autoGenerate;
+
+  useEffect(() => {
+    // Keep ref in sync so mutation callbacks always read the latest value.
+    autoGenerateRef.current = autoGenerate;
+  }, [autoGenerate]);
 
   const generateMutation = useMutation({
     mutationFn: (params: { force?: boolean; limit?: number }) =>

@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -1080,13 +1081,13 @@ export function ConfigBreakdownPanel({
                   <p className="text-gray-500 text-xs mt-1">
                     {data?.no_data_reason || t.pretargeting.publisherBreakdownMissingCsvOrPrecompute}
                   </p>
-                  <a
+                  <Link
                     href="/import"
                     className="inline-flex items-center gap-1 mt-2 text-xs font-medium text-blue-600 hover:text-blue-800"
                   >
                     <Upload className="h-3 w-3" />
                     {t.import.goToImport}
-                  </a>
+                  </Link>
                 </div>
               </div>
             ) : (

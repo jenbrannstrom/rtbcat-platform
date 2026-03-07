@@ -240,10 +240,11 @@ resource "google_sql_database_instance" "rtbcat_serving" {
   database_version = var.cloudsql_database_version
 
   settings {
-    tier              = var.cloudsql_tier
-    availability_type = var.cloudsql_availability_type
-    disk_type         = "PD_SSD"
-    disk_size         = var.cloudsql_disk_size_gb
+    tier                        = var.cloudsql_tier
+    availability_type           = var.cloudsql_availability_type
+    deletion_protection_enabled = var.environment == "production"
+    disk_type                   = "PD_SSD"
+    disk_size                   = var.cloudsql_disk_size_gb
 
     backup_configuration {
       enabled                        = true
