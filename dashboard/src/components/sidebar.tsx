@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import NextImage from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -171,7 +172,7 @@ export function Sidebar() {
       setQpsExpanded(true);
       localStorage.setItem(SIDEBAR_QPS_EXPANDED_KEY, "true");
     }
-  }, [pathname]);
+  }, [adminExpanded, isInAdmin, isInQps, isInSettings, qpsExpanded, settingsExpanded]);
 
   const toggleCollapsed = () => {
     const newValue = !collapsed;
@@ -288,10 +289,13 @@ export function Sidebar() {
     )}>
       {/* Header with logo */}
       <div className="flex items-center h-16 px-4 border-b border-gray-200">
-        <img
+        <NextImage
           src="/cat-scanning-stats.webp"
           alt={t.auth.catScan}
+          width={40}
+          height={40}
           className="h-10 w-10 rounded-lg flex-shrink-0"
+          priority
         />
         {!collapsed && (
           <span className="ml-3 text-xl font-bold text-primary-600">{t.auth.catScan}</span>

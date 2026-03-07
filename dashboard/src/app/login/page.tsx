@@ -8,6 +8,7 @@
  */
 
 import { useEffect, useMemo, useState } from "react";
+import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Mail, Lock, AlertCircle, Loader2 } from "lucide-react";
 import { useTranslation } from "@/contexts/i18n-context";
@@ -240,7 +241,14 @@ export default function LoginPage() {
         {/* Logo and Title */}
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-64 h-64 rounded-2xl mb-4">
-            <img src="/cat-scanning-stats.webp" alt="Cat-Scan" className="w-64 h-64 rounded-2xl" />
+            <Image
+              src="/cat-scanning-stats.webp"
+              alt="Cat-Scan"
+              width={256}
+              height={256}
+              className="w-64 h-64 rounded-2xl"
+              priority
+            />
           </div>
           <h1 className="text-2xl font-bold text-gray-900">{t.auth.catScan}</h1>
           <p className="text-gray-600 mt-1">{t.auth.qpsManagerForGoogleAuthBuyers}</p>

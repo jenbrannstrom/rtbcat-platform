@@ -148,7 +148,7 @@ export default function AttributionReadinessPage() {
     },
   });
 
-  const rows = readinessQuery.data ?? [];
+  const rows = useMemo(() => readinessQuery.data ?? [], [readinessQuery.data]);
 
   const summary = useMemo(() => {
     return {
