@@ -3,16 +3,9 @@
 from __future__ import annotations
 
 import json
-import sys
 import types
 
 import pytest
-
-# Avoid optional Google API dependency while importing settings routers.
-if "collectors" not in sys.modules:
-    fake_collectors = types.ModuleType("collectors")
-    fake_collectors.PretargetingClient = object
-    sys.modules["collectors"] = fake_collectors
 
 pytest.importorskip("fastapi")
 from fastapi import FastAPI

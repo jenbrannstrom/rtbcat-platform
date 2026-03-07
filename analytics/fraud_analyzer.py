@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import logging
 import uuid
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 from analytics.recommendation_engine import (
     Action,
@@ -188,7 +188,7 @@ class FraudAnalyzer:
                     ],
                     affected_creatives=[],
                     affected_campaigns=[],
-                    expires_at=(datetime.utcnow() + timedelta(days=1)).isoformat(),
+                    expires_at=(datetime.now(UTC) + timedelta(days=1)).isoformat(),
                 )
                 recommendations.append(rec)
 
@@ -279,7 +279,7 @@ class FraudAnalyzer:
                 ],
                 affected_creatives=[],
                 affected_campaigns=[],
-                expires_at=(datetime.utcnow() + timedelta(days=3)).isoformat(),
+                expires_at=(datetime.now(UTC) + timedelta(days=3)).isoformat(),
             )
             recommendations.append(rec)
 
@@ -362,7 +362,7 @@ class FraudAnalyzer:
                     ],
                     affected_creatives=[],
                     affected_campaigns=[],
-                    expires_at=(datetime.utcnow() + timedelta(days=7)).isoformat(),
+                    expires_at=(datetime.now(UTC) + timedelta(days=7)).isoformat(),
                 )
                 recommendations.append(rec)
 

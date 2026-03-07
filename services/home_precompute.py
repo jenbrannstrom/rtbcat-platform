@@ -6,7 +6,7 @@ Creates and refreshes daily summary tables for fast Home page queries.
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import UTC, datetime
 import uuid
 from typing import Optional, Sequence
 
@@ -132,7 +132,7 @@ async def refresh_home_summaries(
         buyer_account_id,
     )
     run_id = str(uuid.uuid4())
-    run_started_at = datetime.utcnow().isoformat()
+    run_started_at = datetime.now(UTC).isoformat()
     client = get_bigquery_client()
     bidstream_table = build_table_ref(
         client, table_env="BIGQUERY_RTB_BIDSTREAM_TABLE", default_table="rtb_bidstream"
@@ -483,7 +483,7 @@ async def refresh_home_summaries(
                     row_count=row_count,
                     error_text=error_text,
                     started_at=run_started_at,
-                    finished_at=datetime.utcnow().isoformat(),
+                    finished_at=datetime.now(UTC).isoformat(),
                 )
 
         try:

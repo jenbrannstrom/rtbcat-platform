@@ -32,12 +32,13 @@ def extract_image_urls_from_html(html_snippet: str) -> List[str]:
 
     urls = []
     decoded_snippet = html.unescape(html_snippet)
+    normalized_snippet = re.sub(r"""\\+(['"])""", r"\1", decoded_snippet)
 
     # Pattern 1: Standard img src (handles both quotes)
     # <img src="https://example.com/image.png"
     # <img src='https://example.com/image.png'
     img_src_pattern = r'<img[^>]+src=["\']([^"\']+)["\']'
-    urls.extend(re.findall(img_src_pattern, decoded_snippet, re.IGNORECASE))
+    urls.extend(re.findall(img_src_pattern, normalized_snippet, re.IGNORECASE))
 
     # Pattern 2: JavaScript escaped quotes in document.write
     # src=\'https://example.com/image.png\'
@@ -49,21 +50,21 @@ def extract_image_urls_from_html(html_snippet: str) -> List[str]:
     # background-image: url('https://example.com/image.png')
     # background: url("https://example.com/image.png")
     bg_pattern = r'url\(["\']?([^"\')\s]+)["\']?\)'
-    bg_urls = re.findall(bg_pattern, decoded_snippet, re.IGNORECASE)
+    bg_urls = re.findall(bg_pattern, normalized_snippet, re.IGNORECASE)
     # Filter to only image extensions
     image_extensions = ('.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg')
     urls.extend([u for u in bg_urls if any(u.lower().endswith(ext) for ext in image_extensions)])
 
     # Pattern 4: srcset first candidate
     srcset_pattern = r'srcset=["\']([^"\']+)["\']'
-    for srcset in re.findall(srcset_pattern, decoded_snippet, re.IGNORECASE):
+    for srcset in re.findall(srcset_pattern, normalized_snippet, re.IGNORECASE):
         first = srcset.split(",")[0].strip().split(" ")[0].strip()
         if first:
             urls.append(first)
 
     # Pattern 5: simple JSON-like fields used in ad snippets
     json_like_pattern = r'"(?:image|imageUrl|thumbnail|creative_url)"\s*:\s*"([^"]+)"'
-    urls.extend(re.findall(json_like_pattern, decoded_snippet, re.IGNORECASE))
+    urls.extend(re.findall(json_like_pattern, normalized_snippet, re.IGNORECASE))
 
     # Deduplicate while preserving order
     seen = set()

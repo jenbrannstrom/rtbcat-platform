@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import sys
-import types
 from unittest.mock import AsyncMock
 
 import pytest
@@ -11,15 +9,6 @@ import pytest
 pytest.importorskip("fastapi")
 
 from fastapi import BackgroundTasks, HTTPException
-
-# Avoid optional Google API dependency while importing seats router.
-if "collectors" not in sys.modules:
-    fake_collectors = types.ModuleType("collectors")
-    fake_collectors.BuyerSeatsClient = object
-    fake_collectors.CreativesClient = object
-    fake_collectors.EndpointsClient = object
-    fake_collectors.PretargetingClient = object
-    sys.modules["collectors"] = fake_collectors
 
 from api.routers import seats as seats_router
 from services.auth_service import User

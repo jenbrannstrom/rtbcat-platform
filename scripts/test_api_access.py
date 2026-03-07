@@ -19,6 +19,11 @@ import asyncio
 import os
 import sys
 
+if "pytest" in sys.modules:
+    import pytest
+
+    pytest.skip("Operational script, not part of automated pytest coverage.", allow_module_level=True)
+
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
