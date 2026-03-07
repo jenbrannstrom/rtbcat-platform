@@ -88,7 +88,7 @@ class LanguageAnalyzer:
             except ImportError as exc:
                 raise ImportError(
                     "google-generativeai package not installed. "
-                    "Run: pip install google-generativeai"
+                    "Run: pip install -r requirements-ai.txt"
                 ) from exc
         return self._model
 
@@ -455,4 +455,3 @@ LANGUAGE_CODES = {
 def get_language_name(code: str) -> str:
     """Get the English name for a language code."""
     return LANGUAGE_CODES.get(code.lower(), code.upper())
-

@@ -58,7 +58,7 @@ For the full breakdown of available signals, what's missing, and how we plan to 
 
 ### Campaign Clustering
 
-Cat-Scan groups creatives automatically based on shared destination URLs. This reveals patterns: which campaigns target the same audience, where spend is concentrated, and where config overlap creates waste. Manual grouping is also supported. Future: AI image recognition to identify creative language and surface localisation issues.
+Cat-Scan groups creatives automatically based on shared destination URLs. This reveals patterns: which campaigns target the same audience, where spend is concentrated, and where config overlap creates waste. Manual grouping is also supported. Optional AI-assisted language and geo-linguistic analysis can be enabled separately in the creative review flow, with broader MMP-driven optimization work still in progress.
 
 ---
 
@@ -85,6 +85,11 @@ cd rtbcat-platform
 - ffmpeg (optional, for video thumbnails)
 
 See **[INSTALL.md](INSTALL.md)** for detailed instructions.
+
+By default, `./setup.sh` installs the secure runtime bundle from `requirements.txt`.
+
+- Contributors can install the full tooling bundle with `CATSCAN_PYTHON_REQUIREMENTS=requirements-dev.txt ./setup.sh`
+- Gemini-backed language analysis can be added with `CATSCAN_INSTALL_AI_EXTRAS=true ./setup.sh`
 
 ### Security-First Install Sequence
 
@@ -117,7 +122,7 @@ See **[AUTHENTICATION.md](docs/AUTHENTICATION.md)** for the bootstrap token flow
 | **MCP Support** | Connect your own AI to Cat-Scan's data and algo engine |
 | **Video Thumbnails** | Extract from VAST XML or generate via ffmpeg |
 | **11 Languages** | EN, PL, ZH, RU, UK, ES, DA, FR, NL, HE, AR |
-| **OAuth-Only Login** | Google OAuth via OAuth2 Proxy. No passwords stored. |
+| **Configurable Login** | Google OAuth, Authing OIDC, or email/password with session-based auth. |
 | **Access Control** | Per-user role + service account scoping |
 
 ### Dashboard

@@ -15,9 +15,11 @@ RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
 # Install Python dependencies
-COPY requirements.txt .
+ARG INSTALL_AI_EXTRAS=false
+COPY requirements.txt requirements-ai.txt ./
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
+    pip install --no-cache-dir -r requirements.txt && \
+    if [ "$INSTALL_AI_EXTRAS" = "true" ]; then pip install --no-cache-dir -r requirements-ai.txt; fi
 
 # Stage 2: Runtime
 FROM python:3.11-slim as runtime

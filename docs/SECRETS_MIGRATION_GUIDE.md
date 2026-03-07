@@ -1,4 +1,4 @@
-# Secrets Migration Guide (env, GCP, AWS, Alibaba)
+# Secrets Migration Guide (env, GCP, AWS, optional Alibaba)
 
 This guide shows how to migrate Cat-Scan secret handling to the unified secrets manager with startup validation.
 
@@ -28,6 +28,11 @@ SECRETS_NAME_PREFIX=catscan
 SECRETS_PREFER_ENV=true
 SECRETS_HEALTH_STRICT=false
 ```
+
+For the secure default OSS install, use `env`, `gcp`, or `aws`. The Alibaba
+backend remains optional code-level support, but its vendor SDK is not shipped
+in the default dependency bundles because upstream currently constrains
+`cryptography` below the secure baseline used by this repo.
 
 ## 3) Backend-specific examples
 

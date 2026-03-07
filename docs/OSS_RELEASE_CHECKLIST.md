@@ -16,12 +16,13 @@ Run locally before pushing:
 |------|------|:---------------:|
 | No secrets in repo history | `gitleaks detect` | Yes |
 | No forbidden tracked files | git ls-files pattern scan | Yes |
-| Python deps free of known CVEs | `pip-audit -r requirements.txt` | Yes |
+| Python dependency bundles free of known CVEs | `pip-audit` on `requirements.txt`, `requirements-ai.txt`, `requirements-dev.txt` | Yes |
 | Node deps free of high/critical CVEs | `npm audit --audit-level=high` | Yes |
 | `SECURITY.md` present at root | file check | Yes |
 | `LICENSE` present at root | file check | Yes |
 | `.gitignore` covers `.env`, `*.db`, `*.tfstate`, `terraform.tfvars` | pattern check | Yes |
 | `VERSION` is valid SemVer (`X.Y.Z`) | regex check | Yes |
+| `pyproject.toml` version matches `VERSION` | metadata check | Yes |
 
 CI equivalent: `.github/workflows/oss-release-preflight.yml` (runs on PRs and manual dispatch).
 

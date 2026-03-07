@@ -1,57 +1,38 @@
-# RTBcat Creative Intelligence - Python Dependencies
+# RTBcat Creative Intelligence - secure runtime dependencies
+#
+# Pin exact versions so OSS installs and container builds are reproducible.
+# Optional AI and contributor tooling live in separate requirements files.
 
-# Google Authorized Buyers RTB API
-google-api-python-client>=2.100.0
-google-auth>=2.23.0
-google-auth-oauthlib>=1.1.0
+# Core API/runtime
+fastapi==0.135.1
+starlette==0.52.1
+uvicorn[standard]==0.41.0
+pydantic[email]==2.12.5
+python-multipart==0.0.22
+aiohttp==3.13.3
+httpx==0.25.2
+requests==2.32.5
 
-# Google Gemini API (for language detection)
-google-generativeai>=0.3.0
+# Google Authorized Buyers + Gmail integrations
+google-api-python-client==2.192.0
+google-auth==2.49.0
+google-auth-oauthlib==1.3.0
 
-# Web Framework
-fastapi>=0.104.0
-uvicorn[standard]>=0.24.0
-pydantic[email]>=2.5.0
-python-multipart>=0.0.6
-aiohttp>=3.9.0  # Async HTTP client for app store fetching
+# Cloud storage, analytics, and archival
+boto3==1.42.63
+botocore==1.42.63
+google-cloud-secret-manager==2.26.0
+google-cloud-storage==3.9.0
+google-cloud-bigquery==3.40.1
+pyarrow==23.0.1
+numpy==2.4.2
 
-# Cloud Storage
-boto3>=1.29.0
-botocore>=1.32.0
-google-cloud-secret-manager>=2.20.0
-google-cloud-storage>=2.16.0
-google-cloud-bigquery>=3.25.0
-pyarrow>=15.0.0
-numpy>=1.26.0
-alibabacloud-kms20160120>=2.0.2
-alibabacloud-tea-openapi>=0.3.12
-
-# Security & Encryption
-cryptography>=41.0.0
-bcrypt>=4.0.0
-passlib[bcrypt]>=1.7.4
-
-# Configuration
-pyyaml>=6.0.1
-python-dotenv>=1.0.0
+# Security and configuration
+cryptography==46.0.5
+bcrypt==5.0.0
+passlib[bcrypt]==1.7.4
+pyyaml==6.0.3
+python-dotenv==1.2.2
 
 # Database
-# SQLite is built into Python, no additional package needed
-# Note: google-cloud-bigquery>=3.25.0 already in Cloud Storage section above
-psycopg[binary]>=3.1.18
-
-# Testing
-pytest>=7.4.0
-pytest-asyncio>=0.21.0
-pytest-cov>=4.1.0
-httpx>=0.25.0  # For testing FastAPI
-
-# Development
-black>=23.11.0
-isort>=5.12.0
-mypy>=1.7.0
-ruff>=0.1.6
-
-# Type stubs
-types-pyyaml>=6.0.0
-boto3-stubs[s3]>=1.29.0
+psycopg[binary]==3.3.3

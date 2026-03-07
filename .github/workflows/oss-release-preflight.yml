@@ -57,7 +57,9 @@ jobs:
       - name: Run pip-audit
         run: |
           pip install pip-audit
-          pip-audit -r requirements.txt
+          for req in requirements.txt requirements-ai.txt requirements-dev.txt; do
+            pip-audit -r "$req"
+          done
 
   npm-audit:
     name: Node Dependency Audit
@@ -92,3 +94,9 @@ jobs:
             fi
           done
           echo "All required root files present."
+
+      - name: Verify Python metadata matches VERSION
+        run: |
+          VERSION_VALUE="$(tr -d '[:space:]' < VERSION)"
+          PYPROJECT_VERSION="$(python3 -c 'from pathlib import Path; import tomllib; print(tomllib.loads(Path("pyproject.toml").read_text())["project"]["version"])')"
+          test "$VERSION_VALUE" = "$PYPROJECT_VERSION"

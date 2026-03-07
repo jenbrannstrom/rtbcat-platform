@@ -50,7 +50,9 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install pip-audit
-          pip-audit -r requirements.txt
+          for req in requirements.txt requirements-ai.txt requirements-dev.txt; do
+            pip-audit -r "$req"
+          done
 
       - name: Set up Node.js
         uses: actions/setup-node@v4

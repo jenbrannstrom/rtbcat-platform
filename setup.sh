@@ -14,7 +14,15 @@ command -v node >/dev/null 2>&1 || { echo "Node.js required"; exit 1; }
 echo "Setting up Python environment..."
 python3 -m venv venv
 ./venv/bin/pip install --upgrade pip
-./venv/bin/pip install -r requirements.txt
+PYTHON_REQUIREMENTS="${CATSCAN_PYTHON_REQUIREMENTS:-requirements.txt}"
+if [[ ! -f "${PYTHON_REQUIREMENTS}" ]]; then
+  echo "Missing Python requirements file: ${PYTHON_REQUIREMENTS}"
+  exit 1
+fi
+./venv/bin/pip install -r "${PYTHON_REQUIREMENTS}"
+if [[ "${CATSCAN_INSTALL_AI_EXTRAS:-false}" == "true" && "${PYTHON_REQUIREMENTS}" != "requirements-dev.txt" ]]; then
+  ./venv/bin/pip install -r requirements-ai.txt
+fi
 
 # Node setup
 echo "Setting up Node.js dependencies..."
@@ -36,4 +44,8 @@ fi
 
 echo ""
 echo "=== Setup Complete ==="
+echo "Python bundle installed: ${PYTHON_REQUIREMENTS}"
+if [[ "${CATSCAN_INSTALL_AI_EXTRAS:-false}" == "true" && "${PYTHON_REQUIREMENTS}" != "requirements-dev.txt" ]]; then
+  echo "Optional AI extras installed from requirements-ai.txt"
+fi
 echo "Run ./run.sh to start the application"

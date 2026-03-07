@@ -1,0 +1,18 @@
+# Contributor and CI bundle.
+-r requirements.txt
+-r requirements-ai.txt
+
+# Testing
+pytest==7.4.4
+pytest-asyncio==0.21.1
+pytest-cov==7.0.0
+
+# Development tooling
+black==26.3.0
+isort==8.0.1
+mypy==1.19.1
+ruff==0.15.5
+
+# Type stubs
+types-pyyaml==6.0.12.20250915
+boto3-stubs[s3]==1.42.63

@@ -190,7 +190,9 @@ rtbcat-platform/
 │
 ├── setup.sh              # Development setup script
 ├── run.sh                # Start API + Dashboard
-└── requirements.txt      # Python dependencies
+├── requirements.txt      # Secure runtime Python dependencies
+├── requirements-ai.txt   # Optional AI provider extras
+└── requirements-dev.txt  # Contributor and CI tooling bundle
 ```
 
 ---

@@ -40,9 +40,21 @@ cd rtbcat-platform
 This will:
 - Check all requirements
 - Create Python virtual environment
-- Install Python dependencies
+- Install the secure runtime Python dependencies
 - Install Node.js dependencies
 - Initialize the database
+
+Contributor install:
+
+```bash
+CATSCAN_PYTHON_REQUIREMENTS=requirements-dev.txt ./setup.sh
+```
+
+Optional AI extras for Gemini-backed language analysis:
+
+```bash
+CATSCAN_INSTALL_AI_EXTRAS=true ./setup.sh
+```
 
 ### 3. Configure Google Credentials
 
@@ -80,7 +92,7 @@ cd dashboard
 npm run dev
 ```
 
-### 6. Open in Browser
+### 5. Open in Browser
 
 Visit http://localhost:3000
 
@@ -98,9 +110,15 @@ If the setup script doesn't work for your system:
 # Create virtual environment
 python3.11 -m venv venv
 
-# Install dependencies (no need to activate venv)
+# Install the secure runtime bundle (no need to activate venv)
 ./venv/bin/pip install --upgrade pip
 ./venv/bin/pip install -r requirements.txt
+
+# Optional AI extras (Gemini + image helpers)
+./venv/bin/pip install -r requirements-ai.txt
+
+# Contributor/test tooling
+./venv/bin/pip install -r requirements-dev.txt
 
 # Postgres is required for serving/analytics.
 # Ensure POSTGRES_DSN and POSTGRES_SERVING_DSN are set before starting the API.
@@ -252,7 +270,7 @@ The token auto-refreshes, so you only do this once.
 
 ### Step 4: Create the Import Script
 
-> **Note:** Gmail API dependencies (google-auth, google-auth-oauthlib, google-api-python-client) are already included in requirements.txt and installed during the main setup.
+> **Note:** Gmail API dependencies (google-auth, google-auth-oauthlib, google-api-python-client) are included in `requirements.txt` and installed during the main setup. Gemini-specific packages live in `requirements-ai.txt`.
 
 Create `scripts/gmail_import.py`:
 

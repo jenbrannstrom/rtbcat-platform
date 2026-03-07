@@ -11,6 +11,8 @@ on:
       - "tests/test_response_model_regressions.py"
       - "Makefile"
       - "requirements.txt"
+      - "requirements-ai.txt"
+      - "requirements-dev.txt"
       - ".github/workflows/v1-byom-api-regression.yml"
   push:
     branches:
@@ -23,6 +25,8 @@ on:
       - "tests/test_response_model_regressions.py"
       - "Makefile"
       - "requirements.txt"
+      - "requirements-ai.txt"
+      - "requirements-dev.txt"
       - ".github/workflows/v1-byom-api-regression.yml"
 
 concurrency:
@@ -48,7 +52,7 @@ jobs:
           cache: "pip"
 
       - name: Install Python dependencies
-        run: pip install -r requirements.txt pytest pytest-asyncio
+        run: pip install -r requirements-dev.txt
 
       - name: Run BYOM optimizer API/e2e regression
         run: make v1-byom-api-regression

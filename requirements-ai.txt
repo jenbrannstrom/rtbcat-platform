@@ -1,0 +1,6 @@
+# Optional AI provider dependencies.
+#
+# Gemini uses a local SDK and image helpers. Claude and Grok integrations use
+# direct HTTPS APIs and do not require additional client libraries here.
+google-generativeai==0.8.6
+Pillow==12.1.1

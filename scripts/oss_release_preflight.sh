@@ -71,14 +71,16 @@ fi
 # ── 3. pip-audit (Python dependencies) ──────────────────────────────
 
 if [[ "$QUICK" == false ]]; then
-  info "Running pip-audit on requirements.txt"
+  info "Running pip-audit on Python requirements files"
 
   if command -v pip-audit &>/dev/null; then
-    if pip-audit -r "$REPO_ROOT/requirements.txt" 2>&1; then
-      green "  pip-audit: no known vulnerabilities"
-    else
-      fail "pip-audit found vulnerabilities"
-    fi
+    for req in requirements.txt requirements-ai.txt requirements-dev.txt; do
+      if pip-audit -r "$REPO_ROOT/$req" 2>&1; then
+        green "  pip-audit: $req is clean"
+      else
+        fail "pip-audit found vulnerabilities in $req"
+      fi
+    done
   else
     red "  SKIP: pip-audit not installed (pip install pip-audit)"
     FAIL=1
@@ -142,6 +144,26 @@ elif [[ "$VERSION_VALUE" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
   green "  VERSION is valid SemVer: $VERSION_VALUE"
 else
   fail "VERSION must be SemVer (X.Y.Z), got: $VERSION_VALUE"
+fi
+
+# ── 8. pyproject metadata sync ──────────────────────────────────────
+
+info "Checking pyproject.toml release metadata"
+
+PYPROJECT_VERSION="$(
+  cd "$REPO_ROOT"
+  python3 - <<'PY'
+from pathlib import Path
+import tomllib
+
+data = tomllib.loads(Path("pyproject.toml").read_text())
+print(data["project"]["version"])
+PY
+)"
+if [[ "$PYPROJECT_VERSION" == "$VERSION_VALUE" ]]; then
+  green "  pyproject.toml version matches VERSION"
+else
+  fail "pyproject.toml version ($PYPROJECT_VERSION) does not match VERSION ($VERSION_VALUE)"
 fi
 
 # ── Summary ─────────────────────────────────────────────────────────

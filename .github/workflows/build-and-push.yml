@@ -41,7 +41,7 @@ jobs:
           cache: 'pip'
 
       - name: Install test dependencies
-        run: pip install psycopg[binary] pytest pytest-asyncio boto3
+        run: pip install -r requirements-dev.txt
 
       - name: Run contract and recovery tests
         run: |

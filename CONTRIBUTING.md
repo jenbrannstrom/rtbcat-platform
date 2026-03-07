@@ -5,8 +5,11 @@ Thanks for contributing to Cat-Scan.
 ## Development Setup
 
 1. Install prerequisites from `INSTALL.md`.
-2. Copy `.env.example` to `.env` and configure local values.
-3. Start backend/frontend and verify basic health:
+2. Install the contributor Python/tooling bundle:
+   - `CATSCAN_PYTHON_REQUIREMENTS=requirements-dev.txt ./setup.sh`
+   - or `./venv/bin/pip install -r requirements-dev.txt` if the app is already set up
+3. Copy `.env.example` to `.env` and configure local values.
+4. Start backend/frontend and verify basic health:
    - API: `http://localhost:8000/health`
    - Dashboard: `http://localhost:3000`
 
@@ -34,3 +37,4 @@ Before opening a PR:
 2. Run lint/format checks for touched languages.
 3. Ensure workflows still pass (`security.yml` and project CI).
 4. Verify no sensitive content is present in commits.
+5. Run `./scripts/oss_release_preflight.sh --quick` before changing release-facing docs or dependencies.

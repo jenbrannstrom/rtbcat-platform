@@ -9,6 +9,9 @@ on:
       - "scripts/run_v1_closeout_local.sh"
       - "scripts/v1_canary_smoke.py"
       - "Makefile"
+      - "requirements.txt"
+      - "requirements-ai.txt"
+      - "requirements-dev.txt"
       - ".github/workflows/v1-closeout-quick.yml"
   push:
     branches:
@@ -20,6 +23,9 @@ on:
       - "scripts/run_v1_closeout_local.sh"
       - "scripts/v1_canary_smoke.py"
       - "Makefile"
+      - "requirements.txt"
+      - "requirements-ai.txt"
+      - "requirements-dev.txt"
       - ".github/workflows/v1-closeout-quick.yml"
 
 concurrency:
@@ -44,7 +50,7 @@ jobs:
           cache: "pip"
 
       - name: Install Python dependencies
-        run: pip install -r requirements.txt pytest pytest-asyncio
+        run: pip install -r requirements-dev.txt
 
       - name: Run quick closeout
         run: CATSCAN_CLOSEOUT_PROFILE=quick make v1-closeout-local
