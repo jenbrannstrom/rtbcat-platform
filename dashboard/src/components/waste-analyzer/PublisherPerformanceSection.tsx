@@ -32,6 +32,7 @@ export function PublisherPerformanceSection({ publishers, seatName }: PublisherP
   const { t } = useTranslation();
   const importHref = toBuyerScopedPath("/import", selectedBuyerId);
   const hasPublisherData = publishers && publishers.length > 0;
+  const hasSpendData = publishers.some((pub) => pub.spend_usd !== undefined && pub.spend_usd !== null);
 
   if (!hasPublisherData) {
     return (
@@ -137,7 +138,9 @@ export function PublisherPerformanceSection({ publishers, seatName }: PublisherP
                       {pub.publisher_name}
                     </span>
                     <div className="flex items-center gap-4">
-                      <span className="text-green-600">{formatSpendUsd(pub.spend_usd)} {t.campaigns.spend}</span>
+                      {hasSpendData && (
+                        <span className="text-green-600">{formatSpendUsd(pub.spend_usd)} {t.campaigns.spend}</span>
+                      )}
                       <span className="text-green-600">{formatNumber(asNumber(pub.impressions))} {t.wasteAnalysis.imprShort}</span>
                       <span className="font-medium text-green-700">{asNumber(pub.win_rate).toFixed(1)}% {t.wasteAnalysis.winShort}</span>
                     </div>
@@ -163,7 +166,9 @@ export function PublisherPerformanceSection({ publishers, seatName }: PublisherP
                       {pub.publisher_name}
                     </span>
                     <div className="flex items-center gap-4">
-                      <span className="text-yellow-600">{formatSpendUsd(pub.spend_usd)} {t.campaigns.spend}</span>
+                      {hasSpendData && (
+                        <span className="text-yellow-600">{formatSpendUsd(pub.spend_usd)} {t.campaigns.spend}</span>
+                      )}
                       <span className="text-yellow-600">{formatNumber(asNumber(pub.impressions))} {t.wasteAnalysis.imprShort}</span>
                       <span className="font-medium text-yellow-700">{asNumber(pub.win_rate).toFixed(1)}% {t.wasteAnalysis.winShort}</span>
                     </div>
@@ -189,7 +194,9 @@ export function PublisherPerformanceSection({ publishers, seatName }: PublisherP
                       {pub.publisher_name}
                     </span>
                     <div className="flex items-center gap-4">
-                      <span className="text-orange-600">{formatSpendUsd(pub.spend_usd)} {t.campaigns.spend}</span>
+                      {hasSpendData && (
+                        <span className="text-orange-600">{formatSpendUsd(pub.spend_usd)} {t.campaigns.spend}</span>
+                      )}
                       <span className="text-orange-600">{formatNumber(asNumber(pub.impressions))} {t.wasteAnalysis.imprShort}</span>
                       <span className="font-medium text-orange-700">{asNumber(pub.win_rate).toFixed(1)}% {t.wasteAnalysis.winShort}</span>
                     </div>
