@@ -79,7 +79,7 @@ export default function RetentionSettingsPage() {
       } else {
         throw new Error(t.retentionPage.saveFailed);
       }
-    } catch (error) {
+    } catch {
       setMessage({ type: "error", text: t.retentionPage.saveFailed });
     } finally {
       setSaving(false);
@@ -112,7 +112,7 @@ export default function RetentionSettingsPage() {
       } else {
         throw new Error(t.retentionPage.runFailed);
       }
-    } catch (error) {
+    } catch {
       setMessage({ type: "error", text: t.retentionPage.runFailed });
     } finally {
       setSaving(false);

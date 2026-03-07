@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Server, Database, Video, Loader2, CheckCircle, XCircle, AlertTriangle, Image, Cpu, BarChart3 } from "lucide-react";
+import { Server, Database, Video, Loader2, CheckCircle, XCircle, AlertTriangle, ImageIcon, Cpu, BarChart3 } from "lucide-react";
 import { HelpLink } from "@/components/docs/help-link";
 import {
   getHealth,
@@ -2592,7 +2592,7 @@ export default function SystemStatusPage() {
                       </>
                     ) : (
                       <>
-                        <Image className="h-4 w-4 mr-2" />
+                        <ImageIcon className="h-4 w-4 mr-2" />
                         {t.settings.generateThumbnails}
                       </>
                     )}

@@ -6,7 +6,6 @@ import {
   getSnapshots,
   createSnapshot,
   getComparisons,
-  createComparison,
   rollbackSnapshot,
   type PretargetingSnapshot,
   type SnapshotComparison,

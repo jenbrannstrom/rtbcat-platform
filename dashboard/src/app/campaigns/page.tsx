@@ -11,7 +11,6 @@ import {
   useSensors,
   DragStartEvent,
   DragEndEvent,
-  DragCancelEvent,
 } from '@dnd-kit/core';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus, Sparkles, RefreshCw, LayoutGrid, List } from 'lucide-react';
@@ -223,7 +222,7 @@ export default function CampaignsPage() {
   // Create campaign mutation
   const createMutation = useMutation({
     mutationFn: createCampaign,
-    onSuccess: (_, variables) => {
+    onSuccess: () => {
       setCampaignError(null);
       queryClient.invalidateQueries({ queryKey: ['campaigns'] });
       queryClient.invalidateQueries({ queryKey: ['unclustered'] });
@@ -336,7 +335,7 @@ export default function CampaignsPage() {
     }
   }
 
-  function handleDragCancel(_event: DragCancelEvent) {
+  function handleDragCancel() {
     setActiveId(null);
     setDraggedIds([]);
   }

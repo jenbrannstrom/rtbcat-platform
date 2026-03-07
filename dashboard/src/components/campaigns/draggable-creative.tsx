@@ -127,7 +127,6 @@ export function DraggableCreative({
   isSelected = false,
   isPopupOpen = false,
   onSelect,
-  onTogglePopup,
   onOpenPreview,
 }: DraggableCreativeProps) {
   const { t } = useTranslation();

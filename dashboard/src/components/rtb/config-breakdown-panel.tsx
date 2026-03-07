@@ -28,7 +28,7 @@ import {
 import { cn } from '@/lib/utils';
 import { isValidPublisherId } from '@/lib/publisher-validation';
 import { COMMONLY_BLOCKED, type BlockSuggestion } from '@/lib/commonly-blocked-publishers';
-import { Loader2, AlertCircle, AlertTriangle, ArrowUpDown, ChevronRight, ChevronDown, Info, Image, X, Check, Clock, Upload, Search, ExternalLink, Ban, ShieldAlert, RotateCcw, History } from 'lucide-react';
+import { Loader2, AlertCircle, AlertTriangle, ArrowUpDown, ChevronRight, ChevronDown, Info, ImageIcon, X, Check, Clock, Upload, Search, ExternalLink, Ban, ShieldAlert, RotateCcw, History } from 'lucide-react';
 import { AppDrilldownModal } from './app-drilldown-modal';
 import { useAccount } from '@/contexts/account-context';
 import { useTranslation } from '@/contexts/i18n-context';
@@ -505,7 +505,6 @@ export function ConfigBreakdownPanel({
 
   const effectiveIncludedSizes = new Set(configDetail?.effective_sizes || configDetail?.included_sizes || []);
   const effectiveIncludedGeos = new Set(configDetail?.effective_geos || configDetail?.included_geos || []);
-  const effectiveFormats = new Set(configDetail?.effective_formats || configDetail?.included_formats || []);
   const effectivePublisherMode =
     configDetail?.effective_publisher_targeting_mode ||
     configDetail?.publisher_targeting_mode ||
@@ -514,7 +513,6 @@ export function ConfigBreakdownPanel({
     configDetail?.effective_publisher_targeting_values || configDetail?.publisher_targeting_values || []
   );
   const isSizeIncluded = (sizeName: string): boolean => effectiveIncludedSizes.has(sizeName);
-  const isFormatEnabled = (format: string): boolean => effectiveFormats.has(format);
   const isPublisherListed = (publisherValue: string): boolean => effectivePublisherValues.has(publisherValue);
   const isPublisherBlocked = (publisherValue: string): boolean => {
     if (effectivePublisherMode === 'INCLUSIVE') {
@@ -655,41 +653,6 @@ export function ConfigBreakdownPanel({
 
   const applySelectionState = (shouldInclude: boolean) => {
     selectedSizes.forEach((sizeName) => setSizeInclusionState(sizeName, shouldInclude));
-  };
-
-  const setFormatEnabledState = (format: string, shouldEnable: boolean) => {
-    const pendingAdd = findPendingChange('add_format', format);
-    const pendingRemove = findPendingChange('remove_format', format);
-    const currentlyEnabled = isFormatEnabled(format);
-
-    if (shouldEnable) {
-      if (pendingRemove) {
-        cancelChangeMutation.mutate(pendingRemove.id);
-        return;
-      }
-      if (pendingAdd || currentlyEnabled) return;
-      stageChange({
-        billing_id,
-        change_type: 'add_format',
-        field_name: 'included_formats',
-        value: format,
-        reason: 'Enabled from Home breakdown',
-      });
-      return;
-    }
-
-    if (pendingAdd) {
-      cancelChangeMutation.mutate(pendingAdd.id);
-      return;
-    }
-    if (pendingRemove || !currentlyEnabled) return;
-    stageChange({
-      billing_id,
-      change_type: 'remove_format',
-      field_name: 'included_formats',
-      value: format,
-      reason: 'Disabled from Home breakdown',
-    });
   };
 
   const setPublisherBlockedState = (publisherValue: string, shouldBlock: boolean) => {
@@ -1744,7 +1707,7 @@ export function ConfigBreakdownPanel({
                             className="p-1 text-gray-400 hover:text-gray-600"
                             title={t.creatives.viewCreative}
                           >
-                            <Image className="h-3 w-3" />
+                            <ImageIcon className="h-3 w-3" />
                           </button>
                         )}
                         {isClickable && (
@@ -1902,7 +1865,7 @@ export function ConfigBreakdownPanel({
                                     className="p-1 text-gray-400 hover:text-gray-600"
                                     title={t.creatives.viewCreative}
                                   >
-                                    <Image className="h-3 w-3" />
+                                    <ImageIcon className="h-3 w-3" />
                                   </button>
                                 </div>
                                 {expandedCountries.has(creative.id) && (

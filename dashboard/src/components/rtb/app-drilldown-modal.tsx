@@ -1,8 +1,8 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { X, Loader2, AlertTriangle, TrendingDown, Globe, Layers, Image, Info, HelpCircle, Filter, Ban } from 'lucide-react';
-import { getAppDrilldown, type AppDrilldownResponse } from '@/lib/api';
+import { X, Loader2, AlertTriangle, Globe, Layers, ImageIcon, Info, HelpCircle, Filter, Ban } from 'lucide-react';
+import { getAppDrilldown } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
 import { useTranslation } from '@/contexts/i18n-context';
@@ -433,7 +433,7 @@ export function AppDrilldownModal({ appName, billingId, onClose }: AppDrilldownM
               {data.by_creative && data.by_creative.length > 0 && (
                 <div>
                   <h3 className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-3">
-                    <Image className="h-4 w-4" />
+                    <ImageIcon className="h-4 w-4" />
                     {t.creatives.byCreativeTop10}
                   </h3>
                   <div className="bg-white border rounded-lg overflow-hidden overflow-x-auto">

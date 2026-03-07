@@ -28,7 +28,6 @@ interface FunnelCardProps {
  * Shows traffic reaching the bidder and conversion to impressions.
  */
 export function FunnelCard({
-  bidRequests,
   reached,
   impressions,
   days,

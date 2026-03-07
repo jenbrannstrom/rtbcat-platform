@@ -8,7 +8,7 @@ import {
   Server,
   Video,
   Loader2,
-  Image,
+  ImageIcon,
   Cpu,
 } from "lucide-react";
 import {
@@ -212,7 +212,7 @@ export function SystemTab() {
                   {generateMutation.isPending ? (
                     <><Loader2 className="h-4 w-4 mr-2 animate-spin" />{t.settings.generating}</>
                   ) : (
-                    <><Image className="h-4 w-4 mr-2" />{t.settings.generateThumbnails}</>
+                    <><ImageIcon className="h-4 w-4 mr-2" />{t.settings.generateThumbnails}</>
                   )}
                 </button>
               </div>

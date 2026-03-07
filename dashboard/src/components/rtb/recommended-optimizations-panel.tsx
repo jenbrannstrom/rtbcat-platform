@@ -290,7 +290,6 @@ function RecommendationCard({
 
 export function RecommendedOptimizationsPanel({
   days = 7,
-  onConfigSelect,
 }: RecommendedOptimizationsPanelProps) {
   const { t } = useTranslation();
   const enabled = process.env.NEXT_PUBLIC_ENABLE_RECOMMENDED_OPTIMIZATIONS === 'true';
