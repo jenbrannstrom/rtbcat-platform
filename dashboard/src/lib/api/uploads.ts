@@ -60,6 +60,8 @@ export interface ImportHistoryItem {
   file_size_mb: number;
   status: string;
   error_message?: string | null;
+  buyer_id?: string | null;
+  buyer_display_name?: string | null;
   bidder_id?: string | null;
   billing_ids_found?: string[] | null;
   columns_found?: string[] | null;
@@ -170,15 +172,15 @@ export async function getImportTrackingMatrix(
 export async function getImportHistory(
   limit: number = 50,
   offset: number = 0,
-  bidderId?: string
+  buyerId?: string
 ): Promise<ImportHistoryItem[]> {
   const params = new URLSearchParams({
     limit: String(limit),
     offset: String(offset),
   });
 
-  if (bidderId) {
-    params.set("bidder_id", bidderId);
+  if (buyerId) {
+    params.set("buyer_id", buyerId);
   }
 
   return fetchApi<ImportHistoryItem[]>(`/uploads/history?${params.toString()}`);
