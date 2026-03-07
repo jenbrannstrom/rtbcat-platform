@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 import pytest
@@ -14,7 +14,7 @@ class StubPrecomputeRepo:
     """Minimal async stub for PrecomputeService tests."""
 
     def __init__(self, table_dates: dict[str, str | None]) -> None:
-        now_iso = datetime.utcnow().isoformat()
+        now_iso = datetime.now(UTC).isoformat()
         self._refresh_rows = [
             {"cache_name": cache_name, "refreshed_at": now_iso}
             for cache_name in PrecomputeService.REQUIRED_CACHES

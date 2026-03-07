@@ -134,9 +134,17 @@ class TestVideoFrameExtraction:
         frames = service._extract_video_frames("c11", "https://example.com/video.mp4")
         assert frames == []
 
+    @patch("services.creative_evidence_service.is_safe_public_http_url", return_value=True)
     @patch("shutil.which", return_value="/usr/bin/ffmpeg")
     @patch("subprocess.run")
-    def test_with_ffmpeg_extracts_frames(self, mock_run, mock_which, service, tmp_path):
+    def test_with_ffmpeg_extracts_frames(
+        self,
+        mock_run,
+        mock_which,
+        mock_is_safe_url,
+        service,
+        tmp_path,
+    ):
         service._evidence_dir = tmp_path
 
         # Mock ffprobe returning no duration (fallback to single frame)
@@ -144,6 +152,7 @@ class TestVideoFrameExtraction:
 
         frames = service._extract_video_frames("c12", "https://example.com/video.mp4")
         # Should attempt extraction even with ffprobe failure
+        assert mock_is_safe_url.called
         assert mock_run.called
 
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Optional
 
 from storage.postgres_repositories.precompute_repo import PrecomputeRepository
@@ -77,7 +77,7 @@ class PrecomputeService:
         Returns:
             PrecomputeHealthStatus with detailed cache status.
         """
-        cutoff = datetime.utcnow() - timedelta(hours=max_age_hours)
+        cutoff = datetime.now(UTC) - timedelta(hours=max_age_hours)
 
         try:
             rows = await self._repo.get_cache_refresh_times()
@@ -172,7 +172,7 @@ class PrecomputeService:
         return PrecomputeHealthStatus(
             ok=ok,
             max_age_hours=max_age_hours,
-            checked_at=datetime.utcnow().isoformat(),
+            checked_at=datetime.now(UTC).isoformat(),
             stale_caches=stale_caches,
             missing_caches=missing_caches,
             cache_refresh_times=cache_refresh_times,

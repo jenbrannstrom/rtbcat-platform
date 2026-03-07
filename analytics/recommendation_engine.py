@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field, asdict
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import Enum
 from typing import Optional
 
@@ -132,7 +132,7 @@ class Recommendation:
 
     def __post_init__(self):
         if not self.generated_at:
-            self.generated_at = datetime.utcnow().isoformat()
+            self.generated_at = datetime.now(UTC).isoformat()
 
     def to_dict(self) -> dict:
         """Convert recommendation to dictionary for JSON serialization."""
@@ -316,7 +316,7 @@ class RecommendationEngine:
             "total_spend_usd": round(total_spend_micros / 1_000_000, 2),
             "recommendation_count": severity_counts,
             "total_recommendations": len(recommendations),
-            "generated_at": datetime.utcnow().isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
         }
 
     async def save_recommendation(self, rec: Recommendation) -> None:
@@ -380,7 +380,7 @@ class RecommendationEngine:
         """
 
         rows = await pg_execute(query, (
-            datetime.utcnow().isoformat(),
+            datetime.now(UTC).isoformat(),
             notes,
             rec_id,
         ))

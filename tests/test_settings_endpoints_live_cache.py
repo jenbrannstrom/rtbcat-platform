@@ -2,19 +2,10 @@
 
 from __future__ import annotations
 
-import sys
-import types
-
 import pytest
 
 # Match suite behavior in lightweight environments.
 pytest.importorskip("fastapi")
-
-# Allow importing router module in environments without optional Google deps.
-if "collectors" not in sys.modules:
-    fake_collectors = types.ModuleType("collectors")
-    fake_collectors.EndpointsClient = object
-    sys.modules["collectors"] = fake_collectors
 
 from api.routers.settings import endpoints as endpoints_router
 
