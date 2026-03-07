@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import Link from "next/link";
 import { Settings, Link2 } from "lucide-react";
 import { getHealth } from "@/lib/api";
 import { LoadingPage } from "@/components/loading";

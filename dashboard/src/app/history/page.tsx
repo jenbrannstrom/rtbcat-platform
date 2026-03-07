@@ -11,7 +11,6 @@ import {
   Check,
   X,
   AlertTriangle,
-  ChevronDown,
   TrendingUp,
   TrendingDown,
   Bot,
@@ -375,7 +374,6 @@ export default function HistoryPage() {
   const [billingIdFilter, setBillingIdFilter] = useState<string>('');
   const [changeTypeFilter, setChangeTypeFilter] = useState<string>('');
   const [selectedChange, setSelectedChange] = useState<PretargetingHistoryItem | null>(null);
-  const queryClient = useQueryClient();
 
   // Fetch history
   const { data: history, isLoading } = useQuery({
