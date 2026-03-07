@@ -1,534 +1,238 @@
-# Cat-Scan: an Optimizer for Google Authorized Buyers Signals
+# Cat-Scan
 
-**Release Version:** from `VERSION` (SemVer) | **Runtime Build ID:** image tag / git SHA (example: `sha-a4c50dc`) | **Last Updated:** March 5, 2026
+Cat-Scan is a QPS control plane for Google Authorized Buyers.
 
-An open-source tool that helps RTB bidders improve QPS efficiency on Google Authorized Buyers. Cat-Scan learns which bid-request streams your bidder prefers, then fine-tunes in an attempt to send more of what works and less of what doesn't.
+It does not replace the bidder. It gives the bidder and the operator a better view of what is happening, then helps adjust the levers Google actually exposes: pretargeting configs, seat-level traffic mix, creative hygiene, and reporting.
 
-100% free and open source. Self-host on your own infrastructure.
+Google already does a lot of waste reduction on its side. That is real. Cat-Scan exists for the last layer you can still control on your side.
 
----
+What it does today:
+- imports Google Authorized Buyers CSV reports from Gmail or manual upload
+- syncs creatives, seats, endpoints, and pretargeting data from the Authorized Buyers API
+- shows QPS, bidstream, publisher, geo, size, and config-level waste signals
+- groups creatives into campaigns from destination patterns
+- recommends and applies pretargeting changes, with rollback and audit history
+- supports multi-seat operation with user roles and seat-scoped access
 
-## The Problem
+What it does not do today:
+- it does not have enough public deployment data to claim a typical percentage improvement
+- it does not magically know advertiser value or lifetime value without external conversion data
+- it does not replace bidder-side logic; it complements it
 
-Google Authorized Buyers delivers hundreds of billions of bid requests per day.
+## Why this exists
 
-![QPS Funnel: how bid requests flow through the Google AB pipeline](https://docs.rtb.cat/assets/qps-funnel.svg)
+Authorized Buyers gives you a lot of traffic and only a limited set of controls.
 
-Illustration: Google Authorized Buyers can send your bidder hundreds of billions of bid requests per day. You only want part of that firehose.
+The bidder sees the firehose it receives. Google sees its own side of the exchange. Neither side gives you a clean control plane for understanding where QPS is wasted, where spend actually concentrates, or which pretargeting configs are carrying dead weight.
 
-Authorized Buyers gives you up to 10 pretargeting configs to filter that real-time bidding firehose.
+Cat-Scan fills that gap.
 
-But there is no Reporting API for these metrics, so you cannot programmatically answer basic questions:
+The current optimizer logic is simple on purpose:
+- follow the bids
+- follow the spend
+- cut dead weight
+- treat post-click data as the missing signal until it is actually connected
 
-- Which signal (QPS) does your bidder actually prefer vs declining to bid on?
-- Which pretargeting configs are performing and which are poorly configured?
-- Which creatives are underperforming and blocking better signal?
+That logic is described in [docs/OPTIMIZATION_LOGIC.md](docs/OPTIMIZATION_LOGIC.md).
 
-You're left with CSV exports and manual analysis. That doesn't scale.
+## Current scope
 
-## What Cat-Scan Does
+### Built and usable
+- Gmail and manual CSV ingestion for the five core Authorized Buyers report types
+- creative sync from Authorized Buyers
+- QPS analysis by publisher, geo, and size
+- config and campaign views
+- pretargeting recommendations, apply flow, rollback, and audit trail
+- import history, data freshness, and retention controls
+- multi-user auth with seat-scoped access
+- campaign clustering from destination URLs and creative metadata
+- click-macro audit and AppsFlyer readiness diagnostics
 
-Cat-Scan sits alongside your Google AB seat. Because Google has no reporting API for this data, Cat-Scan ingests scheduled CSV reports sent to a dedicated Gmail address, parses them, and normalizes them into a queryable dataset.
-Google does provide an Authorized Buyers API for creative metadata, which Cat-Scan uses directly.
+### Built but optional
+- AI-assisted language detection and geo-linguistic mismatch analysis in the creative modal
+- these features require explicit provider configuration and are disabled by default in production deploys
 
-From there, it:
+### Under active build
+- conversion ingestion and attribution, with AppsFlyer first
+- broader provider choice for language analysis instead of a Gemini-only path
+- stronger optimizer decisions once conversion and value data are connected
 
-1. **Imports CSV performance data** automatically from Gmail (yes, it's messy, but there's no API alternative)
-2. **Syncs creatives** from the Authorized Buyers API
-3. **Identifies waste** including [size gaps, config inefficiencies](https://docs.rtb.cat/04-analyzing-waste/), and underperforming segments
-4. **Recommends pretargeting changes** based on bid rate, spend concentration, and win rate signals
-5. **Pushes config changes** to Google AB with rollback and historical tracking
-6. **Exposes an MCP interface** so you can connect your own AI to the data and algo engine
-
-**Efficiency improvement:** We don't have enough data yet to quantify the percentage. We need more deployments and real-world testing.
-
-
-
-### MMP / Tracking Platform Integration (Under Construction)
-
-Optimisation improves significantly when conversion data (installs, tutorial completed, level unlocked, first deposit made, etc.) from your MMP is ingested. Supported platforms include AppsFlyer, Adjust, Voluum, and RedTrack. That way your AI has a much better understanding of what signal to optimise for. See the **[ROADMAP](ROADMAP.md)** for progress on this feature.
-
-
-
-### How the Optimizer Thinks
-
-Cat-Scan deduces what the media buyer is trying to achieve based on creatives, spend, CPM, and clicks. The core logic: follow the bids, follow the spend, kill the dead weight.
-
-For the full breakdown of available signals, what's missing, and how we plan to close the gap, see **[docs/OPTIMIZATION_LOGIC.md](docs/OPTIMIZATION_LOGIC.md)**.
-
-### Campaign Clustering
-
-Cat-Scan groups creatives automatically based on shared destination URLs. This reveals patterns: which campaigns target the same audience, where spend is concentrated, and where config overlap creates waste. Manual grouping is also supported. Optional AI-assisted language and geo-linguistic analysis can be enabled separately in the creative review flow, with broader MMP-driven optimization work still in progress.
-
----
-
-## Quick Start
+## Quick start
 
 ```bash
-# Clone and set up
-git clone https://github.com/jenbrannstrom/rtbcat-platform.git
-cd rtbcat-platform
+git clone https://github.com/rtbcat/qps-control-plane.git
+cd qps-control-plane
+cp .env.example .env
+# set POSTGRES_DSN and POSTGRES_SERVING_DSN in .env first
 ./setup.sh
-
-# Start services
 ./run.sh
-
-# Open http://localhost:3000
 ```
 
-> **Linux note:** Run `./run.sh` from a terminal, not by double-clicking in the file manager.
+Open `http://localhost:3000`.
 
-### Requirements
-
+Requirements:
 - Python 3.11+
 - Node.js 18+
-- ffmpeg (optional, for video thumbnails)
+- Postgres 14+
+- `ffmpeg` optional, for video thumbnails
 
-See **[INSTALL.md](INSTALL.md)** for detailed instructions.
+`./setup.sh` expects Postgres connection strings before it can initialize the schema. More setup detail is in [INSTALL.md](INSTALL.md).
 
-By default, `./setup.sh` installs the secure runtime bundle from `requirements.txt`.
+## Install model
 
-- Contributors can install the full tooling bundle with `CATSCAN_PYTHON_REQUIREMENTS=requirements-dev.txt ./setup.sh`
-- Gemini-backed language analysis can be added with `CATSCAN_INSTALL_AI_EXTRAS=true ./setup.sh`
+The install is split on purpose.
 
-### Security-First Install Sequence
+1. Boot the app.
+2. Add Gmail import.
+3. Verify the data path.
+4. Add Google write access only when you actually want live pretargeting changes.
 
-Treat setup as four separate capabilities, enabled in order:
+That keeps a fresh install useful without forcing high-risk credentials on day one.
 
-1. **Boot:** App starts, users can log in. Provision DB + runtime secrets only.
-2. **Ingestion:** CSV import from Gmail. Set up Gmail OAuth credentials and scheduler.
-3. **Analysis:** Metrics computed from imported data. Verify ingestion is working first.
-4. **Google write access:** Live pretargeting changes via API. Only add AB service-account credentials when you're ready for this.
+Authentication and first-admin bootstrap are documented in [docs/AUTHENTICATION.md](docs/AUTHENTICATION.md).
 
-This keeps a fresh install useful but low-risk: no live Google write access until explicitly enabled.
+## Main routes
 
-**Automatable:** infra provisioning, startup, secret creation, bootstrap API call, scheduler wiring, health checks.
-**Manual by design:** Gmail OAuth browser consent and Google-side permission approvals.
+These are the routes that matter for an operator.
 
-See **[AUTHENTICATION.md](docs/AUTHENTICATION.md)** for the bootstrap token flow.
+| Area | Route | Purpose |
+|---|---|---|
+| Home | `/` | Top-level status and summary |
+| Setup | `/setup` | First-run checks and onboarding |
+| Creatives | `/creatives` | Creative list and review |
+| Click macros | `/creatives/click-macros` | Click macro audit |
+| Attribution readiness | `/creatives/attribution-readiness` | Seat-level AppsFlyer readiness |
+| Campaigns | `/campaigns` | Campaign and cluster views |
+| Import | `/import` | Manual uploads, Gmail status, import history |
+| History | `/history` | Change and import history |
+| QPS by publisher | `/qps/publisher` | Publisher-side QPS and waste |
+| QPS by geo | `/qps/geo` | Geo-side QPS and waste |
+| QPS by size | `/qps/size` | Size coverage and waste |
+| Waste analysis | `/waste-analysis` | Waste and inefficiency analysis |
+| Settings | `/settings` | Main settings entry |
+| Connected accounts | `/settings/accounts` | Google API, Gmail, and optional AI provider config |
+| Retention | `/settings/retention` | Retention controls |
+| System | `/settings/system` | Runtime, DB, thumbnails, health |
+| Admin | `/admin` | Users, config, audit log |
 
----
+Buyer-scoped equivalents also exist under `/{buyerId}/...`.
 
-## Features
+## Architecture in one paragraph
 
-| Feature | Description |
-|---------|-------------|
-| **Creative Sync** | Fetch all creatives from Google Authorized Buyers API |
-| **Multi-Seat Support** | Manage multiple buyer accounts under one bidder |
-| **Efficiency Analysis** | Identify size gaps, config inefficiencies, optimisation opportunities |
-| **RTB Bidstream** | Visualise bid pipeline: bid_requests → bids → auctions_won → impressions |
-| **Campaign Clustering** | Grouping by destination URL, region, advertiser, language |
-| **CSV Import** | Auto-import performance data from scheduled Google reports via Gmail |
-| **MCP Support** | Connect your own AI to Cat-Scan's data and algo engine |
-| **Video Thumbnails** | Extract from VAST XML or generate via ffmpeg |
-| **11 Languages** | EN, PL, ZH, RU, UK, ES, DA, FR, NL, HE, AR |
-| **Configurable Login** | Google OAuth, Authing OIDC, or email/password with session-based auth. |
-| **Access Control** | Per-user role + service account scoping |
+The frontend is Next.js. The backend is FastAPI. The serving database is Postgres. In the GCP deployment path, Cloud SQL is reached through `cloud-sql-proxy`. Raw export and archive paths can use GCS and BigQuery, but the operator-facing app runs from Postgres. Reverse proxy and auth depend on deployment mode: local/dev can use Caddy, while the GCP path expects external Nginx and OAuth proxy wiring.
 
-### Dashboard
+The full technical layout is in [ARCHITECTURE.md](ARCHITECTURE.md).
 
-| Page | URL | Purpose |
-|------|-----|---------|
-| Home | `/` | Main dashboard with stats |
-| Setup | `/setup` | Connect API, Gmail, configure retention |
-| Efficiency Analysis | `/efficiency-analysis` | Size coverage, config performance |
-| Creatives | `/creatives` | Browse synced creatives |
-| Campaigns | `/campaigns` | Clustered campaign groups |
-| Import | `/import` | Manual CSV upload |
-| History | `/history` | Import history |
-| Settings | `/settings` | General settings |
-| Seats | `/settings/seats` | Buyer seat management |
-| Admin | `/admin` | Admin dashboard |
+## The five CSV reports
 
----
+Cat-Scan still depends on five separate Authorized Buyers reports because Google does not let you combine all required fields in one export.
 
-## Architecture
+Required reports:
+1. `catscan-bidsinauction`
+2. `catscan-quality`
+3. `catscan-pipeline-geo`
+4. `catscan-pipeline`
+5. `catscan-bid-filtering`
 
-```
-                         ┌─────────────────────────────────────┐
-                         │     Caddy (default) or Nginx        │
-                         │         (Port 443 - HTTPS)          │
-                         │         SSL via Let's Encrypt       │
-                         └─────────────────────────────────────┘
-                                          │
-                    ┌─────────────────────┴─────────────────────┐
-                    │                                           │
-                    ▼                                           ▼
-┌─────────────────────────────────────┐    ┌─────────────────────────────────────┐
-│   Next.js Dashboard (Port 3000)     │    │     FastAPI Backend (Port 8000)     │
-│   /                                 │    │     /api/*                          │
-└─────────────────────────────────────┘    └─────────────────────────────────────┘
-                                                      │
-                         ┌────────────────────────────┴────────────────────────────┐
-                         │                                                         │
-                         ▼                                                         ▼
-          ┌──────────────────────────────┐                      ┌──────────────────────────────┐
-          │ Postgres (serving)           │                      │ Google Authorized            │
-          │ Cloud SQL / local Postgres   │                      │ Buyers API                   │
-          └──────────────────────────────┘                      └──────────────────────────────┘
-                         ▲
-                         │
-          ┌──────────────────────────────┐
-          │ GCS + BigQuery (raw_facts)   │
-          └──────────────────────────────┘
-```
+Why five:
+- bid requests and pretargeting config are not available in the same report
+- creative-level and publisher-level views also split across incompatible report shapes
 
-### API Routers
+The importer joins those reports into a usable dataset. Details are in [DATA_MODEL.md](DATA_MODEL.md) and [importers/README.md](importers/README.md).
 
-| Router | Purpose |
-|--------|---------|
-| `system` | Health, stats, thumbnails |
-| `creatives` | Creative management and sync |
-| `seats` | Buyer seat discovery |
-| `settings` | RTB endpoints, pretargeting |
-| `analytics` | Efficiency analysis, RTB bidstream |
-| `config` | Configuration and credentials |
-| `gmail` | Auto-import from Gmail |
-| `recommendations` | Optimisation recommendations |
-| `retention` | Data retention policies |
-| `uploads` | CSV file uploads |
+## API surface
 
-Full API docs are available at `/docs` when running locally.
+The API is larger than a short README table can capture. The current router surface includes:
+- auth and bootstrap
+- system and health
+- creatives, live creative fetch, creative cache
+- language and geo-linguistic analysis
+- seats and seat admin
+- campaigns
+- settings and pretargeting flows
+- analytics home, waste, traffic, spend, RTB bidstream, and QPS
+- uploads, Gmail, retention, precompute, troubleshooting
+- conversions and optimizer routes
+- admin
 
-See **[DATA_MODEL.md](DATA_MODEL.md)** for the database schema and multi-bidder architecture.
-
----
-
-## CSV Reports
-
-Cat-Scan requires **5 separate CSV reports** from Google Authorized Buyers. This is because of field incompatibilities in Google's reporting system: you can't get pretargeting config IDs and bid request metrics in the same report.
-
-> **Set timezone to UTC for all reports.** Non-UTC data is flagged as legacy.
->
-> **Include Buyer account ID** in every report, or ensure the filename contains the seat ID.
->
-> **Naming:** `catscan-{type}-{account_id}-{period}-UTC`
->
-> **Create in:** Google Authorized Buyers → Reporting → Scheduled Reports
-
-### The 5 Reports
-
-| # | Report | Purpose | Key Fields | Table |
-|---|--------|---------|------------|-------|
-| 1 | **catscan-bidsinauction** | Bid metrics by creative | Creative ID, Bids in auction, Auctions won | `rtb_daily` |
-| 2 | **catscan-quality** | Quality and config data | Pretargeting config (Billing ID), Reached queries, Impressions | `rtb_daily` |
-| 3 | **catscan-pipeline-geo** | Bidstream by region | Country, Bid requests, Bids | `rtb_bidstream` |
-| 4 | **catscan-pipeline** | Bidstream by publisher | Publisher ID + Bid metrics | `rtb_bidstream` |
-| 5 | **catscan-bid-filtering** | Bid filtering reasons | Bid filtering status, Filtered bids | `rtb_bid_filtering` |
-
-### Why 5 Reports?
-
-Google's limitation: "Billing ID is not compatible with Bid requests."
-
-- To get pretargeting config + spend → you lose bid request metrics
-- To get bid request metrics → you lose pretargeting config
-- Cat-Scan joins reports #1 and #2 on (Day, Creative ID) to reconstruct per-config bidstream metrics
-
-### Data Quality Flags
-
-All data has a `data_quality` column:
-- **`production`**: UTC data (real analytics)
-- **`legacy`**: Pre-UTC data (wrong timezone, development only)
-- **`sample`**: Manually marked sample data
-
-> Run migrations 016 and 017 to add data_quality support and rename `rtb_funnel` to `rtb_bidstream`.
-
-### Report Field Reference
-
-**Report 1: Bids in Auction:**
-```
-Dimensions: Day, Hour, Buyer account ID, Creative ID, Region, Platform, Publisher ID
-Metrics: Bids, Bids in auction, Auctions won
-```
-
-**Report 2: Quality:**
-```
-Dimensions: Day, Hour, Buyer account ID, Pretargeting config (Billing ID), Creative ID, Region, Platform
-Metrics: Reached queries, Impressions, Clicks, Spend
-```
-
-**Report 3: Bidstream Geo:**
-```
-Dimensions: Day, Hour, Buyer account ID, Region
-Metrics: Bid requests, Inventory matches, Reached queries, Bids, Bids in auction, Auctions won, Impressions
-```
-
-**Report 4: Bidstream Publishers:**
-```
-Dimensions: Day, Hour, Buyer account ID, Region, Publisher ID, Publisher name
-Metrics: Same as Report 3
-```
-
-**Report 5: Bid Filtering:**
-```
-Dimensions: Day, Hour, Buyer account ID, Bid filtering status, Creative ID
-Metrics: Filtered bids
-```
-
-> **Efficiency calculation:** Impressions / Reached Queries
-
----
-
-## Importer CLI
-
-```bash
-# Unified CSV importer (recommended)
-./venv/bin/python -m importers.unified_importer /path/to/report.csv
-```
-
-For importer internals and supported report types, see [`importers/README.md`](importers/README.md).
-
----
-
-## API
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/health` | Health check |
-| GET | `/creatives` | List creatives |
-| POST | `/collect/sync` | Sync from Google API |
-| GET | `/campaigns` | List campaigns |
-| POST | `/campaigns/auto-cluster` | Clustering |
-| GET | `/analytics/home/funnel` | Home funnel analytics |
-| POST | `/performance/import-csv` | Import CSV |
-
-Full API docs: `http://localhost:8000/docs`
-
----
+Run locally and use `http://localhost:8000/docs` for the current OpenAPI surface.
 
 ## Deployment
 
-### CI/CD (GitHub Actions)
+There are two real deployment modes in this repo.
 
-Pushing to `unified-platform` triggers: build → push to Artifact Registry → pull on VM.
+### Local or simple self-host
+- Next.js on port `3000`
+- FastAPI on port `8000`
+- local Postgres or external Postgres
+- optional Caddy reverse proxy
 
-```bash
-# Deploy a pinned image tag
-cd /opt/catscan
-echo "IMAGE_TAG=sha-<commit>" | sudo tee -a .env
-sudo docker compose -f docker-compose.gcp.yml pull
-sudo docker compose -f docker-compose.gcp.yml up -d --no-build
-```
+### GCP path
+- external reverse proxy and auth in front
+- `cloud-sql-proxy` sidecar
+- FastAPI container
+- Next.js container
+- Postgres serving database in Cloud SQL
+- optional GCS / BigQuery pipeline for raw and archival data
 
-### Production Stack
-
-```
-Internet → Caddy or Nginx (443/HTTPS) → Dashboard (3000) + API (8000)
-```
-
-Caddy is the default reverse proxy with automatic HTTPS. Nginx is supported as an alternative.
-
-<details>
-<summary>Nginx setup</summary>
-
-```bash
-sudo apt install -y nginx certbot python3-certbot-nginx
-```
-
-`/etc/nginx/sites-available/catscan`:
-```nginx
-server {
-    listen 80;
-    server_name your-domain.com;
-    client_max_body_size 200m;
-
-    location /api/ {
-        proxy_pass http://127.0.0.1:8000/;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_set_header Cookie $http_cookie;
-        proxy_pass_header Set-Cookie;
-    }
-
-    location / {
-        proxy_pass http://127.0.0.1:3000;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-    }
-}
-```
-
-```bash
-sudo ln -s /etc/nginx/sites-available/catscan /etc/nginx/sites-enabled/
-sudo rm /etc/nginx/sites-enabled/default
-sudo nginx -t && sudo systemctl reload nginx
-sudo certbot --nginx -d your-domain.com
-```
-
-</details>
-
-### Systemd
-
-```bash
-sudo systemctl start catscan-api catscan-dashboard
-sudo systemctl status catscan-api catscan-dashboard
-sudo journalctl -u catscan-api -f
-```
-
-### Docker
-
-```bash
-docker compose build api
-docker compose up -d api
-```
-
-### Manual Startup
-
-If `./run.sh` doesn't work:
-
-```bash
-# Terminal 1: API
-./venv/bin/python -m uvicorn api.main:app --host 0.0.0.0 --port 8000
-
-# Terminal 2: Dashboard
-cd dashboard && npm run dev
-```
-
-> Use `./venv/bin/python -m uvicorn` instead of `uvicorn` directly. It's more reliable across environments (Flatpak, certain shells).
-
-See **[docs/GCP_CREDENTIALS_SETUP.md](docs/GCP_CREDENTIALS_SETUP.md)** for full deployment instructions.
-
----
-
-## Configuration
-
-### Data Directory
-
-```
-~/.catscan/
-├── thumbnails/             # Generated video thumbnails
-├── imports/                # Downloaded CSV reports
-└── credentials/
-    └── google-credentials.json
-```
-
-### Environment Variables
-
-Create `.env` in the project root:
-
-```bash
-GOOGLE_APPLICATION_CREDENTIALS=~/.catscan/credentials/google-credentials.json
-
-# Postgres (required)
-POSTGRES_DSN=postgresql://user:pass@host:5432/rtbcat_serving
-POSTGRES_SERVING_DSN=postgresql://user:pass@host:5432/rtbcat_serving
-
-# Pipeline (CSV → Parquet → GCS → BigQuery)
-CATSCAN_PIPELINE_ENABLED=true
-CATSCAN_GCS_BUCKET=your-bucket
-RAW_PARQUET_BUCKET=your-bucket
-CATSCAN_BQ_DATASET=rtbcat_analytics
-CATSCAN_BQ_PROJECT=your-project
-```
-
-Postgres is required. The legacy `docker-compose.simple.yml` is deprecated.
-
----
+Start with [INSTALL.md](INSTALL.md). For release/build rules, use [docs/VERSIONING.md](docs/VERSIONING.md).
 
 ## Documentation
 
-| Document | Purpose |
-|----------|---------|
-| **[INSTALL.md](INSTALL.md)** | Installation guide |
-| **[SECURITY.md](SECURITY.md)** | Vulnerability reporting policy + deployment security guide |
-| **[DATA_MODEL.md](DATA_MODEL.md)** | Database schema (41 tables) |
-| **[ARCHITECTURE.md](ARCHITECTURE.md)** | System architecture |
-| **[docs/OPTIMIZATION_LOGIC.md](docs/OPTIMIZATION_LOGIC.md)** | How Cat-Scan analyses QPS signals |
-| **[docs/LOCAL_DEV_DATABASE.md](docs/LOCAL_DEV_DATABASE.md)** | Local DB subset workflow |
-| **[METRICS_GUIDE.md](METRICS_GUIDE.md)** | RTB metrics reference |
-| **[docs/VERSIONING.md](docs/VERSIONING.md)** | Release and build version policy |
-| **[ROADMAP.md](ROADMAP.md)** | Planned features and known bugs |
-| **[CHANGELOG.md](CHANGELOG.md)** | Version history |
-| **[CONTRIBUTING.md](CONTRIBUTING.md)** | Contribution workflow |
-| **[CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)** | Community standards |
+| Document | Use it for |
+|---|---|
+| [INSTALL.md](INSTALL.md) | local install, production install, Gmail setup |
+| [SECURITY.md](SECURITY.md) | security policy and deployment precautions |
+| [ARCHITECTURE.md](ARCHITECTURE.md) | current system layout |
+| [DATA_MODEL.md](DATA_MODEL.md) | Postgres schema and import model |
+| [docs/OPTIMIZATION_LOGIC.md](docs/OPTIMIZATION_LOGIC.md) | what the optimizer uses and what it still lacks |
+| [METRICS_GUIDE.md](METRICS_GUIDE.md) | metric definitions |
+| [ROADMAP.md](ROADMAP.md) | what is built, what is partial, what comes next |
+| [CHANGELOG.md](CHANGELOG.md) | release history |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | contribution flow |
 
----
+## Security model
 
-## Security
+The rule is simple:
+- code can be public
+- data and credentials cannot
 
-**Code is public. Data and credentials are private.**
+Keep private:
+- `.env`
+- service-account keys
+- Gmail tokens
+- Postgres credentials
+- `terraform.tfvars`
+- local databases, imports, and thumbnails under `~/.catscan/`
 
-| Keep Public | Keep Private (gitignored) |
-|-------------|---------------------------|
-| Application code | `.env` (credentials) |
-| Docker configs | `terraform.tfvars` (secrets) |
-| `*.example` files | `*.json` (service account keys) |
-| Documentation | `~/.catscan/` (database, imports) |
+The repo preflight and secret scanning are designed around that assumption. See [SECURITY.md](SECURITY.md).
 
-```bash
-# Copy example files. Never commit the real versions.
-cp .env.example .env
-cp terraform/terraform.tfvars.example terraform/terraform.tfvars
+## Current status
 
-# Verify secrets aren't tracked
-git ls-files | grep -E '\.(env|tfstate|db)$|terraform\.tfvars'
-# Should return empty
-```
+Release engineering is in good shape.
 
-Use GitHub Secrets for CI/CD. See **[SECURITY.md](SECURITY.md)**.
+As of `v0.9.3`:
+- the OSS preflight passes
+- the full Python suite passes in this repo
+- dashboard build and lint pass
 
----
+What still needs more proof:
+- measured efficiency uplift across multiple real deployments
+- end-to-end conversion-driven optimization at production scale
+- provider-agnostic language analysis instead of a single optional AI path
 
-## Status
+## Contributing
 
-### Production Ready
-
-- Creative sync from Google API
-- Multi-seat buyer account support
-- Efficiency analysis with recommendations
-- CSV import (CLI and UI) with 5 report types
-- Gmail auto-import
-- Campaign clustering
-- RTB bidstream visualisation
-- Video thumbnail generation
-- UTC timezone standardisation
-- Data quality flagging
-- Per-config bidstream metrics via JOIN strategy
-
-See **[ROADMAP.md](ROADMAP.md)** for what's planned.
-
----
-
-## Known Issues
-
-| Issue | Fix |
-|-------|-----|
-| Port 8000 stuck | `sudo lsof -ti:8000 \| xargs -r sudo kill -9` |
-| No video thumbnails | Check ffmpeg install and run a thumbnail refresh from `/settings/system` |
-| Dashboard not updating | `npm run build` |
-| uvicorn "module not found" | Use `./venv/bin/python -m uvicorn` instead |
-
----
-
-## Development
+Run the basics before you open a change:
 
 ```bash
-./venv/bin/black . && ./venv/bin/isort . && ./venv/bin/ruff check .
-./venv/bin/pytest tests/ -v
-./venv/bin/mypy .
+./venv/bin/ruff check .
+./venv/bin/pytest -q
+cd dashboard && npm run lint && npm run build
 ```
 
----
-
-## Versioning
-
-- **Release version:** `VERSION` file (`X.Y.Z`), published with annotated git tag `vX.Y.Z`
-- **Runtime build ID:** immutable image tag / commit SHA (`sha-<short_sha>`)
-- **Health/API identity:** `/health` exposes `release_version`, `version` (build ID), and `git_sha`
-
-See **[docs/VERSIONING.md](docs/VERSIONING.md)** for the enforced release flow.
-
----
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the rest.
 
 ## License
 
-MIT License. See [LICENSE](LICENSE).
-
----
-
-Built for RTB bidders who want to stop wasting QPS.
+MIT. See [LICENSE](LICENSE).

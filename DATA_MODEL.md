@@ -1,26 +1,49 @@
-# RTBcat Platform - Data Model Documentation
+# Cat-Scan Data Model
 
-This document describes the database schema for the RTBcat platform, a real-time bidding (RTB) analytics and creative management system. Postgres (Cloud SQL) is the serving database for analytics and precompute.
+This document describes the serving schema and import model used by Cat-Scan.
 
-## Table of Contents
+Postgres is the serving database. In the GCP path that usually means Cloud SQL behind `cloud-sql-proxy`.
 
-1. [CSV Import Reference](#csv-import-reference)
-2. [Creative Management](#creative-management)
-3. [Campaign Management](#campaign-management)
-4. [Service Accounts & Buyer Seats](#service-accounts--buyer-seats)
-5. [RTB Performance & Analytics](#rtb-performance--analytics)
-6. [Pretargeting Configuration](#pretargeting-configuration)
-7. [Import & Upload Tracking](#import--upload-tracking)
-8. [User Authentication & Security](#user-authentication--security)
-9. [Lookup & Reference Tables](#lookup--reference-tables)
-10. [Canonical QPS Schema Requirements](#canonical-qps-schema-requirements)
-11. [Schema Gaps & Required Fixes](#schema-gaps--required-fixes)
+## Scope
 
----
+This file is for:
+- table purpose
+- import shape
+- field mapping
+- how the five Authorized Buyers reports fit together
 
-## CSV Import Reference
+This file is not the source of truth for deployment architecture. Use [ARCHITECTURE.md](ARCHITECTURE.md) for that.
 
-Cat-Scan imports **5 CSV report files** from Google Authorized Buyers. Sample files are located in `data/csv-reports/`.
+## Current schema source of truth
+
+The canonical schema file in this repo is:
+- [storage/postgres_schema.sql](storage/postgres_schema.sql)
+
+That file currently defines `41` tables.
+
+## CSV import reference
+
+Cat-Scan imports five Authorized Buyers CSV report types.
+
+Note:
+- earlier versions of this document referenced sample files under `data/csv-reports/`
+- that directory is not present in the current repo
+- sample rows below are illustrative examples, not guaranteed fixture files in-tree
+
+### Why five reports still matter
+
+Google Authorized Buyers does not give you every field you need in one export.
+
+The practical constraint is simple:
+- if you want pretargeting config context, you lose some bidstream fields
+- if you want bid request fields, you lose some creative or config fields
+- if you want publisher detail, that is another shape again
+
+Cat-Scan joins those exports into one serving model.
+
+## Detailed report reference
+
+Cat-Scan imports **5 CSV report files** from Google Authorized Buyers.
 
 ### Why Multiple Reports?
 
