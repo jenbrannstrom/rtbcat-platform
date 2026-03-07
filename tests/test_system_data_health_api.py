@@ -8,7 +8,7 @@ import pytest
 
 pytest.importorskip("fastapi")
 from fastapi import FastAPI
-from fastapi.testclient import TestClient
+from tests.support.asgi_client import SyncASGIClient
 
 from api.routers import system as system_router
 
@@ -122,7 +122,7 @@ class _StubDataHealthService:
 def _build_client(
     stub_service: _StubDataHealthService,
     monkeypatch: pytest.MonkeyPatch,
-) -> TestClient:
+) -> SyncASGIClient:
     app = FastAPI()
     app.include_router(system_router.router, prefix="/api")
     app.dependency_overrides[system_router.get_store] = lambda: SimpleNamespace()
@@ -139,7 +139,7 @@ def _build_client(
 
     monkeypatch.setattr(system_router, "resolve_buyer_id", _resolve_buyer_id)
     monkeypatch.setattr(system_router, "DataHealthService", lambda: stub_service)
-    return TestClient(app)
+    return SyncASGIClient(app)
 
 
 def test_data_health_forwards_filter_params(monkeypatch: pytest.MonkeyPatch):

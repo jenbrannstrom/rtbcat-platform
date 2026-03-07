@@ -6,7 +6,7 @@ import pytest
 
 pytest.importorskip("fastapi")
 from fastapi import FastAPI, HTTPException
-from fastapi.testclient import TestClient
+from tests.support.asgi_client import SyncASGIClient
 
 from api.routers import performance as performance_router
 from services.auth_service import User
@@ -35,7 +35,7 @@ def test_import_csv_preserves_http_exception_status(
     app.dependency_overrides[performance_router.require_seat_admin_or_sudo] = _allow_seat_admin()
     monkeypatch.setattr(performance_router, "UploadsRepository", _StubUploadsRepository)
 
-    client = TestClient(app)
+    client = SyncASGIClient(app)
     response = client.post(
         "/api/performance/import-csv",
         files={"file": ("sample.csv", b"Day,Creative ID\n2026-03-04,cr-1\n", "text/csv")},

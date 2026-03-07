@@ -16,7 +16,7 @@ if "collectors" not in sys.modules:
 
 pytest.importorskip("fastapi")
 from fastapi import FastAPI
-from fastapi.testclient import TestClient
+from tests.support.asgi_client import SyncASGIClient
 
 from api.routers.settings import pretargeting as pretargeting_router
 
@@ -89,16 +89,21 @@ class _StubSeatsService:
         return None
 
 
-def _build_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
+def _build_client(monkeypatch: pytest.MonkeyPatch) -> SyncASGIClient:
     app = FastAPI()
     app.include_router(pretargeting_router.router, prefix="/api")
+    app.dependency_overrides[pretargeting_router.get_current_user] = lambda: types.SimpleNamespace(
+        id="u1",
+        role="read",
+        email="user@example.com",
+    )
     app.dependency_overrides[pretargeting_router.get_seats_service] = lambda: _StubSeatsService()
     monkeypatch.setattr(
         pretargeting_router,
         "PretargetingService",
         lambda: _StubPretargetingService(),
     )
-    return TestClient(app)
+    return SyncASGIClient(app)
 
 
 def test_pretargeting_list_includes_maximum_qps(monkeypatch: pytest.MonkeyPatch):

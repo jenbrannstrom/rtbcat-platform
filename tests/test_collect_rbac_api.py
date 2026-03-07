@@ -8,7 +8,7 @@ import pytest
 
 pytest.importorskip("fastapi")
 from fastapi import FastAPI, HTTPException
-from fastapi.testclient import TestClient
+from tests.support.asgi_client import SyncASGIClient
 
 from api.routers import collect as collect_router
 from services.auth_service import User
@@ -31,14 +31,14 @@ class _StubCollectService:
         return 10, 7
 
 
-def _build_client(monkeypatch: pytest.MonkeyPatch, seat_admin_override) -> TestClient:
+def _build_client(monkeypatch: pytest.MonkeyPatch, seat_admin_override) -> SyncASGIClient:
     app = FastAPI()
     app.include_router(collect_router.router, prefix="/api")
     app.dependency_overrides[collect_router.get_config] = lambda: _StubConfig()
     app.dependency_overrides[collect_router.get_store] = lambda: SimpleNamespace()
     app.dependency_overrides[collect_router.require_seat_admin_or_sudo] = seat_admin_override
     monkeypatch.setattr(collect_router, "CollectService", _StubCollectService)
-    return TestClient(app)
+    return SyncASGIClient(app)
 
 
 def test_collect_sync_forbidden_when_seat_admin_dependency_denies(

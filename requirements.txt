@@ -10,7 +10,7 @@ uvicorn[standard]==0.41.0
 pydantic[email]==2.12.5
 python-multipart==0.0.22
 aiohttp==3.13.3
-httpx==0.25.2
+httpx==0.28.1
 requests==2.32.5
 
 # Google Authorized Buyers + Gmail integrations

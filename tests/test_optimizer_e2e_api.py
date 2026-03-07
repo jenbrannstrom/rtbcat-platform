@@ -8,7 +8,7 @@ import pytest
 
 pytest.importorskip("fastapi")
 from fastapi import FastAPI
-from fastapi.testclient import TestClient
+from tests.support.asgi_client import SyncASGIClient
 
 from api.routers import optimizer_proposals as optimizer_proposals_router
 from api.routers import optimizer_workflows as optimizer_workflows_router
@@ -205,7 +205,7 @@ class _StatefulOptimizerProposalsService:
         return await self.get_proposal(**kwargs)
 
 
-def _build_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
+def _build_client(monkeypatch: pytest.MonkeyPatch) -> SyncASGIClient:
     scoring_stub = _StubOptimizerScoringService()
     proposals_stub = _StatefulOptimizerProposalsService()
 
@@ -234,7 +234,7 @@ def _build_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     monkeypatch.setattr(optimizer_workflows_router, "OptimizerScoringService", lambda: scoring_stub)
     monkeypatch.setattr(optimizer_workflows_router, "OptimizerProposalsService", lambda: proposals_stub)
     monkeypatch.setattr(optimizer_proposals_router, "OptimizerProposalsService", lambda: proposals_stub)
-    return TestClient(app)
+    return SyncASGIClient(app)
 
 
 def test_end_to_end_optimizer_workflow(monkeypatch: pytest.MonkeyPatch):

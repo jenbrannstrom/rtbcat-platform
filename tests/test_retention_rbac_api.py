@@ -6,7 +6,7 @@ import pytest
 
 pytest.importorskip("fastapi")
 from fastapi import FastAPI, HTTPException
-from fastapi.testclient import TestClient
+from tests.support.asgi_client import SyncASGIClient
 
 from api.routers import retention as retention_router
 from services.auth_service import User
@@ -61,12 +61,12 @@ class _StubRetentionService:
         }
 
 
-def _build_client(monkeypatch: pytest.MonkeyPatch, require_admin_override) -> TestClient:
+def _build_client(monkeypatch: pytest.MonkeyPatch, require_admin_override) -> SyncASGIClient:
     app = FastAPI()
     app.include_router(retention_router.router, prefix="/api")
     app.dependency_overrides[retention_router.require_admin] = require_admin_override
     monkeypatch.setattr(retention_router, "RetentionService", _StubRetentionService)
-    return TestClient(app)
+    return SyncASGIClient(app)
 
 
 def test_set_retention_config_forbidden_when_require_admin_denies(

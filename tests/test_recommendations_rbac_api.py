@@ -8,7 +8,7 @@ import pytest
 
 pytest.importorskip("fastapi")
 from fastapi import FastAPI, HTTPException
-from fastapi.testclient import TestClient
+from tests.support.asgi_client import SyncASGIClient
 
 from api.routers import recommendations as rec_router
 from services.auth_service import User
@@ -51,7 +51,7 @@ def _build_client(
     *,
     current_user_override=None,
     seat_admin_override=None,
-) -> TestClient:
+) -> SyncASGIClient:
     app = FastAPI()
     app.include_router(rec_router.router, prefix="/api")
     app.dependency_overrides[rec_router.get_store] = lambda: SimpleNamespace()
@@ -60,7 +60,7 @@ def _build_client(
     if seat_admin_override is not None:
         app.dependency_overrides[rec_router.require_seat_admin_or_sudo] = seat_admin_override
     monkeypatch.setattr(rec_router, "RecommendationsService", _StubRecommendationsService)
-    return TestClient(app)
+    return SyncASGIClient(app)
 
 
 def test_recommendations_list_forbidden_when_not_authenticated(

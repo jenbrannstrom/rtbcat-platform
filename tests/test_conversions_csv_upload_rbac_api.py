@@ -8,7 +8,7 @@ import pytest
 
 pytest.importorskip("fastapi")
 from fastapi import FastAPI, HTTPException
-from fastapi.testclient import TestClient
+from tests.support.asgi_client import SyncASGIClient
 
 from api.routers import conversions as conversions_router
 from services.auth_service import User
@@ -18,20 +18,23 @@ class _StubConversionIngestionService:
     async def ingest_csv(self, csv_text: str, source_type: str, buyer_id_override=None):
         _ = (csv_text, source_type, buyer_id_override)
         return {
+            "accepted": True,
             "source_type": source_type,
-            "accepted": 1,
-            "rejected": 0,
+            "import_batch_id": "batch-1",
             "rows_read": 1,
+            "rows_inserted": 1,
+            "rows_duplicate": 0,
+            "rows_skipped": 0,
             "errors": [],
         }
 
 
-def _build_client(monkeypatch: pytest.MonkeyPatch, seat_admin_override) -> TestClient:
+def _build_client(monkeypatch: pytest.MonkeyPatch, seat_admin_override) -> SyncASGIClient:
     app = FastAPI()
     app.include_router(conversions_router.router, prefix="/api")
     app.dependency_overrides[conversions_router.require_seat_admin_or_sudo] = seat_admin_override
     monkeypatch.setattr(conversions_router, "ConversionIngestionService", _StubConversionIngestionService)
-    return TestClient(app)
+    return SyncASGIClient(app)
 
 
 def test_csv_upload_forbidden_without_seat_admin(
@@ -67,5 +70,6 @@ def test_csv_upload_allows_with_seat_admin(
     assert response.status_code == 200
     payload = response.json()
     assert payload["source_type"] == "manual_csv"
-    assert payload["accepted"] == 1
-    assert payload["rejected"] == 0
+    assert payload["accepted"] is True
+    assert payload["rows_inserted"] == 1
+    assert payload["rows_duplicate"] == 0

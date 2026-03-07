@@ -8,7 +8,7 @@ import pytest
 
 pytest.importorskip("fastapi")
 from fastapi import FastAPI
-from fastapi.testclient import TestClient
+from tests.support.asgi_client import SyncASGIClient
 
 from api.routers import optimizer_proposals as optimizer_proposals_router
 
@@ -174,7 +174,7 @@ class _StubOptimizerProposalsService:
 def _build_client(
     stub_service: _StubOptimizerProposalsService,
     monkeypatch: pytest.MonkeyPatch,
-) -> TestClient:
+) -> SyncASGIClient:
     app = FastAPI()
     app.include_router(optimizer_proposals_router.router, prefix="/api")
     app.dependency_overrides[optimizer_proposals_router.get_store] = lambda: SimpleNamespace()
@@ -191,7 +191,7 @@ def _build_client(
 
     monkeypatch.setattr(optimizer_proposals_router, "resolve_buyer_id", _resolve_buyer_id)
     monkeypatch.setattr(optimizer_proposals_router, "OptimizerProposalsService", lambda: stub_service)
-    return TestClient(app)
+    return SyncASGIClient(app)
 
 
 def test_generate_qps_proposals_endpoint(monkeypatch: pytest.MonkeyPatch):

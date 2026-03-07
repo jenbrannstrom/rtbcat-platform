@@ -8,7 +8,7 @@ import pytest
 
 pytest.importorskip("fastapi")
 from fastapi import FastAPI
-from fastapi.testclient import TestClient
+from tests.support.asgi_client import SyncASGIClient
 
 from api.routers import optimizer_scoring as optimizer_scoring_router
 
@@ -110,7 +110,7 @@ class _StubOptimizerScoringService:
 def _build_client(
     stub_service: _StubOptimizerScoringService,
     monkeypatch: pytest.MonkeyPatch,
-) -> TestClient:
+) -> SyncASGIClient:
     app = FastAPI()
     app.include_router(optimizer_scoring_router.router, prefix="/api")
     app.dependency_overrides[optimizer_scoring_router.get_store] = lambda: SimpleNamespace()
@@ -127,7 +127,7 @@ def _build_client(
 
     monkeypatch.setattr(optimizer_scoring_router, "resolve_buyer_id", _resolve_buyer_id)
     monkeypatch.setattr(optimizer_scoring_router, "OptimizerScoringService", lambda: stub_service)
-    return TestClient(app)
+    return SyncASGIClient(app)
 
 
 def test_run_rules_scoring_endpoint(monkeypatch: pytest.MonkeyPatch):

@@ -1,72 +1,57 @@
-"""API Routers for Cat-Scan Creative Intelligence."""
+"""Lazy exports for router objects used by ``api.main``.
 
-from .system import router as system_router
-from .creatives import router as creatives_router
-from .creatives_live import router as creatives_live_router
-from .creative_cache import router as creative_cache_router
-from .creative_language import router as creative_language_router
-from .creative_geo_linguistic import router as creative_geo_linguistic_router
-from .seats import router as seats_router
-from .settings import router as settings_router
-from .uploads import router as uploads_router
-from .config import router as config_router
-from .gmail import router as gmail_router
-from .recommendations import router as recommendations_router
-from .retention import router as retention_router
-from .precompute import router as precompute_router
-from .performance import router as performance_router
-from .troubleshooting import router as troubleshooting_router
-from .collect import router as collect_router
-from .conversions import router as conversions_router
-from .optimizer_models import router as optimizer_models_router
-from .optimizer_scoring import router as optimizer_scoring_router
-from .optimizer_proposals import router as optimizer_proposals_router
-from .optimizer_economics import router as optimizer_economics_router
-from .optimizer_workflows import router as optimizer_workflows_router
-from .admin import router as admin_router
-from .seat_admin import router as seat_admin_router
+Importing every router eagerly makes unrelated imports pay for optional
+dependencies. Keep submodule imports lazy so tests can import one router
+without dragging in the whole package graph.
+"""
 
-# Analytics sub-routers (refactored from monolithic analytics.py)
-from .analytics import (
-    waste_router,
-    rtb_bidstream_router,
-    qps_router as analytics_qps_router,
-    traffic_router,
-    spend_router,
-    home_router,
-)
+from __future__ import annotations
 
-__all__ = [
-    "system_router",
-    "creatives_router",
-    "creatives_live_router",
-    "creative_cache_router",
-    "creative_language_router",
-    "creative_geo_linguistic_router",
-    "seats_router",
-    "settings_router",
-    "uploads_router",
-    "config_router",
-    "gmail_router",
-    "recommendations_router",
-    "retention_router",
-    "precompute_router",
-    "performance_router",
-    "troubleshooting_router",
-    "collect_router",
-    "conversions_router",
-    "optimizer_models_router",
-    "optimizer_scoring_router",
-    "optimizer_proposals_router",
-    "optimizer_economics_router",
-    "optimizer_workflows_router",
-    "admin_router",
-    "seat_admin_router",
-    # Analytics sub-routers
-    "waste_router",
-    "rtb_bidstream_router",
-    "analytics_qps_router",
-    "traffic_router",
-    "spend_router",
-    "home_router",
-]
+from importlib import import_module
+
+
+_ROUTER_EXPORTS = {
+    "system_router": ("api.routers.system", "router"),
+    "creatives_router": ("api.routers.creatives", "router"),
+    "creatives_live_router": ("api.routers.creatives_live", "router"),
+    "creative_cache_router": ("api.routers.creative_cache", "router"),
+    "creative_language_router": ("api.routers.creative_language", "router"),
+    "creative_geo_linguistic_router": ("api.routers.creative_geo_linguistic", "router"),
+    "seats_router": ("api.routers.seats", "router"),
+    "settings_router": ("api.routers.settings", "router"),
+    "uploads_router": ("api.routers.uploads", "router"),
+    "config_router": ("api.routers.config", "router"),
+    "gmail_router": ("api.routers.gmail", "router"),
+    "recommendations_router": ("api.routers.recommendations", "router"),
+    "retention_router": ("api.routers.retention", "router"),
+    "precompute_router": ("api.routers.precompute", "router"),
+    "performance_router": ("api.routers.performance", "router"),
+    "troubleshooting_router": ("api.routers.troubleshooting", "router"),
+    "collect_router": ("api.routers.collect", "router"),
+    "conversions_router": ("api.routers.conversions", "router"),
+    "optimizer_models_router": ("api.routers.optimizer_models", "router"),
+    "optimizer_scoring_router": ("api.routers.optimizer_scoring", "router"),
+    "optimizer_proposals_router": ("api.routers.optimizer_proposals", "router"),
+    "optimizer_economics_router": ("api.routers.optimizer_economics", "router"),
+    "optimizer_workflows_router": ("api.routers.optimizer_workflows", "router"),
+    "admin_router": ("api.routers.admin", "router"),
+    "seat_admin_router": ("api.routers.seat_admin", "router"),
+    "waste_router": ("api.routers.analytics.waste", "router"),
+    "rtb_bidstream_router": ("api.routers.analytics.rtb_bidstream", "router"),
+    "analytics_qps_router": ("api.routers.analytics.qps", "router"),
+    "traffic_router": ("api.routers.analytics.traffic", "router"),
+    "spend_router": ("api.routers.analytics.spend", "router"),
+    "home_router": ("api.routers.analytics.home", "router"),
+}
+
+__all__ = list(_ROUTER_EXPORTS)
+
+
+def __getattr__(name: str):
+    if name not in _ROUTER_EXPORTS:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    module_name, attribute_name = _ROUTER_EXPORTS[name]
+    module = import_module(module_name)
+    value = getattr(module, attribute_name)
+    globals()[name] = value
+    return value
