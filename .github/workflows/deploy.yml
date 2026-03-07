@@ -38,12 +38,12 @@ concurrency:
 
 env:
   GCP_PROJECT: ${{ vars.GCP_PROJECT }}
-  GCP_ZONE: ${{ vars.GCP_ZONE || 'asia-southeast1-b' }}
-  GCP_VM_PRODUCTION: ${{ vars.GCP_VM_PRODUCTION || 'catscan-production-sg' }}
-  GCP_VM_STAGING: ${{ vars.GCP_VM_STAGING || 'catscan-production-sg2' }}
+  GCP_ZONE: ${{ vars.GCP_ZONE }}
+  GCP_VM_PRODUCTION: ${{ vars.GCP_VM_PRODUCTION }}
+  GCP_VM_STAGING: ${{ vars.GCP_VM_STAGING }}
   APP_DIR: ${{ vars.APP_DIR || '/opt/catscan' }}
   GIT_BRANCH: ${{ vars.GIT_BRANCH || 'unified-platform' }}
-  IMAGE_REGISTRY: ${{ vars.IMAGE_REGISTRY || 'asia-southeast1-docker.pkg.dev/catscan-prod-202601/catscan' }}
+  IMAGE_REGISTRY: ${{ vars.IMAGE_REGISTRY }}
   ALLOW_CONTRACT_FAILURE: ${{ vars.ALLOW_CONTRACT_FAILURE || 'false' }}
   CATSCAN_ENABLE_GMAIL_IMPORT_SCHEDULER: ${{ vars.CATSCAN_ENABLE_GMAIL_IMPORT_SCHEDULER || 'true' }}
   CATSCAN_ENABLE_PRECOMPUTE_SCHEDULER: ${{ vars.CATSCAN_ENABLE_PRECOMPUTE_SCHEDULER || 'true' }}
@@ -61,6 +61,17 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Validate deploy configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          for var_name in GCP_PROJECT GCP_ZONE GCP_VM_PRODUCTION GCP_VM_STAGING IMAGE_REGISTRY; do
+            if [ -z "${!var_name:-}" ]; then
+              echo "Missing required repository variable: ${var_name}"
+              exit 1
+            fi
+          done
+
       - name: Set VM name
         id: vm
         run: |

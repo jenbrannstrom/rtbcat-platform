@@ -21,10 +21,10 @@ permissions:
   contents: read
 
 env:
-  PROJECT_ID: ${{ vars.GCP_PROJECT || 'catscan-prod-202601' }}
-  REGION: ${{ vars.GCP_REGION || 'asia-southeast1' }}
-  REPOSITORY: ${{ vars.GCP_REPOSITORY || 'catscan' }}
-  REGISTRY_HOST: ${{ vars.GCP_REGISTRY_HOST || 'asia-southeast1-docker.pkg.dev' }}
+  PROJECT_ID: ${{ vars.GCP_PROJECT }}
+  REGION: ${{ vars.GCP_REGION }}
+  REPOSITORY: ${{ vars.GCP_REPOSITORY }}
+  REGISTRY_HOST: ${{ vars.GCP_REGISTRY_HOST }}
 
 jobs:
   test:
@@ -75,6 +75,17 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Validate registry configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          for var_name in PROJECT_ID REGION REPOSITORY REGISTRY_HOST; do
+            if [ -z "${!var_name:-}" ]; then
+              echo "Missing required repository variable: ${var_name}"
+              exit 1
+            fi
+          done
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2

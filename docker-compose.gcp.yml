@@ -9,7 +9,7 @@
 #   DATA_DIR        - Host path for persistent data (default: ~/.catscan)
 #   GMAIL_IMPORT_SECRET - Secret for Gmail webhook (optional)
 #   CREATIVE_CACHE_REFRESH_SECRET - Secret for creative cache refresh webhook (optional)
-#   CLOUDSQL_INSTANCE - Cloud SQL instance connection name (project:region:instance)
+#   CLOUDSQL_INSTANCE - Required Cloud SQL instance connection name (project:region:instance)
 #   CATSCAN_ENABLE_* - Feature toggles used by secrets-health checks
 
 services:
@@ -21,7 +21,7 @@ services:
       - "0.0.0.0"
       - "--port"
       - "5432"
-      - "${CLOUDSQL_INSTANCE:-catscan-prod-202601:asia-southeast1:catscan-production-serving}"
+      - "${CLOUDSQL_INSTANCE:?Set CLOUDSQL_INSTANCE to <project>:<region>:<instance>}"
     # On GCE VMs, uses Application Default Credentials from metadata server
     # For local dev with credentials file, set GOOGLE_APPLICATION_CREDENTIALS
     restart: always
