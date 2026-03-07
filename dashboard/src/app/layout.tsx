@@ -1,9 +1,6 @@
 import type { Metadata } from "next";
-import { Suspense } from "react";
 import "./globals.css";
 import { Providers } from "./providers";
-import { Sidebar } from "@/components/sidebar";
-import { FirstRunCheck } from "@/components/first-run-check";
 import { AuthenticatedLayout } from "@/components/authenticated-layout";
 
 export const metadata: Metadata = {

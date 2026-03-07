@@ -96,7 +96,7 @@ describe("proxy - skip paths", () => {
 
 describe("proxy - legacy aliases", () => {
   it("does not redirect /creatives (real route)", () => {
-    const result = proxy(makeRequest("/creatives"));
+    proxy(makeRequest("/creatives"));
     expect(mockRedirect).not.toHaveBeenCalledWith(expect.stringContaining("/clusters"));
   });
 

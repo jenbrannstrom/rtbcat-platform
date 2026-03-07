@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Settings, Check, AlertCircle, Info } from "lucide-react";
+import { Check, AlertCircle, Info } from "lucide-react";
 import { getSystemSettings, updateSystemSetting } from "@/lib/api";
 import { withAdminAuth } from "@/contexts/auth-context";
 import { useTranslation } from "@/contexts/i18n-context";

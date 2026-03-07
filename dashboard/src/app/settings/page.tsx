@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { Settings, Users, Clock, Activity, Link2, ChevronRight, CheckCircle, XCircle } from "lucide-react";
+import { Users, Clock, Activity, Link2, ChevronRight, CheckCircle, XCircle } from "lucide-react";
 import { getHealth, getSeats } from "@/lib/api";
 import { useTranslation } from "@/contexts/i18n-context";
 

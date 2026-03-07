@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Activity, Filter, ChevronDown } from "lucide-react";
-import { getAuditLogs, type AuditLogEntry } from "@/lib/api";
+import { getAuditLogs } from "@/lib/api";
 import { withAdminAuth } from "@/contexts/auth-context";
 import { useTranslation } from "@/contexts/i18n-context";
 import { cn } from "@/lib/utils";
