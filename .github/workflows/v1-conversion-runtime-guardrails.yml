@@ -6,7 +6,7 @@ on:
       api_base_url:
         description: "API base URL (include /api path)"
         required: true
-        default: "https://your-deployment.example.com/api"
+        default: ""
       strict_security:
         description: "Fail run if webhook security posture is not fully hardened"
         required: true
@@ -43,30 +43,66 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
-      CATSCAN_API_BASE_URL: ${{ github.event.inputs.api_base_url || 'https://your-deployment.example.com/api' }}
-      CATSCAN_GUARDRAIL_STRICT_SECURITY: ${{ github.event.inputs.strict_security || 'true' }}
-      CATSCAN_GUARDRAIL_RUN_RETENTION: ${{ github.event.inputs.run_retention || 'true' }}
-      CATSCAN_CANARY_TIMEOUT_SECONDS: ${{ github.event.inputs.timeout_seconds || '60' }}
-      CATSCAN_CANARY_EMAIL: ${{ secrets.CATSCAN_CANARY_BEARER_TOKEN }}
+      CATSCAN_API_TOKEN: ${{ secrets.CATSCAN_CANARY_BEARER_TOKEN }}
+      CATSCAN_CANARY_EMAIL: ${{ secrets.CATSCAN_CANARY_EMAIL }}
+      CATSCAN_CONVERSION_GUARDRAILS_API_BASE_URL_DEFAULT: ${{ vars.CATSCAN_CONVERSION_GUARDRAILS_API_BASE_URL || vars.CATSCAN_RUNTIME_HEALTH_API_BASE_URL }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Validate canary auth input
+      - name: Resolve guardrail configuration
+        id: config
         run: |
-          if [[ -z "${CATSCAN_CANARY_EMAIL:-}" ]]; then
-            echo "Set CATSCAN_CANARY_BEARER_TOKEN (email value) in repository secrets." >&2
+          set -euo pipefail
+
+          api_base_url="${{ github.event.inputs.api_base_url || '' }}"
+          strict_security="${{ github.event.inputs.strict_security || 'true' }}"
+          run_retention="${{ github.event.inputs.run_retention || 'true' }}"
+          timeout_seconds="${{ github.event.inputs.timeout_seconds || '60' }}"
+
+          if [[ -z "${api_base_url}" ]]; then
+            api_base_url="${CATSCAN_CONVERSION_GUARDRAILS_API_BASE_URL_DEFAULT:-}"
+          fi
+
+          missing=()
+          if [[ -z "${api_base_url}" || "${api_base_url}" == "https://your-deployment.example.com/api" ]]; then
+            missing+=("CATSCAN_CONVERSION_GUARDRAILS_API_BASE_URL")
+          fi
+          if [[ -z "${CATSCAN_API_TOKEN:-}" && -z "${CATSCAN_CANARY_EMAIL:-}" ]]; then
+            missing+=("CATSCAN_CANARY_BEARER_TOKEN or CATSCAN_CANARY_EMAIL")
+          fi
+
+          if [[ "${#missing[@]}" -gt 0 ]]; then
+            skip_reason="Missing required conversion guardrail configuration: $(IFS=', '; echo "${missing[*]}")"
+            if [[ "${{ github.event_name }}" == "schedule" ]]; then
+              echo "should_run=false" >> "$GITHUB_OUTPUT"
+              echo "skip_reason=${skip_reason}" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            echo "${skip_reason}" >&2
             exit 1
           fi
 
+          echo "should_run=true" >> "$GITHUB_OUTPUT"
+          echo "skip_reason=" >> "$GITHUB_OUTPUT"
+          echo "CATSCAN_API_BASE_URL=${api_base_url}" >> "$GITHUB_ENV"
+          echo "CATSCAN_GUARDRAIL_STRICT_SECURITY=${strict_security}" >> "$GITHUB_ENV"
+          echo "CATSCAN_GUARDRAIL_RUN_RETENTION=${run_retention}" >> "$GITHUB_ENV"
+          echo "CATSCAN_CANARY_TIMEOUT_SECONDS=${timeout_seconds}" >> "$GITHUB_ENV"
+
       - name: Run conversion runtime guardrail checks
         id: guardrail
+        if: steps.config.outputs.should_run == 'true'
         run: |
           args=(
             --base-url "${CATSCAN_API_BASE_URL}"
-            --email "${CATSCAN_CANARY_EMAIL}"
             --timeout "${CATSCAN_CANARY_TIMEOUT_SECONDS}"
           )
+          if [[ -n "${CATSCAN_API_TOKEN:-}" ]]; then
+            args+=(--token "${CATSCAN_API_TOKEN}")
+          elif [[ -n "${CATSCAN_CANARY_EMAIL:-}" ]]; then
+            args+=(--email "${CATSCAN_CANARY_EMAIL}")
+          fi
           if [[ "${CATSCAN_GUARDRAIL_STRICT_SECURITY}" == "true" ]]; then
             args+=(--strict-security)
           fi
@@ -100,8 +136,15 @@ jobs:
       - name: Publish guardrail summary
         if: always()
         run: |
-          report_path="${{ steps.guardrail.outputs.report_path }}"
-          if [[ -n "${report_path}" && -f "${report_path}" ]]; then
+          if [[ "${{ steps.config.outputs.should_run }}" != "true" ]]; then
+            {
+              echo "## Conversion Runtime Guardrails"
+              echo ""
+              echo "- Status: skipped"
+              echo "- Reason: ${{ steps.config.outputs.skip_reason }}"
+            } >> "$GITHUB_STEP_SUMMARY"
+          elif [[ -n "${{ steps.guardrail.outputs.report_path }}" && -f "${{ steps.guardrail.outputs.report_path }}" ]]; then
+            report_path="${{ steps.guardrail.outputs.report_path }}"
             cat "${report_path}" >> "$GITHUB_STEP_SUMMARY"
           elif [[ -f /tmp/v1_conversion_runtime_guardrails.log ]]; then
             echo "Guardrail markdown report missing; log tail:" >> "$GITHUB_STEP_SUMMARY"
@@ -113,7 +156,7 @@ jobs:
           fi
 
       - name: Upload guardrail artifact
-        if: always()
+        if: always() && steps.config.outputs.should_run == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: v1-conversion-runtime-guardrails-report

@@ -35,38 +35,54 @@ jobs:
   backup:
     runs-on: ubuntu-latest
     steps:
-      - name: Validate backup configuration
+      - name: Resolve backup configuration
+        id: config
         shell: bash
         run: |
           set -euo pipefail
-          for var_name in GCP_PROJECT CLOUDSQL_INSTANCE_DEFAULT CLOUDSQL_DATABASE_DEFAULT CLOUDSQL_BACKUP_BUCKET_DEFAULT; do
-            if [ -z "${!var_name:-}" ]; then
-              echo "Missing required repository variable: ${var_name}"
-              exit 1
+          INSTANCE="${{ github.event.inputs.instance || '' }}"
+          DATABASE="${{ github.event.inputs.database || '' }}"
+          BUCKET="${{ github.event.inputs.bucket || '' }}"
+
+          if [ -z "$INSTANCE" ]; then
+            INSTANCE="${CLOUDSQL_INSTANCE_DEFAULT:-}"
+          fi
+          if [ -z "$DATABASE" ]; then
+            DATABASE="${CLOUDSQL_DATABASE_DEFAULT:-}"
+          fi
+          if [ -z "$BUCKET" ]; then
+            BUCKET="${CLOUDSQL_BACKUP_BUCKET_DEFAULT:-}"
+          fi
+
+          missing=()
+          for pair in \
+            "GCP_PROJECT:${GCP_PROJECT:-}" \
+            "CLOUDSQL_INSTANCE:${INSTANCE}" \
+            "CLOUDSQL_DATABASE:${DATABASE}" \
+            "CLOUDSQL_BACKUP_BUCKET:${BUCKET}"; do
+            name="${pair%%:*}"
+            value="${pair#*:}"
+            if [ -z "$value" ]; then
+              missing+=("$name")
             fi
           done
 
-      - name: Resolve inputs
-        shell: bash
-        run: |
-          set -euo pipefail
-          INSTANCE="${{ github.event.inputs.instance }}"
-          DATABASE="${{ github.event.inputs.database }}"
-          BUCKET="${{ github.event.inputs.bucket }}"
-
-          if [ -z "$INSTANCE" ]; then
-            INSTANCE="${CLOUDSQL_INSTANCE_DEFAULT}"
-          fi
-          if [ -z "$DATABASE" ]; then
-            DATABASE="${CLOUDSQL_DATABASE_DEFAULT}"
-          fi
-          if [ -z "$BUCKET" ]; then
-            BUCKET="${CLOUDSQL_BACKUP_BUCKET_DEFAULT}"
+          if [ "${#missing[@]}" -gt 0 ]; then
+            skip_reason="Missing required backup configuration: $(IFS=', '; echo "${missing[*]}")"
+            if [ "${{ github.event_name }}" = "schedule" ]; then
+              echo "should_run=false" >> "$GITHUB_OUTPUT"
+              echo "skip_reason=${skip_reason}" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            echo "${skip_reason}" >&2
+            exit 1
           fi
 
           TS="$(date -u +%Y%m%dT%H%M%SZ)"
           URI="gs://${BUCKET}/${INSTANCE}/${DATABASE}-${TS}.sql.gz"
 
+          echo "should_run=true" >> "$GITHUB_OUTPUT"
+          echo "skip_reason=" >> "$GITHUB_OUTPUT"
           echo "INSTANCE=$INSTANCE" >> "$GITHUB_ENV"
           echo "DATABASE=$DATABASE" >> "$GITHUB_ENV"
           echo "BUCKET=$BUCKET" >> "$GITHUB_ENV"
@@ -74,16 +90,19 @@ jobs:
           echo "EXPORT_TS=$TS" >> "$GITHUB_ENV"
 
       - name: Authenticate to Google Cloud
+        if: steps.config.outputs.should_run == 'true'
         uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
       - name: Set up Cloud SDK
+        if: steps.config.outputs.should_run == 'true'
         uses: google-github-actions/setup-gcloud@v2
         with:
           project_id: ${{ env.GCP_PROJECT }}
 
       - name: Export SQL dump to GCS
+        if: steps.config.outputs.should_run == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -95,6 +114,7 @@ jobs:
             --quiet
 
       - name: Verify backup object
+        if: steps.config.outputs.should_run == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -107,7 +127,19 @@ jobs:
           echo "Backup size (bytes): ${SIZE_BYTES}"
           echo "SIZE_BYTES=${SIZE_BYTES}" >> "$GITHUB_ENV"
 
+      - name: Write skipped summary
+        if: steps.config.outputs.should_run != 'true'
+        shell: bash
+        run: |
+          {
+            echo "## Cloud SQL Logical Backup"
+            echo ""
+            echo "- Status: skipped"
+            echo "- Reason: ${{ steps.config.outputs.skip_reason }}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Write summary
+        if: steps.config.outputs.should_run == 'true'
         shell: bash
         run: |
           {
