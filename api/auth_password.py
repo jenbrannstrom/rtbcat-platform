@@ -4,7 +4,8 @@ This module provides traditional username/password authentication:
 - /auth/login: Login with email and password
 - /auth/register: Register new user (sudo only or first user)
 
-Password hashing uses bcrypt via passlib.
+Password hashing uses bcrypt directly, with an explicit SHA-256 prehash
+for new passwords so long passphrases are supported safely.
 """
 
 import os
@@ -35,20 +36,32 @@ router = APIRouter(prefix="/auth", tags=["Password Authentication"])
 # ==================== Password Hashing ====================
 
 try:
-    from passlib.context import CryptContext
-    from passlib.exc import UnknownHashError
+    import bcrypt
 except ImportError:
-    raise RuntimeError(
-        "passlib is required for secure password hashing. Install dependency: passlib[bcrypt]."
-    )
+    raise RuntimeError("bcrypt is required for secure password hashing.")
 
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+_PREHASHED_BCRYPT_PREFIX = "$catscan-sha256$"
+
+
+def _prehash_password(password: str) -> str:
+    return hashlib.sha256(password.encode()).hexdigest()
+
+
+def _hash_bcrypt(secret: str) -> str:
+    return bcrypt.hashpw(secret.encode(), bcrypt.gensalt()).decode()
+
+
+def _verify_bcrypt(secret: str, hashed_password: str) -> bool:
+    try:
+        return bcrypt.checkpw(secret.encode(), hashed_password.encode())
+    except ValueError:
+        return False
 
 
 def hash_password(password: str) -> str:
-    """Hash a password using bcrypt."""
-    return pwd_context.hash(password)
+    """Hash a password using SHA-256 prehash + bcrypt."""
+    return f"{_PREHASHED_BCRYPT_PREFIX}{_hash_bcrypt(_prehash_password(password))}"
 
 
 def _looks_like_legacy_pbkdf2_hash(hashed_password: str) -> bool:
@@ -74,12 +87,20 @@ def _verify_legacy_password(plain_password: str, hashed_password: str) -> bool:
 
 def verify_password(plain_password: str, hashed_password: str) -> tuple[bool, bool]:
     """Verify a password and report whether the stored hash should be upgraded."""
-    try:
-        return pwd_context.verify(plain_password, hashed_password), False
-    except UnknownHashError:
-        if _verify_legacy_password(plain_password, hashed_password):
-            return True, True
-        return False, False
+    if hashed_password.startswith(_PREHASHED_BCRYPT_PREFIX):
+        return _verify_bcrypt(
+            _prehash_password(plain_password),
+            hashed_password[len(_PREHASHED_BCRYPT_PREFIX):],
+        ), False
+
+    if hashed_password.startswith("$2"):
+        valid = _verify_bcrypt(plain_password, hashed_password)
+        return valid, valid
+
+    if _verify_legacy_password(plain_password, hashed_password):
+        return True, True
+
+    return False, False
 
 
 # ==================== Request/Response Models ====================

@@ -61,6 +61,49 @@ async def test_login_accepts_legacy_pbkdf2_hash_and_upgrades_to_bcrypt(monkeypat
 
 
 @pytest.mark.asyncio
+async def test_login_accepts_long_legacy_password_and_upgrades_to_bcrypt_sha256(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    auth = MagicMock()
+    user = User(id="user-1", email="cat-scan@rtb.cat", role="sudo", is_active=True)
+    auth.get_user_by_email = AsyncMock(return_value=user)
+    auth.update_last_login = AsyncMock()
+    auth.create_session = AsyncMock()
+    auth.log_audit = AsyncMock()
+
+    long_password = "L" * 80 + "!correct"
+    stored_hash = _legacy_hash(long_password)
+    upgraded_hashes: list[str] = []
+
+    async def fake_set_password_hash(user_id: str, password_hash: str) -> None:
+        assert user_id == user.id
+        upgraded_hashes.append(password_hash)
+
+    monkeypatch.setattr(auth_password, "get_auth_service", lambda: auth)
+    monkeypatch.setattr(auth_password, "_get_user_password_hash", AsyncMock(return_value=stored_hash))
+    monkeypatch.setattr(auth_password, "_set_user_password_hash", fake_set_password_hash)
+    monkeypatch.setattr(auth_password, "_get_client_ip", lambda request: "127.0.0.1")
+    monkeypatch.setattr(auth_password, "_is_secure_request", lambda request: True)
+    monkeypatch.setattr(auth_password, "is_password_login_enabled", lambda: True)
+
+    response = Response()
+    result = await auth_password.login(
+        _request(),
+        response,
+        auth_password.LoginRequest(email="cat-scan@rtb.cat", password=long_password),
+    )
+
+    assert result.status == "success"
+    assert upgraded_hashes
+    valid, needs_upgrade = auth_password.verify_password(long_password, upgraded_hashes[0])
+    assert valid is True
+    assert needs_upgrade is False
+    auth.update_last_login.assert_awaited_once_with(user.id)
+    auth.create_session.assert_awaited_once()
+    assert "rtbcat_session=" in response.headers["set-cookie"]
+
+
+@pytest.mark.asyncio
 async def test_login_rejects_invalid_legacy_hash_without_500(monkeypatch: pytest.MonkeyPatch):
     auth = MagicMock()
     user = User(id="user-1", email="cat-scan@rtb.cat", role="sudo", is_active=True)
