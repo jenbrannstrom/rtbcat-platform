@@ -4,6 +4,22 @@ from api.analysis.language_analyzer import LanguageAnalyzer
 
 
 class TestLanguageAnalyzerProviders:
+    def test_detect_language_with_gemini(self, monkeypatch):
+        analyzer = LanguageAnalyzer(provider="gemini", api_key="test-gemini-key")
+
+        monkeypatch.setattr(
+            "api.analysis.language_analyzer.generate_gemini_content",
+            lambda *args, **kwargs: (
+                '{"language":"English","language_code":"en","confidence":0.97}'
+            ),
+        )
+
+        result = analyzer.detect_language("Buy now")
+        assert result.success
+        assert result.language == "English"
+        assert result.language_code == "en"
+        assert result.source == "gemini"
+
     def test_detect_language_with_claude(self, monkeypatch):
         analyzer = LanguageAnalyzer(provider="claude", api_key="test-claude-key")
 
@@ -66,4 +82,3 @@ class TestLanguageAnalyzerProviders:
         assert not result.success
         assert "text content" in (result.error or "").lower()
         assert result.source == "claude"
-
