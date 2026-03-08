@@ -198,7 +198,7 @@ Current state:
 - language detection and geo-linguistic mismatch analysis are implemented in backend and UI
 - these features are optional
 - production deploys can disable them with feature flags
-- current provider wiring is still centered on Gemini-backed analysis, though a broader provider choice is the sensible next step
+- language analysis supports Gemini, Claude, and Grok, though real-world provider quality still needs operator validation
 
 ## Deployment modes
 

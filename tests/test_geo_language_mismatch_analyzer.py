@@ -1,4 +1,4 @@
-"""Tests for the GeminiGeoLinguisticAnalyzer."""
+"""Tests for provider-backed geo-linguistic analysis."""
 
 import json
 from unittest.mock import MagicMock, patch
@@ -6,15 +6,14 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from api.analysis.geo_language_mismatch_analyzer import (
-    GeminiGeoLinguisticAnalyzer,
-    GeoLinguisticAnalysisResult,
+    GeoLinguisticAnalyzer,
 )
 
 
 @pytest.fixture
 def analyzer():
     """Create analyzer with a fake API key."""
-    return GeminiGeoLinguisticAnalyzer(api_key="test-key")
+    return GeoLinguisticAnalyzer(api_key="test-key")
 
 
 class TestIsConfigured:
@@ -24,7 +23,7 @@ class TestIsConfigured:
     def test_not_configured_without_key(self):
         with patch("api.analysis.geo_language_mismatch_analyzer.get_secrets_manager") as mock_sm:
             mock_sm.return_value.get.return_value = None
-            a = GeminiGeoLinguisticAnalyzer(api_key=None)
+            a = GeoLinguisticAnalyzer(api_key=None)
             assert a.is_configured is False
 
 
@@ -124,7 +123,7 @@ class TestAnalyze:
     def test_not_configured(self):
         with patch("api.analysis.geo_language_mismatch_analyzer.get_secrets_manager") as mock_sm:
             mock_sm.return_value.get.return_value = None
-            a = GeminiGeoLinguisticAnalyzer(api_key=None)
+            a = GeoLinguisticAnalyzer(api_key=None)
             result = a.analyze(
                 serving_countries=["IN"],
                 text_content="test",
@@ -165,3 +164,85 @@ class TestAnalyze:
         assert result.success
         assert result.decision == "match"
         assert result.risk_score == 0.1
+
+    def test_successful_analysis_with_claude(self, monkeypatch):
+        analyzer = GeoLinguisticAnalyzer(provider="claude", api_key="test-claude-key")
+
+        def fake_post_json(url, headers, payload, timeout):
+            assert "anthropic.com" in url
+            assert headers["x-api-key"] == "test-claude-key"
+            assert payload["messages"]
+            assert timeout == 30.0
+            return {
+                "content": [
+                    {
+                        "type": "text",
+                        "text": json.dumps(
+                            {
+                                "primary_languages": ["German"],
+                                "secondary_languages": ["English"],
+                                "detected_currencies": ["EUR"],
+                                "findings": [
+                                    {
+                                        "category": "language_mismatch",
+                                        "severity": "high",
+                                        "description": "German text in India traffic",
+                                        "evidence": "Contains 'Jetzt kaufen'",
+                                    }
+                                ],
+                                "risk_score": 0.8,
+                                "decision": "mismatch",
+                                "confidence": 0.91,
+                            }
+                        ),
+                    }
+                ]
+            }
+
+        monkeypatch.setattr(analyzer, "_post_json", fake_post_json)
+        result = analyzer.analyze(
+            serving_countries=["IN"],
+            text_content="Jetzt kaufen",
+        )
+        assert result.success
+        assert result.decision == "mismatch"
+        assert result.primary_languages == ["German"]
+        assert result.detected_currencies == ["EUR"]
+
+    def test_successful_analysis_with_grok(self, monkeypatch):
+        analyzer = GeoLinguisticAnalyzer(provider="grok", api_key="test-grok-key")
+
+        def fake_post_json(url, headers, payload, timeout):
+            assert "x.ai" in url
+            assert headers["Authorization"] == "Bearer test-grok-key"
+            assert payload["messages"]
+            assert timeout == 30.0
+            return {
+                "choices": [
+                    {
+                        "message": {
+                            "content": json.dumps(
+                                {
+                                    "primary_languages": ["Arabic"],
+                                    "secondary_languages": [],
+                                    "detected_currencies": ["AED"],
+                                    "findings": [],
+                                    "risk_score": 0.15,
+                                    "decision": "match",
+                                    "confidence": 0.88,
+                                }
+                            )
+                        }
+                    }
+                ]
+            }
+
+        monkeypatch.setattr(analyzer, "_post_json", fake_post_json)
+        result = analyzer.analyze(
+            serving_countries=["AE"],
+            text_content="اشتري الآن",
+        )
+        assert result.success
+        assert result.decision == "match"
+        assert result.primary_languages == ["Arabic"]
+        assert result.detected_currencies == ["AED"]

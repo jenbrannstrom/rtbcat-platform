@@ -31,7 +31,7 @@ import type { ServiceAccount } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type { BuyerSeat } from "@/types/api";
 import { useTranslation } from "@/contexts/i18n-context";
-import { GeminiApiKeySection } from "./GeminiApiKeySection";
+import { LanguageAIProviderSection } from "./LanguageAIProviderSection";
 
 /**
  * API Connection tab for service account and buyer seat management.
@@ -683,8 +683,8 @@ export function ApiConnectionTab() {
         )}
       </div>
 
-      {/* Gemini API Key Section */}
-      <GeminiApiKeySection />
+      {/* Language AI provider configuration */}
+      <LanguageAIProviderSection />
     </div>
   );
 }

@@ -47,7 +47,7 @@ class GeoLinguisticService:
           2. Create run record
           3. Fetch creative + serving countries
           4. Collect evidence
-          5. Run Gemini analysis
+          5. Run provider-backed analysis
           6. Persist result + evidence refs
           7. Return response dict
         """
