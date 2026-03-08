@@ -91,7 +91,17 @@ fi
 # Write JSON artifact if requested
 # ---------------------------------------------------------------------------
 if [[ -n "$JSON_OUT" ]]; then
-  echo "$PROBE_JSON" > "$JSON_OUT"
+  json_dir="$(dirname "$JSON_OUT")"
+  json_name="$(basename "$JSON_OUT")"
+  tmp_json="$(mktemp "${json_dir}/${json_name}.tmp.XXXXXX" 2>/dev/null || true)"
+
+  if [[ -z "$tmp_json" ]]; then
+    tmp_json="$(mktemp "/var/tmp/${json_name}.tmp.XXXXXX")"
+  fi
+
+  printf '%s\n' "$PROBE_JSON" > "$tmp_json"
+  chmod 600 "$tmp_json"
+  mv -f "$tmp_json" "$JSON_OUT"
 fi
 
 # ---------------------------------------------------------------------------

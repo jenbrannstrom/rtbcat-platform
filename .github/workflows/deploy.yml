@@ -337,7 +337,7 @@ jobs:
               set +e
               sudo bash ${{ env.APP_DIR }}/scripts/verify_secrets_health.sh \
                 --container catscan-api \
-                --json-out /tmp/catscan_secrets_health.json \
+                --json-out /var/tmp/catscan_secrets_health.json \
                 \$([ '${SECRETS_HEALTH_STRICT}' = 'true' ] && echo '--strict')
               SECRETS_EXIT=\$?
               set -e
@@ -373,6 +373,8 @@ jobs:
           TIMESTAMP="$(date -u +%Y%m%dT%H%M%SZ)"
           ARTIFACT_NAME="contracts_${SHORT_SHA}_${{ steps.vm.outputs.name }}_${TIMESTAMP}.json"
           ARTIFACT_PATH="/tmp/${ARTIFACT_NAME}"
+          VM_ARTIFACT_PATH="/var/tmp/contracts_post_deploy.json"
+          CONTAINER_ARTIFACT_PATH="/tmp/contracts_post_deploy.json"
           echo "ARTIFACT_PATH=${ARTIFACT_PATH}" >> "$GITHUB_ENV"
           echo "ARTIFACT_NAME=${ARTIFACT_NAME}" >> "$GITHUB_ENV"
 
@@ -385,17 +387,28 @@ jobs:
             --quiet \
             --ssh-flag="-o StrictHostKeyChecking=no" \
             --command="
+              sudo rm -f ${VM_ARTIFACT_PATH}
+              set +e
               sudo docker exec catscan-api python /app/scripts/contracts_check.py \
                 --days 7 \
                 --db-dsn-env POSTGRES_DSN \
-                --json-out /tmp/contracts_post_deploy.json
+                --json-out ${CONTAINER_ARTIFACT_PATH}
+              CHECK_EXIT=\$?
+              sudo docker cp catscan-api:${CONTAINER_ARTIFACT_PATH} ${VM_ARTIFACT_PATH} >/dev/null 2>&1
+              COPY_EXIT=\$?
+              if [ \${COPY_EXIT} -eq 0 ]; then
+                sudo chmod 644 ${VM_ARTIFACT_PATH}
+              fi
+              echo contract_check_exit=\${CHECK_EXIT}
+              echo contract_artifact_copy_exit=\${COPY_EXIT}
+              exit \${CHECK_EXIT}
             "
           CHECK_EXIT=$?
           set -e
 
           # Copy JSON artifact from VM
           set +e
-          gcloud compute scp ${{ steps.vm.outputs.name }}:/tmp/contracts_post_deploy.json \
+          gcloud compute scp ${{ steps.vm.outputs.name }}:${VM_ARTIFACT_PATH} \
             "${ARTIFACT_PATH}" \
             --zone=${{ env.GCP_ZONE }} \
             --tunnel-through-iap \
