@@ -87,7 +87,7 @@ Zwraca SHA commita i tag obrazu. Porównaj z logiem commitów.
 
 ### [DevOps] Jak wdrożyć poprawkę?
 
-1. Wypchnij na `unified-platform`
+1. Wypchnij na `main`
 2. Poczekaj na sukces `build-and-push.yml`
 3. Uruchom `deploy.yml` przez `gh workflow run` z `confirm=DEPLOY`
 4. Zweryfikuj za pomocą `/api/health`

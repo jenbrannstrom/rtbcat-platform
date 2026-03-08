@@ -39,4 +39,4 @@ Cat-Scan uses two version identifiers on purpose:
 2. Update `CHANGELOG.md` with user-facing changes.
 3. Commit: `git commit -m "release: vX.Y.Z"`.
 4. Create annotated tag: `git tag -a vX.Y.Z -m "vX.Y.Z"`.
-5. Push branch and tag: `git push origin unified-platform && git push origin vX.Y.Z`.
+5. Push branch and tag: `git push origin main && git push origin vX.Y.Z`.

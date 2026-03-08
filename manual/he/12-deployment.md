@@ -5,7 +5,7 @@
 ## צינור CI/CD
 
 ```
-Push to unified-platform
+Push to main
          │
          ▼
 build-and-push.yml (automatic)
@@ -43,7 +43,7 @@ deploy.yml (workflow_dispatch)
 2. הפעילו את הפריסה:
    ```bash
    gh workflow run deploy.yml \
-     --ref unified-platform \
+     --ref main \
      -f target=production \
      -f confirm=DEPLOY \
      -f reason="your reason here"
@@ -85,7 +85,7 @@ deploy.yml (workflow_dispatch)
 לשחזור לגרסה קודמת, פרסו קומיט תקין קודם:
 
 1. זהו את ה-SHA האחרון התקין מלוג ה-git או מהרצות פריסה קודמות.
-2. עשו checkout ל-SHA הזה על unified-platform (או השתמשו ב-`--ref` עם הקומיט).
+2. עשו checkout ל-SHA הזה על main (או השתמשו ב-`--ref` עם הקומיט).
 3. הפעילו את תהליך הפריסה.
 
 אין מנגנון שחזור ייעודי. מדובר פשוט בפריסה של גרסה ישנה יותר.

@@ -5,7 +5,7 @@
 ## CI/CD-pipeline
 
 ```
-Push to unified-platform
+Push to main
          │
          ▼
 build-and-push.yml (automatic)
@@ -43,7 +43,7 @@ Images worden getagd met de verkorte git-SHA: `sha-XXXXXXX`. De deploy-stap gebr
 2. Trigger de deployment:
    ```bash
    gh workflow run deploy.yml \
-     --ref unified-platform \
+     --ref main \
      -f target=production \
      -f confirm=DEPLOY \
      -f reason="your reason here"
@@ -85,7 +85,7 @@ Deploy eerst naar staging, verifieer, en deploy dan naar productie.
 Om terug te draaien, deploy je een eerder bekende goede commit:
 
 1. Identificeer de laatste goede SHA vanuit het git-log of eerdere deploy-runs.
-2. Check die SHA uit op unified-platform (of gebruik `--ref` met de commit).
+2. Check die SHA uit op main (of gebruik `--ref` met de commit).
 3. Trigger de deploy-workflow.
 
 Er is geen apart rollback-mechanisme. Het is simpelweg het deployen van een oudere versie.

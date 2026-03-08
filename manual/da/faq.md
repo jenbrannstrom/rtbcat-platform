@@ -85,7 +85,7 @@ Dette returnerer git SHA og image-tag. Sammenlign med din commit-log.
 
 ### [DevOps] Hvordan deployer jeg en rettelse?
 
-1. Push til `unified-platform`
+1. Push til `main`
 2. Vent på at `build-and-push.yml` lykkes
 3. Udløs `deploy.yml` via `gh workflow run` med `confirm=DEPLOY`
 4. Verificér med `/api/health`

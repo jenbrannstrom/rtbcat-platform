@@ -5,7 +5,7 @@
 ## Potok CI/CD
 
 ```
-Push to unified-platform
+Push to main
          │
          ▼
 build-and-push.yml (automatic)
@@ -43,7 +43,7 @@ Obrazy są tagowane skróconym SHA commitu: `sha-XXXXXXX`. Krok wdrożeniowy uż
 2. Uruchom wdrożenie:
    ```bash
    gh workflow run deploy.yml \
-     --ref unified-platform \
+     --ref main \
      -f target=production \
      -f confirm=DEPLOY \
      -f reason="your reason here"
@@ -85,7 +85,7 @@ Najpierw wdróż na staging, zweryfikuj, a potem wdróż na produkcję.
 Aby wycofać zmiany, wdróż poprzedni sprawdzony commit:
 
 1. Zidentyfikuj ostatni poprawny SHA z historii gita lub poprzednich uruchomień wdrożenia.
-2. Przełącz się na ten SHA w gałęzi unified-platform (lub użyj `--ref` z commitem).
+2. Przełącz się na ten SHA w gałęzi main (lub użyj `--ref` z commitem).
 3. Uruchom workflow wdrożeniowy.
 
 Nie ma dedykowanego mechanizmu rollbacku. To po prostu wdrożenie starszej wersji.

@@ -92,7 +92,7 @@ commits.
 
 ### [DevOps] Comment déployer un correctif ?
 
-1. Poussez sur `unified-platform`
+1. Poussez sur `main`
 2. Attendez que `build-and-push.yml` réussisse
 3. Déclenchez `deploy.yml` via `gh workflow run` avec `confirm=DEPLOY`
 4. Vérifiez avec `/api/health`

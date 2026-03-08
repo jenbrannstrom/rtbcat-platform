@@ -75,7 +75,7 @@ curl -sS https://your-deployment.example.com/api/health | jq -r '.git_sha,.versi
 
 ### [运维] 如何部署修复？
 
-1. 推送到 `unified-platform`
+1. 推送到 `main`
 2. 等待 `build-and-push.yml` 成功
 3. 通过 `gh workflow run` 触发 `deploy.yml`，设置 `confirm=DEPLOY`
 4. 用 `/api/health` 验证

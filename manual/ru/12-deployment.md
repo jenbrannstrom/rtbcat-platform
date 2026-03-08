@@ -5,7 +5,7 @@
 ## CI/CD-конвейер
 
 ```
-Push to unified-platform
+Push to main
          │
          ▼
 build-and-push.yml (automatic)
@@ -43,7 +43,7 @@ deploy.yml (workflow_dispatch)
 2. Запустите развёртывание:
    ```bash
    gh workflow run deploy.yml \
-     --ref unified-platform \
+     --ref main \
      -f target=production \
      -f confirm=DEPLOY \
      -f reason="your reason here"
@@ -85,7 +85,7 @@ deploy.yml (workflow_dispatch)
 Чтобы выполнить откат, разверните предыдущий заведомо рабочий коммит:
 
 1. Определите последний рабочий SHA из git log или предыдущих запусков развёртывания.
-2. Переключитесь на этот SHA в ветке unified-platform (или используйте `--ref` с нужным коммитом).
+2. Переключитесь на этот SHA в ветке main (или используйте `--ref` с нужным коммитом).
 3. Запустите рабочий процесс развёртывания.
 
 Специального механизма отката нет — это просто развёртывание более старой версии.

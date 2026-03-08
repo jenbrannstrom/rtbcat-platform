@@ -79,7 +79,7 @@ Ejecuta la puerta estricta en CI. Se activa manualmente a través de workflow_di
 
 ```bash
 gh workflow run v1-runtime-health-strict.yml \
-  --ref unified-platform \
+  --ref main \
   -f api_base_url="https://your-deployment.example.com/api" \
   -f buyer_id="<BUYER_ID>" \
   -f canary_profile="balanced" \

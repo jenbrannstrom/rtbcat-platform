@@ -81,7 +81,7 @@ This returns the git SHA and image tag. Compare against your commit log.
 
 ### [DevOps] How do I deploy a fix?
 
-1. Push to `unified-platform`
+1. Push to `main`
 2. Wait for `build-and-push.yml` to succeed
 3. Trigger `deploy.yml` via `gh workflow run` with `confirm=DEPLOY`
 4. Verify with `/api/health`

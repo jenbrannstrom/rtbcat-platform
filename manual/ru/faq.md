@@ -84,7 +84,7 @@ curl -sS https://your-deployment.example.com/api/health | jq -r '.git_sha,.versi
 
 ### [DevOps] Как развернуть исправление?
 
-1. Запушьте в `unified-platform`
+1. Запушьте в `main`
 2. Дождитесь успешного завершения `build-and-push.yml`
 3. Запустите `deploy.yml` через `gh workflow run` с `confirm=DEPLOY`
 4. Проверьте через `/api/health`

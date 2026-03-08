@@ -5,7 +5,7 @@
 ## CI/CD-pipeline
 
 ```
-Push to unified-platform
+Push to main
          │
          ▼
 build-and-push.yml (automatic)
@@ -43,7 +43,7 @@ Images tagges med det korte git-SHA: `sha-XXXXXXX`. Udrulningstrinnet bruger `GI
 2. Aktivér udrulning:
    ```bash
    gh workflow run deploy.yml \
-     --ref unified-platform \
+     --ref main \
      -f target=production \
      -f confirm=DEPLOY \
      -f reason="your reason here"
@@ -85,7 +85,7 @@ Udrul til staging først, verificér, og udrul derefter til produktion.
 For at rulle tilbage udrulles et tidligere kendt-godt commit:
 
 1. Identificér det seneste gode SHA fra git-loggen eller tidligere udrulningskørsler.
-2. Checkout dette SHA på unified-platform (eller brug `--ref` med committet).
+2. Checkout dette SHA på main (eller brug `--ref` med committet).
 3. Aktivér udrulningsworkflowet.
 
 Der er ingen dedikeret tilbagerulningsmekanisme. Det er blot udrulning af en ældre version.

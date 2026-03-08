@@ -5,7 +5,7 @@
 ## CI/CD pipeline
 
 ```
-Push to unified-platform
+Push to main
          │
          ▼
 build-and-push.yml (automatic)
@@ -47,7 +47,7 @@ to a specific commit.
 2. Trigger deploy:
    ```bash
    gh workflow run deploy.yml \
-     --ref unified-platform \
+     --ref main \
      -f target=production \
      -f confirm=DEPLOY \
      -f reason="your reason here"
@@ -92,7 +92,7 @@ Deploy to staging first, verify, then deploy to production.
 To roll back, deploy a previous known-good commit:
 
 1. Identify the last good SHA from git log or previous deploy runs.
-2. Check out that SHA on unified-platform (or use `--ref` with the commit).
+2. Check out that SHA on main (or use `--ref` with the commit).
 3. Trigger the deploy workflow.
 
 There is no dedicated rollback mechanism. It's just deploying an older
