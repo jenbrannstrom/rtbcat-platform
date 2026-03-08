@@ -2,7 +2,8 @@
 set -euo pipefail
 
 BASE_URL="${CATSCAN_API_BASE_URL:-https://your-deployment.example.com/api}"
-CANARY_EMAIL="${CATSCAN_CANARY_EMAIL:-${CATSCAN_CANARY_BEARER_TOKEN:-}}"
+CANARY_EMAIL="${CATSCAN_CANARY_EMAIL:-}"
+API_TOKEN="${CATSCAN_API_TOKEN:-${CATSCAN_CANARY_BEARER_TOKEN:-}}"
 TIMEOUT_SECONDS="${CATSCAN_CANARY_TIMEOUT_SECONDS:-60}"
 OUT_DIR="${CATSCAN_OUTPUT_DIR:-/tmp}"
 RUN_RETENTION=1
@@ -21,6 +22,7 @@ Runs conversion runtime guardrail checks in one command:
 
 Options:
   --base-url <url>         API base URL (default: https://your-deployment.example.com/api)
+  --token <token>          Authorization bearer token (default: CATSCAN_API_TOKEN/CATSCAN_CANARY_BEARER_TOKEN)
   --email <email>          X-Email identity (default: CATSCAN_CANARY_EMAIL/CATSCAN_CANARY_BEARER_TOKEN)
   --timeout <seconds>      Curl timeout per request (default: 60)
   --out-dir <dir>          Output root (default: /tmp)
@@ -40,6 +42,10 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --base-url)
       BASE_URL="${2:-}"
+      shift 2
+      ;;
+    --token)
+      API_TOKEN="${2:-}"
       shift 2
       ;;
     --email)
@@ -74,8 +80,8 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ -z "$CANARY_EMAIL" ]]; then
-  echo "Set CATSCAN_CANARY_EMAIL (or CATSCAN_CANARY_BEARER_TOKEN), or pass --email." >&2
+if [[ -z "$CANARY_EMAIL" && -z "$API_TOKEN" ]]; then
+  echo "Set CATSCAN_API_TOKEN/CATSCAN_CANARY_BEARER_TOKEN or CATSCAN_CANARY_EMAIL, or pass --token/--email." >&2
   exit 2
 fi
 if ! [[ "$TIMEOUT_SECONDS" =~ ^[0-9]+$ ]] || (( TIMEOUT_SECONDS < 5 || TIMEOUT_SECONDS > 600 )); then
@@ -96,6 +102,16 @@ STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 RUN_DIR="${OUT_DIR%/}/conversion-runtime-guardrails-${STAMP}"
 mkdir -p "$RUN_DIR"
 
+declare -a AUTH_HEADERS=()
+if [[ -n "$API_TOKEN" ]]; then
+  AUTH_HEADERS=(-H "Authorization: Bearer ${API_TOKEN}")
+elif [[ -n "$CANARY_EMAIL" ]]; then
+  AUTH_HEADERS=(-H "X-Email: ${CANARY_EMAIL}")
+else
+  echo "Provide --token or --email." >&2
+  exit 2
+fi
+
 api_request() {
   local method="$1"
   local path="$2"
@@ -111,7 +127,7 @@ api_request() {
 
   set +e
   curl -sS -m "$TIMEOUT_SECONDS" \
-    -H "X-Email: ${CANARY_EMAIL}" \
+    "${AUTH_HEADERS[@]}" \
     "${data_args[@]}" \
     -o "$body_file" \
     -w "%{http_code}\n" \
@@ -145,7 +161,11 @@ fail=0
 
 printf 'Run dir: %s\n' "$RUN_DIR"
 printf 'Base URL: %s\n' "$BASE_URL"
-printf 'X-Email: %s\n\n' "$CANARY_EMAIL"
+if [[ -n "$API_TOKEN" ]]; then
+  printf 'Auth: bearer token\n\n'
+else
+  printf 'X-Email: %s\n\n' "$CANARY_EMAIL"
+fi
 
 echo "[1/4] Checking conversion webhook security posture..."
 api_request "GET" "/conversions/security/status" "$security_body" "$security_code"
