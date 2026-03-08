@@ -318,7 +318,7 @@ jobs:
           fi
 
       - name: Upload contract check artifact
-        if: ${{ always() && github.event.inputs.run_contract_check != 'false' }}
+        if: ${{ always() && github.event.inputs.run_contract_check != 'false' && env.ARTIFACT_PATH != '' }}
         uses: actions/upload-artifact@v4
         with:
           name: contracts-${{ steps.vm.outputs.name }}-${{ github.sha }}
