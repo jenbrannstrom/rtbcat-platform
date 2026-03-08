@@ -29,6 +29,6 @@ GCP hardening), see [docs/SECURITY.md](docs/SECURITY.md).
 
 ## Supported Versions
 
-Only the latest release on the `unified-platform` branch receives security
+Only the latest release on the `main` branch receives security
 updates. If you are running an older checkout, pull the latest before
 reporting.

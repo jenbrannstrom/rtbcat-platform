@@ -116,7 +116,7 @@ git commit -m "release: v1.0.0"
 git tag -a v1.0.0 -m "v1.0.0"
 
 # 5. Push branch, then push tag (tag triggers build-and-push workflow)
-git push origin unified-platform
+git push origin main
 git push origin v1.0.0
 
 # 6. Confirm release tag ordering

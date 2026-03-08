@@ -5,7 +5,7 @@
 ## CI/CD 流水线
 
 ```
-推送到 unified-platform
+推送到 main
          │
          ▼
 build-and-push.yml（自动）
@@ -45,7 +45,7 @@ deploy.yml（workflow_dispatch）
 2. 触发部署：
    ```bash
    gh workflow run deploy.yml \
-     --ref unified-platform \
+     --ref main \
      -f target=production \
      -f confirm=DEPLOY \
      -f reason="你的原因"
@@ -89,7 +89,7 @@ deploy.yml（workflow_dispatch）
 回滚方式是部署之前已知正常的提交：
 
 1. 从 git 日志或之前的部署运行中找到最后正常的 SHA。
-2. 在 unified-platform 上检出该 SHA（或使用 `--ref` 指定提交）。
+2. 在 main 上检出该 SHA（或使用 `--ref` 指定提交）。
 3. 触发部署工作流。
 
 没有专门的回滚机制，就是部署旧版本。

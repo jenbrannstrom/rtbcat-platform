@@ -4,7 +4,7 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 OUT_REPO="${1:-/tmp/rtbcat-public-snapshot.git}"
 SOURCE_REF="${2:-HEAD}"
-PUBLIC_BRANCH="${PUBLIC_BRANCH:-unified-platform}"
+PUBLIC_BRANCH="${PUBLIC_BRANCH:-main}"
 PUBLIC_TAG="${PUBLIC_TAG:-}"
 COMMIT_MESSAGE="${PUBLIC_COMMIT_MESSAGE:-Public OSS snapshot}"
 AUTHOR_NAME="${PUBLIC_AUTHOR_NAME:-Cat-Scan OSS}"

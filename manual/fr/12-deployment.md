@@ -5,7 +5,7 @@
 ## Pipeline CI/CD
 
 ```
-Push to unified-platform
+Push to main
          │
          ▼
 build-and-push.yml (automatic)
@@ -48,7 +48,7 @@ déployée correspond toujours à un commit précis.
 2. Déclencher le déploiement :
    ```bash
    gh workflow run deploy.yml \
-     --ref unified-platform \
+     --ref main \
      -f target=production \
      -f confirm=DEPLOY \
      -f reason="your reason here"
@@ -98,7 +98,7 @@ est connu :
 
 1. Identifiez le dernier SHA fonctionnel à partir du journal git ou des
    exécutions de déploiement précédentes.
-2. Positionnez-vous sur ce SHA sur unified-platform (ou utilisez `--ref` avec
+2. Positionnez-vous sur ce SHA sur main (ou utilisez `--ref` avec
    le commit).
 3. Déclenchez le workflow de déploiement.
 

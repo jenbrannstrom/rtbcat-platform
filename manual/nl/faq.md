@@ -85,7 +85,7 @@ Dit retourneert de git SHA en de image-tag. Vergelijk met uw commitlog.
 
 ### [DevOps] Hoe rol ik een fix uit?
 
-1. Push naar `unified-platform`
+1. Push naar `main`
 2. Wacht tot `build-and-push.yml` slaagt
 3. Trigger `deploy.yml` via `gh workflow run` met `confirm=DEPLOY`
 4. Verifieer met `/api/health`

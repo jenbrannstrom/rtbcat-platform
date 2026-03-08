@@ -5,7 +5,7 @@
 ## خط أنابيب CI/CD
 
 ```
-Push to unified-platform
+Push to main
          │
          ▼
 build-and-push.yml (automatic)
@@ -43,7 +43,7 @@ deploy.yml (workflow_dispatch)
 2. أطلق عملية النشر:
    ```bash
    gh workflow run deploy.yml \
-     --ref unified-platform \
+     --ref main \
      -f target=production \
      -f confirm=DEPLOY \
      -f reason="your reason here"
@@ -85,7 +85,7 @@ deploy.yml (workflow_dispatch)
 للتراجع، انشر عملية إيداع سابقة معروفة بأنها تعمل بشكل صحيح:
 
 1. حدد آخر معرّف SHA صالح من سجل git أو عمليات النشر السابقة.
-2. انتقل إلى ذلك المعرّف على فرع unified-platform (أو استخدم `--ref` مع عملية الإيداع).
+2. انتقل إلى ذلك المعرّف على فرع main (أو استخدم `--ref` مع عملية الإيداع).
 3. أطلق سير عمل النشر.
 
 لا توجد آلية تراجع مخصصة. إنما هو مجرد نشر لإصدار أقدم.

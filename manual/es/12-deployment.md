@@ -5,7 +5,7 @@
 ## Pipeline de CI/CD
 
 ```
-Push to unified-platform
+Push to main
          │
          ▼
 build-and-push.yml (automatic)
@@ -43,7 +43,7 @@ Las imágenes se etiquetan con el SHA corto de git: `sha-XXXXXXX`. El paso de de
 2. Activar el despliegue:
    ```bash
    gh workflow run deploy.yml \
-     --ref unified-platform \
+     --ref main \
      -f target=production \
      -f confirm=DEPLOY \
      -f reason="your reason here"
@@ -85,7 +85,7 @@ Despliegue primero en staging, verifique y luego despliegue en producción.
 Para revertir, despliegue un commit anterior conocido como estable:
 
 1. Identifique el último SHA correcto desde el historial de git o ejecuciones previas de despliegue.
-2. Haga checkout de ese SHA en unified-platform (o use `--ref` con el commit).
+2. Haga checkout de ese SHA en main (o use `--ref` con el commit).
 3. Active el flujo de despliegue.
 
 No existe un mecanismo de rollback dedicado. Simplemente se despliega una versión anterior.

@@ -5,7 +5,7 @@
 ## CI/CD конвеєр
 
 ```
-Push to unified-platform
+Push to main
          │
          ▼
 build-and-push.yml (automatic)
@@ -43,7 +43,7 @@ deploy.yml (workflow_dispatch)
 2. Запустіть розгортання:
    ```bash
    gh workflow run deploy.yml \
-     --ref unified-platform \
+     --ref main \
      -f target=production \
      -f confirm=DEPLOY \
      -f reason="your reason here"
@@ -85,7 +85,7 @@ deploy.yml (workflow_dispatch)
 Для відкату розгорніть попередній стабільний коміт:
 
 1. Визначте останній стабільний SHA з git log або попередніх запусків розгортання.
-2. Переключіться на цей SHA у гілці unified-platform (або використайте `--ref` із зазначенням коміту).
+2. Переключіться на цей SHA у гілці main (або використайте `--ref` із зазначенням коміту).
 3. Запустіть робочий процес розгортання.
 
 Окремого механізму відкату не існує. Це просто розгортання старішої версії.

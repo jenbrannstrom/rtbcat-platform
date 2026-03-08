@@ -6,7 +6,7 @@ from scripts.render_v1_closeout_summary import build_summary_markdown, main
 
 def test_build_summary_markdown_with_payload():
     payload = {
-        "branch": "unified-platform",
+        "branch": "main",
         "commit": "abc1234",
         "profile": "quick",
         "timestamp_utc": "2026-03-01 00:00:00 UTC",
@@ -18,7 +18,7 @@ def test_build_summary_markdown_with_payload():
     markdown = build_summary_markdown("V1 Closeout Quick Report", payload, Path("/tmp/unused.json"))
 
     assert "## V1 Closeout Quick Report" in markdown
-    assert "- branch: `unified-platform`" in markdown
+    assert "- branch: `main`" in markdown
     assert "| Phase 0 regression | PASS | command succeeded |" in markdown
     assert "| Deployed canary | BLOCKED | network \\| policy |" in markdown
 
@@ -35,7 +35,7 @@ def test_main_writes_summary_from_report_json(monkeypatch, tmp_path: Path):
     report_path.write_text(
         json.dumps(
             {
-                "branch": "unified-platform",
+                "branch": "main",
                 "commit": "def5678",
                 "profile": "deployed_only",
                 "timestamp_utc": "2026-03-01 00:00:00 UTC",

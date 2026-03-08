@@ -81,7 +81,7 @@ curl -sS https://your-deployment.example.com/api/health | jq -r '.git_sha,.versi
 
 ### [DevOps] כיצד אפרוס תיקון?
 
-1. דחפו ל-`unified-platform`
+1. דחפו ל-`main`
 2. המתינו שה-`build-and-push.yml` יסתיים בהצלחה
 3. הפעילו את `deploy.yml` דרך `gh workflow run` עם `confirm=DEPLOY`
 4. אמתו עם `/api/health`
