@@ -406,19 +406,26 @@ jobs:
           CHECK_EXIT=$?
           set -e
 
-          # Copy JSON artifact from VM
+          # Copy JSON artifact from VM via SSH cat. This is more reliable than
+          # gcloud compute scp over IAP in this environment.
           set +e
-          gcloud compute scp ${{ steps.vm.outputs.name }}:${VM_ARTIFACT_PATH} \
-            "${ARTIFACT_PATH}" \
+          gcloud compute ssh ${{ steps.vm.outputs.name }} \
             --zone=${{ env.GCP_ZONE }} \
             --tunnel-through-iap \
             --quiet \
-            --ssh-flag="-o StrictHostKeyChecking=no" 2>/dev/null
+            --ssh-flag="-o StrictHostKeyChecking=no" \
+            --command="sudo cat ${VM_ARTIFACT_PATH}" > "${ARTIFACT_PATH}" 2>/dev/null
           SCP_EXIT=$?
           set -e
 
+          if [ "$SCP_EXIT" -eq 0 ] && [ -f "${ARTIFACT_PATH}" ]; then
+            if ! python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "${ARTIFACT_PATH}" >/dev/null 2>&1; then
+              SCP_EXIT=2
+            fi
+          fi
+
           if [ "$SCP_EXIT" -ne 0 ] || [ ! -f "${ARTIFACT_PATH}" ]; then
-            echo "::warning::SCP copy failed (exit ${SCP_EXIT}). Writing fallback artifact."
+            echo "::warning::Contract artifact fetch failed (exit ${SCP_EXIT}). Writing fallback artifact."
             cat > "${ARTIFACT_PATH}" <<FALLBACK
           {
             "timestamp": "${TIMESTAMP}",
