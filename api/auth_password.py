@@ -12,6 +12,8 @@ import uuid
 import logging
 import threading
 import time
+import hashlib
+import hmac
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Request, Response
@@ -34,6 +36,7 @@ router = APIRouter(prefix="/auth", tags=["Password Authentication"])
 
 try:
     from passlib.context import CryptContext
+    from passlib.exc import UnknownHashError
 except ImportError:
     raise RuntimeError(
         "passlib is required for secure password hashing. Install dependency: passlib[bcrypt]."
@@ -48,9 +51,35 @@ def hash_password(password: str) -> str:
     return pwd_context.hash(password)
 
 
-def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Verify a password against a hash."""
-    return pwd_context.verify(plain_password, hashed_password)
+def _looks_like_legacy_pbkdf2_hash(hashed_password: str) -> bool:
+    parts = hashed_password.split(":")
+    if len(parts) != 2:
+        return False
+    salt_hex, digest_hex = parts
+    return len(salt_hex) == 64 and len(digest_hex) == 64
+
+
+def _verify_legacy_password(plain_password: str, hashed_password: str) -> bool:
+    """Verify the pre-bcrypt PBKDF2 format used before passlib was available."""
+    if not _looks_like_legacy_pbkdf2_hash(hashed_password):
+        return False
+    try:
+        salt_hex, digest_hex = hashed_password.split(":")
+        salt = bytes.fromhex(salt_hex)
+        expected = hashlib.pbkdf2_hmac("sha256", plain_password.encode(), salt, 100000).hex()
+        return hmac.compare_digest(expected, digest_hex)
+    except (ValueError, TypeError):
+        return False
+
+
+def verify_password(plain_password: str, hashed_password: str) -> tuple[bool, bool]:
+    """Verify a password and report whether the stored hash should be upgraded."""
+    try:
+        return pwd_context.verify(plain_password, hashed_password), False
+    except UnknownHashError:
+        if _verify_legacy_password(plain_password, hashed_password):
+            return True, True
+        return False, False
 
 
 # ==================== Request/Response Models ====================
@@ -216,7 +245,8 @@ async def login(request: Request, response: Response, login_data: LoginRequest):
         )
 
     # Verify password
-    if not verify_password(login_data.password, password_hash):
+    password_valid, needs_upgrade = verify_password(login_data.password, password_hash)
+    if not password_valid:
         _record_login_failure(email, client_ip)
         # Log failed attempt
         await auth_svc.log_audit(
@@ -232,6 +262,10 @@ async def login(request: Request, response: Response, login_data: LoginRequest):
     # Check if user is active
     if not user.is_active:
         raise HTTPException(status_code=403, detail="Account is deactivated")
+
+    if needs_upgrade:
+        await _set_user_password_hash(user.id, hash_password(login_data.password))
+        logger.info("Upgraded legacy password hash for %s during login", email)
 
     _clear_login_failures(email, client_ip)
 
