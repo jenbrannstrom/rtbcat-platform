@@ -1,7 +1,7 @@
 """Tests for provider-backed geo-linguistic analysis."""
 
 import json
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -140,23 +140,21 @@ class TestAnalyze:
         )
         assert result.error == "No content to analyze"
 
-    @patch("google.generativeai.GenerativeModel")
-    @patch("google.generativeai.configure")
-    def test_successful_analysis(self, mock_configure, mock_model_cls, analyzer):
-        mock_model = MagicMock()
-        mock_response = MagicMock()
-        mock_response.text = json.dumps({
-            "primary_languages": ["English"],
-            "secondary_languages": [],
-            "detected_currencies": ["$"],
-            "findings": [],
-            "risk_score": 0.1,
-            "decision": "match",
-            "confidence": 0.95,
-        })
-        mock_model.generate_content.return_value = mock_response
-        analyzer._model = mock_model
-
+    def test_successful_analysis(self, monkeypatch, analyzer):
+        monkeypatch.setattr(
+            "api.analysis.geo_language_mismatch_analyzer.generate_gemini_content",
+            lambda *args, **kwargs: json.dumps(
+                {
+                    "primary_languages": ["English"],
+                    "secondary_languages": [],
+                    "detected_currencies": ["$"],
+                    "findings": [],
+                    "risk_score": 0.1,
+                    "decision": "match",
+                    "confidence": 0.95,
+                }
+            ),
+        )
         result = analyzer.analyze(
             serving_countries=["US"],
             text_content="Buy shoes now, only $49.99",

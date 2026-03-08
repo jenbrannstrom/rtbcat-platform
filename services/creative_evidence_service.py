@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Optional
 from xml.etree import ElementTree
 
+from services.gemini_client import generate_gemini_content
 from services.url_safety import is_safe_public_http_url
 
 logger = logging.getLogger(__name__)
@@ -405,22 +406,18 @@ class CreativeEvidenceService:
 
     @staticmethod
     def _ocr_with_gemini(image_path: str, api_key: str) -> str:
-        import google.generativeai as genai
-        import PIL.Image
-
-        genai.configure(api_key=api_key)
-        model = genai.GenerativeModel("gemini-1.5-flash")
-        img = PIL.Image.open(image_path)
-        response = model.generate_content(
-            [
+        return generate_gemini_content(
+            (
                 "Extract ALL visible text from this image. "
                 "Return only the extracted text, nothing else. "
-                "If there is no text, return EMPTY.",
-                img,
-            ],
-            generation_config={"temperature": 0.1, "max_output_tokens": 500},
+                "If there is no text, return EMPTY."
+            ),
+            api_key,
+            image_paths=[image_path],
+            temperature=0.1,
+            max_output_tokens=500,
+            timeout=20.0,
         )
-        return str(getattr(response, "text", "")).strip()
 
     def _ocr_with_claude(self, image_path: str, api_key: str) -> str:
         encoded = self._load_image_base64(image_path)

@@ -17,6 +17,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
+from services.gemini_client import generate_gemini_content
 from services.language_ai_config import normalize_language_ai_provider
 from services.secrets_manager import get_secrets_manager
 
@@ -90,25 +91,10 @@ class GeoLinguisticAnalyzer:
                 self.api_key = get_secrets_manager().get("ANTHROPIC_API_KEY")
             else:
                 self.api_key = get_secrets_manager().get("XAI_API_KEY")
-        self._model = None
 
     @property
     def is_configured(self) -> bool:
         return bool(self.api_key)
-
-    @property
-    def model(self):
-        """Lazy-load Gemini model."""
-        if self.provider != "gemini":
-            raise ValueError(f"{self.provider} does not use local Gemini SDK model")
-        if self._model is None:
-            if not self.api_key:
-                raise ValueError("GEMINI_API_KEY not configured")
-            import google.generativeai as genai
-
-            genai.configure(api_key=self.api_key)
-            self._model = genai.GenerativeModel("gemini-1.5-flash")
-        return self._model
 
     def analyze(
         self,
@@ -167,29 +153,14 @@ class GeoLinguisticAnalyzer:
         image_paths: list[str] | None,
         timeout: float,
     ) -> str:
-        content_parts: list = [prompt]
-        if image_paths:
-            try:
-                import PIL.Image
-
-                for path in image_paths[:4]:
-                    try:
-                        img = PIL.Image.open(path)
-                        content_parts.append(img)
-                    except Exception as exc:
-                        logger.debug("Skipping image %s: %s", path, exc)
-            except ImportError:
-                logger.debug("PIL not available, skipping image analysis")
-
-        response = self.model.generate_content(
-            content_parts,
-            generation_config={
-                "temperature": 0.1,
-                "max_output_tokens": 1500,
-            },
-            request_options={"timeout": timeout},
+        return generate_gemini_content(
+            prompt,
+            self.api_key or "",
+            image_paths=(image_paths or [])[:4],
+            temperature=0.1,
+            max_output_tokens=1500,
+            timeout=timeout,
         )
-        return str(getattr(response, "text", "")).strip()
 
     def _analyze_with_claude(
         self,
@@ -445,4 +416,3 @@ Return ONLY valid JSON (no markdown, no explanation) in this exact format:
 
 # Backward-compatible alias used by existing callers/tests.
 GeminiGeoLinguisticAnalyzer = GeoLinguisticAnalyzer
-

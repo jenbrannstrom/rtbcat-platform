@@ -14,6 +14,7 @@ import urllib.request
 from dataclasses import dataclass
 from typing import Optional
 
+from services.gemini_client import generate_gemini_content
 from services.language_ai_config import (
     get_provider_env_key,
     normalize_language_ai_provider,
@@ -65,32 +66,11 @@ class LanguageAnalyzer:
     ) -> None:
         self.provider = normalize_language_ai_provider(provider)
         self.api_key = api_key or get_provider_api_key_sync(self.provider, db_path)
-        self._model = None
 
     @property
     def is_configured(self) -> bool:
         """Check if API key is configured."""
         return bool(self.api_key)
-
-    @property
-    def model(self):
-        """Lazy-load Gemini model."""
-        if self.provider != "gemini":
-            raise ValueError(f"{self.provider} does not use local Gemini SDK model")
-        if self._model is None:
-            if not self.api_key:
-                raise ValueError("GEMINI_API_KEY not configured")
-            try:
-                import google.generativeai as genai
-
-                genai.configure(api_key=self.api_key)
-                self._model = genai.GenerativeModel("gemini-1.5-flash")
-            except ImportError as exc:
-                raise ImportError(
-                    "google-generativeai package not installed. "
-                    "Run: pip install -r requirements-ai.txt"
-                ) from exc
-        return self._model
 
     def extract_text_from_creative(
         self,
@@ -215,7 +195,7 @@ class LanguageAnalyzer:
 
         try:
             if self.provider == "gemini":
-                return self._detect_with_gemini(prompt)
+                return self._detect_with_gemini(prompt, timeout=timeout)
             if self.provider == "claude":
                 return self._detect_with_claude(prompt, timeout=timeout)
             if self.provider == "grok":
@@ -253,15 +233,19 @@ Rules:
 - If you cannot determine the language, respond with: {{"language": null, "language_code": null, "confidence": 0.0}}
 """
 
-    def _detect_with_gemini(self, prompt: str) -> LanguageDetectionResult:
-        response = self.model.generate_content(
+    def _detect_with_gemini(
+        self,
+        prompt: str,
+        timeout: float,
+    ) -> LanguageDetectionResult:
+        response_text = generate_gemini_content(
             prompt,
-            generation_config={
-                "temperature": 0.1,
-                "max_output_tokens": 100,
-            },
+            self.api_key or "",
+            temperature=0.1,
+            max_output_tokens=100,
+            timeout=timeout,
         )
-        return self._parse_response(getattr(response, "text", "").strip())
+        return self._parse_response(response_text)
 
     def _detect_with_claude(
         self,

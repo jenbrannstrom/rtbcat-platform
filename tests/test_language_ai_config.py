@@ -75,13 +75,13 @@ async def test_get_provider_api_key_prefers_store(monkeypatch):
     monkeypatch.setattr(
         language_ai_config,
         "get_secrets_manager",
-        lambda: StubSecretsManager({"ANTHROPIC_API_KEY": "env-claude-key"}),
+        lambda: StubSecretsManager({"ANTHROPIC_API_KEY": "demo-claude-env-key"}),
     )
-    store = StubStore({"claude_api_key": "db-claude-key"})
+    store = StubStore({"claude_api_key": "demo-claude-db-key"})
 
     api_key = await language_ai_config.get_provider_api_key(store, "claude")
 
-    assert api_key == "db-claude-key"
+    assert api_key == "demo-claude-db-key"
 
 
 @pytest.mark.asyncio
@@ -89,12 +89,12 @@ async def test_get_provider_api_key_falls_back_to_secrets_manager(monkeypatch):
     monkeypatch.setattr(
         language_ai_config,
         "get_secrets_manager",
-        lambda: StubSecretsManager({"XAI_API_KEY": "env-grok-key"}),
+        lambda: StubSecretsManager({"XAI_API_KEY": "demo-grok-env-key"}),
     )
 
     api_key = await language_ai_config.get_provider_api_key(StubStore(), "grok")
 
-    assert api_key == "env-grok-key"
+    assert api_key == "demo-grok-env-key"
 
 
 @pytest.mark.asyncio
@@ -104,12 +104,12 @@ async def test_get_all_provider_key_statuses_reports_each_provider(monkeypatch):
         "get_secrets_manager",
         lambda: StubSecretsManager(
             {
-                "GEMINI_API_KEY": "gemini-secret-1234",
-                "XAI_API_KEY": "xai-secret-5678",
+                "GEMINI_API_KEY": "demo-gemini-env-key",
+                "XAI_API_KEY": "demo-grok-env-key",
             }
         ),
     )
-    store = StubStore({"claude_api_key": "claude-db-secret"})
+    store = StubStore({"claude_api_key": "demo-claude-db-key"})
 
     statuses = await language_ai_config.get_all_provider_key_statuses(store)
 
