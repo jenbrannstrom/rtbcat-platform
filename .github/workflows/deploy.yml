@@ -30,6 +30,10 @@ on:
         required: false
         type: boolean
         default: true
+      staging_verification_notes:
+        description: "For production promotion: brief note on what was verified on vm2."
+        required: false
+        default: ""
 
 # Prevent concurrent deployments to the same VM
 concurrency:
@@ -47,6 +51,8 @@ env:
   APP_DIR: ${{ vars.APP_DIR || '/opt/catscan' }}
   GIT_BRANCH: ${{ vars.GIT_BRANCH || 'main' }}
   IMAGE_REGISTRY: ${{ vars.IMAGE_REGISTRY }}
+  STAGING_API_BASE_URL: ${{ vars.STAGING_API_BASE_URL || 'https://vm2.scan.rtb.cat/api' }}
+  PRODUCTION_API_BASE_URL: ${{ vars.PRODUCTION_API_BASE_URL || 'https://scan.rtb.cat/api' }}
   ALLOW_CONTRACT_FAILURE: ${{ vars.ALLOW_CONTRACT_FAILURE || 'false' }}
   CATSCAN_ENABLE_GMAIL_IMPORT_SCHEDULER: ${{ vars.CATSCAN_ENABLE_GMAIL_IMPORT_SCHEDULER || 'true' }}
   CATSCAN_ENABLE_PRECOMPUTE_SCHEDULER: ${{ vars.CATSCAN_ENABLE_PRECOMPUTE_SCHEDULER || 'true' }}
@@ -89,6 +95,43 @@ jobs:
           echo "Manual deploy approved."
           echo "Target: ${{ github.event.inputs.target }} (${{ steps.vm.outputs.name }})"
           echo "Reason: ${{ github.event.inputs.reason }}"
+
+      - name: Require staging verification before production
+        if: ${{ github.event.inputs.target == 'production' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ -z "${{ github.event.inputs.staging_verification_notes }}" ]; then
+            echo "Production promotion requires staging verification notes."
+            echo "Re-run this workflow and fill in staging_verification_notes with what was tested on vm2."
+            exit 1
+          fi
+
+          EXPECTED_SHORT_SHA="${GITHUB_SHA::7}"
+          STAGING_HEALTH_URL="${{ env.STAGING_API_BASE_URL }}/health"
+
+          echo "Checking staging health at ${STAGING_HEALTH_URL}"
+          RESPONSE="$(curl -fsSL "${STAGING_HEALTH_URL}")"
+          echo "${RESPONSE}"
+
+          python3 -c '
+import json, sys
+payload = json.loads(sys.argv[1])
+expected = sys.argv[2].lower()
+status = str(payload.get("status") or "")
+version = str(payload.get("version") or "")
+git_sha = str(payload.get("git_sha") or "").lower()
+if status != "healthy":
+    raise SystemExit("Staging is not healthy")
+if not (version == f"sha-{expected}" or git_sha.startswith(expected)):
+    raise SystemExit(
+        f"Staging is running {version or git_sha or \"unknown\"}, expected sha-{expected}"
+    )
+' "${RESPONSE}" "${EXPECTED_SHORT_SHA}"
+
+          echo "Verified staging is healthy on sha-${EXPECTED_SHORT_SHA}"
+          echo "Verification notes: ${{ github.event.inputs.staging_verification_notes }}"
 
       - name: Checkout code
         uses: actions/checkout@v4
@@ -249,6 +292,17 @@ jobs:
 
               sudo docker ps
             "
+
+      - name: Emit promotion summary
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event.inputs.target }}" = "staging" ]; then
+            echo "Staging deploy complete on ${{ env.STAGING_API_BASE_URL }}."
+            echo "Next step: verify the change on vm2, then run this workflow again with target=production."
+          else
+            echo "Production promotion complete on ${{ env.PRODUCTION_API_BASE_URL }}."
+          fi
 
       - name: Post-deploy contract check
         if: ${{ github.event.inputs.run_contract_check != 'false' }}
