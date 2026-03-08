@@ -4,6 +4,7 @@ This module provides administrative endpoints for managing users,
 permissions, and viewing audit logs. All endpoints require sudo role.
 """
 
+from datetime import datetime
 from typing import Any, Optional, List
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -117,7 +118,7 @@ class AuditLogResponse(BaseModel):
     resource_id: Optional[str]
     details: Optional[str]
     ip_address: Optional[str]
-    created_at: Optional[str]
+    created_at: Optional[datetime]
 
 
 class SystemSettingResponse(BaseModel):

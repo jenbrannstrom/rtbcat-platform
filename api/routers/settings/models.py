@@ -86,7 +86,7 @@ class PretargetingHistoryResponse(BaseModel):
     field_changed: Optional[str] = None
     old_value: Optional[str] = None
     new_value: Optional[str] = None
-    changed_at: str
+    changed_at: datetime
     changed_by: Optional[str] = None
     change_source: str
     rollback_context: Optional[dict[str, Any]] = None

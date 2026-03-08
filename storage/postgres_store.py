@@ -1943,7 +1943,7 @@ class PostgresStore:
         config_data: Optional[dict] = None,
         performance_data: Optional[dict] = None,
         publisher_targeting_mode: Optional[str] = None,
-        publisher_targeting_values: Optional[str] = None,
+        publisher_targeting_values: Optional[list[str]] = None,
         notes: Optional[str] = None,
     ) -> int:
         """Create a pretargeting snapshot. Returns the new ID."""

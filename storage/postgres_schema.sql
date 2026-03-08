@@ -628,6 +628,8 @@ CREATE TABLE IF NOT EXISTS pretargeting_snapshots (
     included_geos JSONB,
     excluded_geos JSONB,
     state TEXT,
+    publisher_targeting_mode TEXT,
+    publisher_targeting_values JSONB,
     total_impressions BIGINT DEFAULT 0,
     total_clicks INTEGER DEFAULT 0,
     total_spend_usd REAL DEFAULT 0,

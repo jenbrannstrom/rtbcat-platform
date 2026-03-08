@@ -3,8 +3,8 @@
 import { useState, useRef, useEffect, type MouseEvent } from 'react';
 import Link from 'next/link';
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
-import { setPretargetingName, lookupGeoNames, suspendPretargeting, activatePretargeting, syncPretargetingConfigs, getPretargetingConfigDetail, createPendingChange, cancelPendingChange } from '@/lib/api';
-import { ChevronRight, Pencil, Check, X, AlertTriangle, AlertCircle, Pause, Play, Loader2, History } from 'lucide-react';
+import { setPretargetingName, lookupGeoNames, suspendPretargeting, activatePretargeting, syncPretargetingConfigs, getPretargetingConfigDetail, createPendingChange, cancelPendingChange, applyAllPendingChanges } from '@/lib/api';
+import { ChevronRight, Pencil, Check, X, AlertTriangle, AlertCircle, Pause, Play, Loader2, History, Upload } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { SnapshotComparisonPanel } from './snapshot-comparison-panel';
 import { useAccount } from '@/contexts/account-context';
@@ -162,6 +162,9 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState(config.name);
   const [showHistory, setShowHistory] = useState(false);
+  const [showConfirmSuspend, setShowConfirmSuspend] = useState(false);
+  const [showCommitToast, setShowCommitToast] = useState(false);
+  const [pushResult, setPushResult] = useState<{ success: boolean; message: string } | null>(null);
   const [changeError, setChangeError] = useState<string | null>(null);
   const [qpsInput, setQpsInput] = useState(
     config.maximum_qps === null || config.maximum_qps === undefined ? '' : String(config.maximum_qps)
@@ -191,17 +194,28 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
 
   const suspendMutation = useMutation({
     mutationFn: () => suspendPretargeting(config.billing_id),
-    onSuccess: async () => {
+    onSuccess: async (data) => {
+      setPushResult({ success: true, message: data.message });
       await syncPretargetingConfigs();
+      queryClient.invalidateQueries({ queryKey: ['pretargeting-detail', config.billing_id] });
       queryClient.invalidateQueries({ queryKey: ['pretargeting-configs'] });
+      setShowConfirmSuspend(false);
+    },
+    onError: (error: Error) => {
+      setPushResult({ success: false, message: error.message });
     },
   });
 
   const activateMutation = useMutation({
     mutationFn: () => activatePretargeting(config.billing_id),
-    onSuccess: async () => {
+    onSuccess: async (data) => {
+      setPushResult({ success: true, message: data.message });
       await syncPretargetingConfigs();
+      queryClient.invalidateQueries({ queryKey: ['pretargeting-detail', config.billing_id] });
       queryClient.invalidateQueries({ queryKey: ['pretargeting-configs'] });
+    },
+    onError: (error: Error) => {
+      setPushResult({ success: false, message: error.message });
     },
   });
 
@@ -222,6 +236,20 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['pretargeting-detail', config.billing_id] });
       queryClient.invalidateQueries({ queryKey: ['pretargeting-configs'] });
+    },
+  });
+
+  const applyAllMutation = useMutation({
+    mutationFn: () => applyAllPendingChanges(config.billing_id, false),
+    onSuccess: async (data) => {
+      setPushResult({ success: true, message: data.message });
+      setShowCommitToast(false);
+      await syncPretargetingConfigs();
+      queryClient.invalidateQueries({ queryKey: ['pretargeting-detail', config.billing_id] });
+      queryClient.invalidateQueries({ queryKey: ['pretargeting-configs'] });
+    },
+    onError: (error: Error) => {
+      setPushResult({ success: false, message: error.message });
     },
   });
 
@@ -291,6 +319,7 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
     : null;
   const persistedQpsLimit = configDetail?.maximum_qps ?? config.maximum_qps ?? null;
   const pendingChanges = configDetail?.pending_changes || [];
+  const hasPendingChanges = pendingChanges.length > 0;
   const activeMajorChangeType = resolveActiveMajorChangeType(pendingChanges);
 
   const canStageChange = (nextChangeType: string): boolean => {
@@ -396,6 +425,10 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
   };
 
   const formatMutationPending = createChangeMutation.isPending || cancelChangeMutation.isPending;
+  const openCommitToast = () => {
+    if (!hasPendingChanges) return;
+    setShowCommitToast(true);
+  };
 
   // Determine status indicator
   const isHighWaste = config.has_performance && config.waste_rate >= 70;
@@ -404,6 +437,7 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
 
   // Check if using display_name from Google (not user-defined)
   const stateMutationPending = suspendMutation.isPending || activateMutation.isPending;
+  const isPushing = applyAllMutation.isPending || stateMutationPending;
   const qpsMutationPending = createChangeMutation.isPending || cancelChangeMutation.isPending;
   const configDetailHref = toBuyerScopedPath(
     `/bill_id/${encodeURIComponent(config.billing_id)}`,
@@ -614,8 +648,101 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
 
       </div>
 
+      {pushResult && (
+        <div className={cn(
+          'px-4 py-2 border-t flex items-center justify-between',
+          pushResult.success ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'
+        )}>
+          <div className="flex items-center gap-2 text-sm">
+            {pushResult.success ? (
+              <Check className="h-4 w-4 text-green-600" />
+            ) : (
+              <AlertTriangle className="h-4 w-4 text-red-600" />
+            )}
+            <span className={pushResult.success ? 'text-green-800' : 'text-red-800'}>
+              {pushResult.message}
+            </span>
+          </div>
+          <button
+            onClick={() => setPushResult(null)}
+            className="text-gray-400 hover:text-gray-600"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+
       {changeError && (
         <div className="px-4 pb-2 text-xs text-red-600">{changeError}</div>
+      )}
+
+      {showConfirmSuspend && (
+        <div className="px-4 py-3 bg-yellow-50 border-t border-yellow-200">
+          <div className="flex items-start gap-2">
+            <AlertTriangle className="h-5 w-5 text-yellow-600 flex-shrink-0" />
+            <div className="flex-1">
+              <p className="text-sm font-medium text-yellow-900">
+                {t.pretargeting.suspendConfigConfirmTitle}
+              </p>
+              <p className="text-xs text-yellow-700 mt-1">
+                {t.pretargeting.suspendConfigConfirmDesc}
+              </p>
+              <div className="flex gap-2 mt-3">
+                <button
+                  onClick={() => suspendMutation.mutate()}
+                  disabled={suspendMutation.isPending}
+                  className="flex items-center gap-1 px-3 py-1.5 bg-yellow-600 text-white text-sm rounded hover:bg-yellow-700 disabled:opacity-50"
+                >
+                  {suspendMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Pause className="h-4 w-4" />
+                  )}
+                  {t.pretargeting.yesSuspend}
+                </button>
+                <button
+                  onClick={() => setShowConfirmSuspend(false)}
+                  disabled={suspendMutation.isPending}
+                  className="px-3 py-1.5 bg-white text-gray-700 text-sm rounded border hover:bg-gray-50 disabled:opacity-50"
+                >
+                  {t.common.cancel}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {hasPendingChanges && (
+        <div className="px-4 py-3 border-t bg-blue-50/60" onClick={(e) => e.stopPropagation()}>
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-medium text-blue-900">
+                {t.pretargeting.pendingChangesTitle.replace('{count}', String(pendingChanges.length))}
+              </p>
+              <p className="text-xs text-blue-700">
+                {t.pretargeting.clickPushToGoogleHint}
+              </p>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={() => pendingChanges.forEach((change) => cancelChangeMutation.mutate(change.id))}
+                disabled={cancelChangeMutation.isPending}
+                className="px-2 py-1 text-xs bg-white text-gray-600 rounded border hover:bg-gray-50 disabled:opacity-50"
+              >
+                {t.pretargeting.clearAll}
+              </button>
+              <button
+                onClick={openCommitToast}
+                disabled={isPushing}
+                className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+              >
+                <Upload className="h-3 w-3" />
+                {t.pretargeting.pushToGoogle}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Expanded content */}
@@ -653,7 +780,7 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
               {/* Pause/Activate */}
               {config.state === 'ACTIVE' ? (
                 <button
-                  onClick={() => suspendMutation.mutate()}
+                  onClick={() => setShowConfirmSuspend(true)}
                   disabled={stateMutationPending}
                   className="flex items-center gap-1 px-2 py-1 text-xs font-medium rounded bg-yellow-100 text-yellow-700 hover:bg-yellow-200 disabled:opacity-50"
                 >
@@ -695,6 +822,50 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
               />
             </div>
           )}
+        </div>
+      )}
+
+      {showCommitToast && hasPendingChanges && (
+        <div className="fixed bottom-4 right-4 z-50 w-full max-w-md rounded-lg border border-blue-200 bg-white shadow-xl">
+          <div className="border-b border-blue-100 bg-blue-50 px-3 py-2">
+            <p className="text-sm font-medium text-blue-900">
+              {t.pretargeting.pushPendingChangesToGoogleConfirm.replace('{count}', String(pendingChanges.length))}
+            </p>
+            <p className="mt-1 text-xs text-blue-700">{t.pretargeting.pushConfirmLiveChangeWarning}</p>
+          </div>
+          <div className="max-h-40 overflow-y-auto px-3 py-2">
+            {pendingChanges.map((change) => (
+              <div key={`toast-${change.id}`} className="text-xs text-gray-700">
+                • {change.change_type === 'set_maximum_qps'
+                  ? t.pretargeting.pendingChangeSetQpsLimit.replace('{value}', change.value)
+                  : change.change_type === 'add_format'
+                    ? t.pretargeting.pendingChangeEnableFormat.replace('{value}', change.value)
+                    : change.change_type === 'remove_format'
+                      ? t.pretargeting.pendingChangeDisableFormat.replace('{value}', change.value)
+                      : `${change.change_type}: ${change.value}`}
+              </div>
+            ))}
+          </div>
+          <div className="border-t border-gray-100 px-3 py-2 text-xs text-blue-700">
+            {t.pretargeting.pushConfirmSnapshotCreated}
+          </div>
+          <div className="flex items-center justify-end gap-2 px-3 py-2">
+            <button
+              onClick={() => setShowCommitToast(false)}
+              disabled={applyAllMutation.isPending}
+              className="rounded border px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            >
+              {t.common.cancel}
+            </button>
+            <button
+              onClick={() => applyAllMutation.mutate()}
+              disabled={applyAllMutation.isPending}
+              className="inline-flex items-center gap-1 rounded bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+            >
+              {applyAllMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+              {t.pretargeting.yesPushToGoogle}
+            </button>
+          </div>
         </div>
       )}
     </div>

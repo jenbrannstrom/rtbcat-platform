@@ -141,7 +141,7 @@ class SnapshotsService:
             config_data=config_data,
             performance_data=performance_data,
             publisher_targeting_mode=publisher_mode,
-            publisher_targeting_values=json.dumps(publisher_values) if publisher_values else None,
+            publisher_targeting_values=publisher_values or None,
             notes=notes,
         )
 
