@@ -25,6 +25,10 @@ on:
         description: "Max wait for API health after deploy (seconds)."
         required: false
         default: "120"
+      image_wait_seconds:
+        description: "Max wait for api/dashboard images to exist in Artifact Registry (seconds)."
+        required: false
+        default: "300"
       run_contract_check:
         description: "Run post-deploy contract check gate."
         required: false
@@ -151,6 +155,57 @@ jobs:
         uses: google-github-actions/setup-gcloud@v2
         with:
           project_id: ${{ env.GCP_PROJECT }}
+
+      - name: Wait for tagged images
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          SHORT_SHA="${GITHUB_SHA::7}"
+          IMAGE_TAG="sha-${SHORT_SHA}"
+          MAX_WAIT_SECONDS="${{ github.event.inputs.image_wait_seconds }}"
+          if ! [[ "$MAX_WAIT_SECONDS" =~ ^[0-9]+$ ]] || [ "$MAX_WAIT_SECONDS" -lt 30 ]; then
+            MAX_WAIT_SECONDS=300
+          fi
+          POLL_SECONDS=10
+          ATTEMPTS=$(( (MAX_WAIT_SECONDS + POLL_SECONDS - 1) / POLL_SECONDS ))
+
+          check_image() {
+            local image_ref="$1"
+            gcloud artifacts docker images describe "$image_ref" --project="${GCP_PROJECT}" >/dev/null 2>&1
+          }
+
+          API_IMAGE="${IMAGE_REGISTRY}/catscan-api:${IMAGE_TAG}"
+          DASHBOARD_IMAGE="${IMAGE_REGISTRY}/catscan-dashboard:${IMAGE_TAG}"
+
+          for i in $(seq 1 "${ATTEMPTS}"); do
+            api_ready=0
+            dashboard_ready=0
+            if check_image "${API_IMAGE}"; then
+              api_ready=1
+            fi
+            if check_image "${DASHBOARD_IMAGE}"; then
+              dashboard_ready=1
+            fi
+
+            if [ "${api_ready}" -eq 1 ] && [ "${dashboard_ready}" -eq 1 ]; then
+              echo "Images available:"
+              echo "  - ${API_IMAGE}"
+              echo "  - ${DASHBOARD_IMAGE}"
+              exit 0
+            fi
+
+            echo "Waiting for images (attempt ${i}/${ATTEMPTS})"
+            echo "  api ready: ${api_ready}"
+            echo "  dashboard ready: ${dashboard_ready}"
+            sleep "${POLL_SECONDS}"
+          done
+
+          echo "Timed out waiting for tagged images in Artifact Registry."
+          echo "Expected:"
+          echo "  - ${API_IMAGE}"
+          echo "  - ${DASHBOARD_IMAGE}"
+          exit 1
 
       - name: Deploy to VM via IAP tunnel
         run: |
