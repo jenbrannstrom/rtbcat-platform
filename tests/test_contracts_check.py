@@ -69,7 +69,14 @@ async def test_all_pass():
         "LEFT JOIN rtb_endpoints_current": [],  # no gaps
         "FROM rtb_endpoints": [{"cnt": 3}],
         # C-PRE-002: no gap
-        "FROM pretargeting_configs": [{"configured_active": 10, "observed_precompute": 10, "gap": 0}],
+        "FROM precompute_refresh_log": [
+            {
+                "configured_active": 10,
+                "observed_precompute": 10,
+                "gap": 0,
+                "pending_refresh": 0,
+            }
+        ],
         # C-PRE-003: buyer has pretarg data AND publisher data
         "FROM pretarg_daily WHERE buyer_account_id": [{"cnt": 50}],
         "FROM pretarg_publisher_daily": [{"cnt": 30}],
@@ -120,8 +127,13 @@ async def test_ept_001_gap_failure():
 async def test_pre_002_missing_config():
     """An ACTIVE config has no row in home_config_daily."""
     responses = {
-        "FROM pretargeting_configs": [
-            {"configured_active": 10, "observed_precompute": 8, "gap": 2}
+        "FROM precompute_refresh_log": [
+            {
+                "configured_active": 10,
+                "observed_precompute": 8,
+                "gap": 2,
+                "pending_refresh": 0,
+            }
         ],
     }
 
@@ -134,7 +146,33 @@ async def test_pre_002_missing_config():
 
 
 # ---------------------------------------------------------------------------
-# Test 4: C-PRE-003 justified exception → WARN (non-strict)
+# Test 4: C-PRE-002 recent sync waits for next precompute → WARN
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_pre_002_recent_sync_warn():
+    """A newly synced ACTIVE config should warn until the next home refresh."""
+    responses = {
+        "FROM precompute_refresh_log": [
+            {
+                "configured_active": 9,
+                "observed_precompute": 9,
+                "gap": 0,
+                "pending_refresh": 1,
+            }
+        ],
+    }
+
+    with patch(PG_QUERY, new=_mock_pg(responses)):
+        result = await check_pre_002(7, _buyers("b1"))
+
+    assert result.status == "WARN"
+    assert result.details["pending_refresh"] == 1
+    assert result.details["buyer_pending_refresh"] == {"b1": 1}
+
+
+# ---------------------------------------------------------------------------
+# Test 5: C-PRE-003 justified exception → WARN (non-strict)
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
@@ -156,7 +194,7 @@ async def test_pre_003_justified_exception_warn():
 
 
 # ---------------------------------------------------------------------------
-# Test 5: C-PRE-003 justified exception → FAIL under --strict
+# Test 6: C-PRE-003 justified exception → FAIL under --strict
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
@@ -176,7 +214,7 @@ async def test_pre_003_strict_fail():
 
 
 # ---------------------------------------------------------------------------
-# Test 6: No active buyers → DISCOVERY FAIL
+# Test 7: No active buyers → DISCOVERY FAIL
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
@@ -196,7 +234,7 @@ async def test_no_active_buyers():
 
 
 # ---------------------------------------------------------------------------
-# Test 7: C-ING-001 stuck runs detected → WARN
+# Test 8: C-ING-001 stuck runs detected → WARN
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
@@ -215,7 +253,7 @@ async def test_ing_001_stuck_runs():
 
 
 # ---------------------------------------------------------------------------
-# Test 8: C-ING-002 missing buyers
+# Test 9: C-ING-002 missing buyers
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio

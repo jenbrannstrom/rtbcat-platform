@@ -216,47 +216,95 @@ async def check_pre_002(days: int, buyers: list[dict]) -> CheckResult:
     """C-PRE-002: All ACTIVE configs have rows in pretarg_daily."""
     total_gap = 0
     buyer_gaps: dict[str, int] = {}
+    total_pending_refresh = 0
+    buyer_pending_refresh: dict[str, int] = {}
 
     for b in buyers:
         bid = b["buyer_id"]
         rows = await pg_query(
+            "WITH latest_refresh AS ( "
+            "  SELECT MAX(refreshed_at::timestamptz) AS refreshed_at "
+            "  FROM precompute_refresh_log "
+            "  WHERE cache_name = 'home_summaries' "
+            "), config_rows AS ( "
+            "  SELECT "
+            "    pc.bidder_id, "
+            "    pc.billing_id, "
+            "    pc.synced_at, "
+            "    lr.refreshed_at "
+            "  FROM pretargeting_configs pc "
+            "  JOIN buyer_seats bs "
+            "    ON bs.bidder_id = pc.bidder_id AND bs.active = true "
+            "  CROSS JOIN latest_refresh lr "
+            "  WHERE pc.state = 'ACTIVE' "
+            "    AND pc.billing_id IS NOT NULL "
+            "    AND pc.billing_id != '' "
+            "    AND pc.bidder_id = %s "
+            ") "
             "SELECT "
-            "  COUNT(*) AS configured_active, "
-            "  COUNT(hcd.billing_id) AS observed_precompute, "
-            "  COUNT(*) - COUNT(hcd.billing_id) AS gap "
-            "FROM pretargeting_configs pc "
-            "JOIN buyer_seats bs "
-            "  ON bs.bidder_id = pc.bidder_id AND bs.active = true "
+            "  COUNT(*) FILTER (WHERE refreshed_at IS NULL OR synced_at <= refreshed_at) "
+            "    AS configured_active, "
+            "  COUNT(hcd.billing_id) FILTER (WHERE refreshed_at IS NULL OR synced_at <= refreshed_at) "
+            "    AS observed_precompute, "
+            "  COUNT(*) FILTER (WHERE (refreshed_at IS NULL OR synced_at <= refreshed_at) AND hcd.billing_id IS NULL) "
+            "    AS gap, "
+            "  COUNT(*) FILTER (WHERE refreshed_at IS NOT NULL AND synced_at > refreshed_at AND hcd.billing_id IS NULL) "
+            "    AS pending_refresh "
+            "FROM config_rows pc "
             "LEFT JOIN ( "
             "  SELECT DISTINCT buyer_account_id, billing_id "
             "  FROM pretarg_daily "
             "  WHERE metric_date::text >= (CURRENT_DATE - %s)::text "
             ") hcd ON hcd.buyer_account_id = pc.bidder_id "
-            "  AND hcd.billing_id = pc.billing_id "
-            "WHERE pc.state = 'ACTIVE' "
-            "  AND pc.billing_id IS NOT NULL "
-            "  AND pc.billing_id != '' "
-            "  AND pc.bidder_id = %s",
-            (days, bid),
+            "  AND hcd.billing_id = pc.billing_id",
+            (bid, days),
         )
         if rows:
             gap = rows[0]["gap"]
             if gap > 0:
                 buyer_gaps[bid] = gap
                 total_gap += gap
+            pending_refresh = rows[0].get("pending_refresh", 0)
+            if pending_refresh > 0:
+                buyer_pending_refresh[bid] = pending_refresh
+                total_pending_refresh += pending_refresh
 
     if total_gap > 0:
         return CheckResult(
             "C-PRE-002", "pretarg_daily ACTIVE config coverage", "FAIL",
             f"{total_gap} ACTIVE config(s) missing from pretarg_daily: "
             f"{buyer_gaps}",
-            {"total_gap": total_gap, "buyer_gaps": buyer_gaps},
+            {
+                "total_gap": total_gap,
+                "buyer_gaps": buyer_gaps,
+                "pending_refresh": total_pending_refresh,
+                "buyer_pending_refresh": buyer_pending_refresh,
+            },
+        )
+
+    if total_pending_refresh > 0:
+        return CheckResult(
+            "C-PRE-002", "pretarg_daily ACTIVE config coverage", "WARN",
+            f"{total_pending_refresh} ACTIVE config(s) synced after the last "
+            f"home precompute refresh are waiting for the next refresh: "
+            f"{buyer_pending_refresh}",
+            {
+                "total_gap": 0,
+                "buyer_gaps": {},
+                "pending_refresh": total_pending_refresh,
+                "buyer_pending_refresh": buyer_pending_refresh,
+            },
         )
 
     return CheckResult(
         "C-PRE-002", "pretarg_daily ACTIVE config coverage", "PASS",
         f"All ACTIVE configs have rows in pretarg_daily ({days}d window)",
-        {"total_gap": 0, "buyers_checked": len(buyers)},
+        {
+            "total_gap": 0,
+            "buyers_checked": len(buyers),
+            "pending_refresh": 0,
+            "buyer_pending_refresh": {},
+        },
     )
 
 
