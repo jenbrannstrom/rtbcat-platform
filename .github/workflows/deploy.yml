@@ -50,6 +50,7 @@ env:
   CLOUDSQL_CONNECTION_NAME: ${{ vars.CLOUDSQL_CONNECTION_NAME }}
   APP_DIR: ${{ vars.APP_DIR || '/opt/catscan' }}
   GIT_BRANCH: ${{ vars.GIT_BRANCH || 'main' }}
+  GIT_REMOTE_URL: ${{ vars.GIT_REMOTE_URL || 'https://github.com/jenbrannstrom/rtbcat-platform.git' }}
   IMAGE_REGISTRY: ${{ vars.IMAGE_REGISTRY }}
   STAGING_API_BASE_URL: ${{ vars.STAGING_API_BASE_URL || 'https://vm2.scan.rtb.cat/api' }}
   PRODUCTION_API_BASE_URL: ${{ vars.PRODUCTION_API_BASE_URL || 'https://scan.rtb.cat/api' }}
@@ -74,7 +75,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for var_name in GCP_PROJECT GCP_REGION GCP_ZONE GCP_VM_PRODUCTION GCP_VM_STAGING IMAGE_REGISTRY CLOUDSQL_INSTANCE_NAME; do
+          for var_name in GCP_PROJECT GCP_REGION GCP_ZONE GCP_VM_PRODUCTION GCP_VM_STAGING IMAGE_REGISTRY CLOUDSQL_INSTANCE_NAME GIT_REMOTE_URL; do
             if [ -z "${!var_name:-}" ]; then
               echo "Missing required repository variable: ${var_name}"
               exit 1
@@ -163,10 +164,10 @@ if not (version == f"sha-{expected}" or git_sha.startswith(expected)):
             --command="
               cd ${{ env.APP_DIR }}
 
-              # Pull latest code (for docker-compose.gcp.yml updates)
-              sudo -u catscan git fetch origin
-              sudo -u catscan git checkout ${{ env.GIT_BRANCH }}
-              sudo -u catscan git reset --hard origin/${{ env.GIT_BRANCH }}
+              # Pull latest code over HTTPS from the canonical public repo.
+              # This avoids brittle dependence on a VM-local SSH deploy key.
+              sudo -u catscan git fetch --prune '${{ env.GIT_REMOTE_URL }}' '${{ env.GIT_BRANCH }}'
+              sudo -u catscan git checkout -B '${{ env.GIT_BRANCH }}' FETCH_HEAD
 
               # Set image registry and tag for prebuilt images
               export IMAGE_REGISTRY=${{ env.IMAGE_REGISTRY }}
