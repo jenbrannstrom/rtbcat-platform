@@ -38,9 +38,12 @@ concurrency:
 
 env:
   GCP_PROJECT: ${{ vars.GCP_PROJECT }}
+  GCP_REGION: ${{ vars.GCP_REGION }}
   GCP_ZONE: ${{ vars.GCP_ZONE }}
   GCP_VM_PRODUCTION: ${{ vars.GCP_VM_PRODUCTION }}
   GCP_VM_STAGING: ${{ vars.GCP_VM_STAGING }}
+  CLOUDSQL_INSTANCE_NAME: ${{ vars.CLOUDSQL_INSTANCE }}
+  CLOUDSQL_CONNECTION_NAME: ${{ vars.CLOUDSQL_CONNECTION_NAME }}
   APP_DIR: ${{ vars.APP_DIR || '/opt/catscan' }}
   GIT_BRANCH: ${{ vars.GIT_BRANCH || 'main' }}
   IMAGE_REGISTRY: ${{ vars.IMAGE_REGISTRY }}
@@ -65,7 +68,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for var_name in GCP_PROJECT GCP_ZONE GCP_VM_PRODUCTION GCP_VM_STAGING IMAGE_REGISTRY; do
+          for var_name in GCP_PROJECT GCP_REGION GCP_ZONE GCP_VM_PRODUCTION GCP_VM_STAGING IMAGE_REGISTRY CLOUDSQL_INSTANCE_NAME; do
             if [ -z "${!var_name:-}" ]; then
               echo "Missing required repository variable: ${var_name}"
               exit 1
@@ -104,6 +107,10 @@ jobs:
         run: |
           # Get the short SHA for image tag
           SHORT_SHA="${GITHUB_SHA::7}"
+          CLOUDSQL_CONNECTION_NAME="${{ env.CLOUDSQL_CONNECTION_NAME }}"
+          if [ -z "$CLOUDSQL_CONNECTION_NAME" ]; then
+            CLOUDSQL_CONNECTION_NAME="${{ env.GCP_PROJECT }}:${{ env.GCP_REGION }}:${{ env.CLOUDSQL_INSTANCE_NAME }}"
+          fi
 
           gcloud compute ssh ${{ steps.vm.outputs.name }} \
             --zone=${{ env.GCP_ZONE }} \
@@ -121,6 +128,7 @@ jobs:
               # Set image registry and tag for prebuilt images
               export IMAGE_REGISTRY=${{ env.IMAGE_REGISTRY }}
               export IMAGE_TAG=sha-${SHORT_SHA}
+              export CLOUDSQL_INSTANCE='${CLOUDSQL_CONNECTION_NAME}'
               export CATSCAN_ENABLE_GMAIL_IMPORT_SCHEDULER='${{ env.CATSCAN_ENABLE_GMAIL_IMPORT_SCHEDULER }}'
               export CATSCAN_ENABLE_PRECOMPUTE_SCHEDULER='${{ env.CATSCAN_ENABLE_PRECOMPUTE_SCHEDULER }}'
               export CATSCAN_ENABLE_CREATIVE_CACHE_SCHEDULER='${{ env.CATSCAN_ENABLE_CREATIVE_CACHE_SCHEDULER }}'
