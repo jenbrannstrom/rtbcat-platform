@@ -19,6 +19,10 @@ What it does not do today:
 - it does not magically know advertiser value or lifetime value without external conversion data
 - it does not replace bidder-side logic; it complements it
 
+## The problem in one picture
+
+![QPS Funnel](https://docs.rtb.cat/assets/qps-funnel.svg)
+
 ## Why this exists
 
 Authorized Buyers gives you a lot of traffic and only a limited set of controls.
@@ -60,8 +64,8 @@ That logic is described in [docs/OPTIMIZATION_LOGIC.md](docs/OPTIMIZATION_LOGIC.
 ## Quick start
 
 ```bash
-git clone https://github.com/rtbcat/qps-control-plane.git
-cd qps-control-plane
+git clone https://github.com/jenbrannstrom/rtbcat-platform.git
+cd rtbcat-platform
 cp .env.example .env
 # set POSTGRES_DSN and POSTGRES_SERVING_DSN in .env first
 ./setup.sh
