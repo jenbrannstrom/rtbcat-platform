@@ -3,7 +3,7 @@ name: CI Build and Push Images
 on:
   push:
     branches:
-      - unified-platform
+      - main
     tags:
       - 'v*'
     paths-ignore:

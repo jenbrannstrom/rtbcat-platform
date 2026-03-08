@@ -3,7 +3,7 @@ name: OSS Release Preflight
 on:
   workflow_dispatch:
   pull_request:
-    branches: [main, master, unified-platform]
+    branches: [main, master, main]
 
 concurrency:
   group: oss-preflight-${{ github.ref }}

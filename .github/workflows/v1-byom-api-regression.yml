@@ -16,7 +16,7 @@ on:
       - ".github/workflows/v1-byom-api-regression.yml"
   push:
     branches:
-      - unified-platform
+      - main
     paths:
       - "api/**"
       - "services/**"
