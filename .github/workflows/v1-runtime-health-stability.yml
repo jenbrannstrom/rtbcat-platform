@@ -20,7 +20,7 @@ on:
       branch:
         description: "Branch to inspect"
         required: false
-        default: "unified-platform"
+        default: "main"
   schedule:
     - cron: "50 3 * * *"
 
@@ -43,7 +43,7 @@ jobs:
       BUYER_ID: ${{ github.event.inputs.buyer_id || vars.CATSCAN_RUNTIME_HEALTH_PILOT_BUYER_ID || '1111111111' }}
       WINDOW: ${{ github.event.inputs.window || vars.CATSCAN_RUNTIME_HEALTH_STABILITY_WINDOW || '3' }}
       LIMIT: ${{ github.event.inputs.limit || vars.CATSCAN_RUNTIME_HEALTH_STABILITY_LIMIT || '20' }}
-      BRANCH: ${{ github.event.inputs.branch || 'unified-platform' }}
+      BRANCH: ${{ github.event.inputs.branch || 'main' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4

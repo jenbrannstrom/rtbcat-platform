@@ -42,7 +42,7 @@ env:
   GCP_VM_PRODUCTION: ${{ vars.GCP_VM_PRODUCTION }}
   GCP_VM_STAGING: ${{ vars.GCP_VM_STAGING }}
   APP_DIR: ${{ vars.APP_DIR || '/opt/catscan' }}
-  GIT_BRANCH: ${{ vars.GIT_BRANCH || 'unified-platform' }}
+  GIT_BRANCH: ${{ vars.GIT_BRANCH || 'main' }}
   IMAGE_REGISTRY: ${{ vars.IMAGE_REGISTRY }}
   ALLOW_CONTRACT_FAILURE: ${{ vars.ALLOW_CONTRACT_FAILURE || 'false' }}
   CATSCAN_ENABLE_GMAIL_IMPORT_SCHEDULER: ${{ vars.CATSCAN_ENABLE_GMAIL_IMPORT_SCHEDULER || 'true' }}

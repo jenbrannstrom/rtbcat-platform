@@ -17,7 +17,7 @@ on:
       - ".github/workflows/phase0-regression.yml"
   push:
     branches:
-      - unified-platform
+      - main
     paths:
       - "api/**"
       - "services/**"
