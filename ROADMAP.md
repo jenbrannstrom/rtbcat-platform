@@ -49,11 +49,11 @@ Current state:
 - the UI and API paths exist
 - the feature is optional
 - it is disabled by default in the GCP deploy path
-- provider wiring is still too narrow
+- provider selection and key management exist for Gemini, Claude, and Grok
 
 Next steps:
-- make language analysis provider-agnostic
-- support more than one external model provider
+- keep provider selection coherent across UI, API, and docs
+- evaluate provider quality and failure behavior in real operator workflows
 - keep the feature optional and explicitly configured
 - preserve manual override and operator review in the creative flow
 

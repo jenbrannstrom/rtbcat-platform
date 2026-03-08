@@ -47,7 +47,7 @@ const PROVIDER_META: Record<
   },
 };
 
-export function GeminiApiKeySection() {
+export function LanguageAIProviderSection() {
   const queryClient = useQueryClient();
   const { t } = useTranslation();
 
@@ -331,4 +331,3 @@ export function GeminiApiKeySection() {
     </div>
   );
 }
-

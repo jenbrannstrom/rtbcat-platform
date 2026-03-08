@@ -54,11 +54,11 @@ That logic is described in [docs/OPTIMIZATION_LOGIC.md](docs/OPTIMIZATION_LOGIC.
 
 ### Built but optional
 - AI-assisted language detection and geo-linguistic mismatch analysis in the creative modal
+- provider choice for language analysis (Gemini, Claude, or Grok)
 - these features require explicit provider configuration and are disabled by default in production deploys
 
 ### Under active build
 - conversion ingestion and attribution, with AppsFlyer first
-- broader provider choice for language analysis instead of a Gemini-only path
 - stronger optimizer decisions once conversion and value data are connected
 
 ## Quick start
