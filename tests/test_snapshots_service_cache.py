@@ -40,7 +40,7 @@ class _StubSnapshotsRepo:
         config_data: dict[str, object],
         performance_data: dict[str, object],
         publisher_targeting_mode: str | None,
-        publisher_targeting_values: str | None,
+        publisher_targeting_values: list[str] | None,
         notes: str | None,
     ) -> int:
         self.create_calls += 1

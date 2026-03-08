@@ -57,6 +57,30 @@ class ComparisonResponse(BaseModel):
     sizes_removed: int = 0
 
 
+class PretargetingHistoryResponse(BaseModel):
+    id: int
+    config_id: str
+    bidder_id: str
+    change_type: str
+    field_changed: Optional[str] = None
+    old_value: Optional[str] = None
+    new_value: Optional[str] = None
+    changed_at: datetime
+    changed_by: Optional[str] = None
+    change_source: str
+
+
+class AuditLogResponse(BaseModel):
+    id: str
+    user_id: Optional[str] = None
+    action: str
+    resource_type: Optional[str] = None
+    resource_id: Optional[str] = None
+    details: Optional[str] = None
+    ip_address: Optional[str] = None
+    created_at: Optional[datetime] = None
+
+
 # ---- Bug A: datetime serialization ----
 
 class TestPendingChangeResponseDatetime:
@@ -169,6 +193,46 @@ class TestComparisonResponseDatetime:
         assert isinstance(data["completed_at"], str)
 
 
+class TestPretargetingHistoryResponseDatetime:
+    def test_history_response_accepts_datetime(self):
+        now = datetime.now(timezone.utc)
+        resp = PretargetingHistoryResponse(
+            id=1,
+            config_id="cfg-1",
+            bidder_id="bidder-1",
+            change_type="major_commit",
+            changed_at=now,
+            change_source="api",
+        )
+        assert resp.changed_at == now
+        data = resp.model_dump(mode="json")
+        assert isinstance(data["changed_at"], str)
+
+    def test_history_response_accepts_string(self):
+        resp = PretargetingHistoryResponse(
+            id=1,
+            config_id="cfg-1",
+            bidder_id="bidder-1",
+            change_type="major_commit",
+            changed_at="2025-01-15T10:30:00+00:00",
+            change_source="api",
+        )
+        assert isinstance(resp.changed_at, datetime)
+
+
+class TestAuditLogResponseDatetime:
+    def test_audit_log_response_accepts_datetime(self):
+        now = datetime.now(timezone.utc)
+        resp = AuditLogResponse(
+            id="1",
+            action="login",
+            created_at=now,
+        )
+        assert resp.created_at == now
+        data = resp.model_dump(mode="json")
+        assert isinstance(data["created_at"], str)
+
+
 # ---- Bug B: safe JSON normalization ----
 
 def _safe_parse_raw_config(raw_config):
@@ -274,7 +338,7 @@ class TestSuspendServiceWithDictRawConfig:
 
         assert result["id"] == 42
         mock_snapshots_repo.create_snapshot.assert_called_once()
-        # Verify publisher_targeting_values was serialized correctly
+        # Verify publisher_targeting_values stays as a JSON-compatible list for JSONB storage
         call_kwargs = mock_snapshots_repo.create_snapshot.call_args[1]
         assert call_kwargs["publisher_targeting_mode"] == "EXCLUSIVE"
-        assert json.loads(call_kwargs["publisher_targeting_values"]) == ["pub-abc"]
+        assert call_kwargs["publisher_targeting_values"] == ["pub-abc"]

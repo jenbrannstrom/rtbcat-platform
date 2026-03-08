@@ -18,7 +18,7 @@ class SnapshotsRepository:
         config_data: dict[str, Any],
         performance_data: dict[str, Any],
         publisher_targeting_mode: str | None,
-        publisher_targeting_values: str | None,
+        publisher_targeting_values: list[str] | None,
         notes: str | None,
     ) -> int:
         row = await pg_query_one(
