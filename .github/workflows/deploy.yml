@@ -116,20 +116,25 @@ jobs:
           RESPONSE="$(curl -fsSL "${STAGING_HEALTH_URL}")"
           echo "${RESPONSE}"
 
-          python3 -c '
-import json, sys
-payload = json.loads(sys.argv[1])
-expected = sys.argv[2].lower()
-status = str(payload.get("status") or "")
-version = str(payload.get("version") or "")
-git_sha = str(payload.get("git_sha") or "").lower()
-if status != "healthy":
-    raise SystemExit("Staging is not healthy")
-if not (version == f"sha-{expected}" or git_sha.startswith(expected)):
-    raise SystemExit(
-        f"Staging is running {version or git_sha or \"unknown\"}, expected sha-{expected}"
-    )
-' "${RESPONSE}" "${EXPECTED_SHORT_SHA}"
+          python3 - "${RESPONSE}" "${EXPECTED_SHORT_SHA}" <<'PY'
+          import json
+          import sys
+
+          payload = json.loads(sys.argv[1])
+          expected = sys.argv[2].lower()
+          status = str(payload.get("status") or "")
+          version = str(payload.get("version") or "")
+          git_sha = str(payload.get("git_sha") or "").lower()
+
+          if status != "healthy":
+              raise SystemExit("Staging is not healthy")
+
+          if not (version == f"sha-{expected}" or git_sha.startswith(expected)):
+              current = version or git_sha or "unknown"
+              raise SystemExit(
+                  f"Staging is running {current}, expected sha-{expected}"
+              )
+          PY
 
           echo "Verified staging is healthy on sha-${EXPECTED_SHORT_SHA}"
           echo "Verification notes: ${{ github.event.inputs.staging_verification_notes }}"
