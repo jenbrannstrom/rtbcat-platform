@@ -14,6 +14,7 @@ from services.auth_service import User
 from services.changes_service import ChangesService
 from services.pretargeting_service import PretargetingService
 from services.seats_service import SeatsService
+from utils.list_payloads import parse_list_payload
 
 from .models import (
     PretargetingConfigResponse,
@@ -295,7 +296,7 @@ async def get_pretargeting_configs(
             if row.get("state") == "DELETED":
                 continue
             # Parse OS targeting and convert IDs to names if possible
-            os_ids = _parse_json_field(row["included_operating_systems"])
+            os_ids = parse_list_payload(row["included_operating_systems"])
             os_names = None
             if os_ids:
                 # Map known OS IDs to human-readable names
@@ -319,11 +320,11 @@ async def get_pretargeting_configs(
                     display_name=row["display_name"],
                     user_name=row["user_name"],
                     state=row["state"] or "ACTIVE",
-                    included_formats=_parse_json_field(row["included_formats"]),
-                    included_platforms=_parse_json_field(row["included_platforms"]),
-                    included_sizes=_parse_json_field(row["included_sizes"]),
-                    included_geos=_parse_json_field(row["included_geos"]),
-                    excluded_geos=_parse_json_field(row["excluded_geos"]),
+                    included_formats=parse_list_payload(row["included_formats"]),
+                    included_platforms=parse_list_payload(row["included_platforms"]),
+                    included_sizes=parse_list_payload(row["included_sizes"]),
+                    included_geos=parse_list_payload(row["included_geos"]),
+                    excluded_geos=parse_list_payload(row["excluded_geos"]),
                     maximum_qps=maximum_qps,
                     included_operating_systems=os_names,
                     synced_at=str(row["synced_at"]) if row["synced_at"] else None,
