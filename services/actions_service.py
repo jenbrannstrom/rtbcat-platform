@@ -11,6 +11,7 @@ from googleapiclient.errors import HttpError
 
 from collectors import PretargetingClient
 from services.changes_service import ChangesService
+from utils.list_payloads import parse_list_payload
 
 logger = logging.getLogger(__name__)
 from services.pretargeting_service import PretargetingService
@@ -41,21 +42,15 @@ class ActionsService:
 
     @staticmethod
     def _parse_json_list(value: Any) -> list:
-        if value is None:
-            return []
-        if isinstance(value, list):
-            return value
-        if isinstance(value, str):
-            try:
-                return json.loads(value)
-            except Exception:
-                logger.warning(
-                    "Failed to parse JSON list payload in ActionsService; defaulting to []",
-                    extra={"value_preview": str(value)[:120]},
-                    exc_info=True,
-                )
-                return []
-        return list(value)
+        parsed = parse_list_payload(value)
+        if parsed:
+            return parsed
+        if value not in (None, "", "[]", "{}"):
+            logger.warning(
+                "Failed to parse list payload in ActionsService; defaulting to []",
+                extra={"value_preview": str(value)[:120]},
+            )
+        return []
 
     @staticmethod
     def _resolve_major_change_type(changes: list[dict[str, Any]]) -> str:

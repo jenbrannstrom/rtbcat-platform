@@ -11,6 +11,7 @@ from storage.postgres_repositories.comparisons_repo import ComparisonsRepository
 from storage.postgres_repositories.performance_repo import PerformanceRepository
 from storage.postgres_repositories.pretargeting_repo import PretargetingRepository
 from storage.postgres_repositories.snapshots_repo import SnapshotsRepository
+from utils.list_payloads import parse_list_payload
 
 
 class SnapshotsService:
@@ -113,14 +114,14 @@ class SnapshotsService:
             raw_config = json.loads(raw_config)
         publisher_targeting = raw_config.get("publisherTargeting") or {}
         publisher_mode = publisher_targeting.get("targetingMode")
-        publisher_values = publisher_targeting.get("values") or []
+        publisher_values = parse_list_payload(publisher_targeting.get("values"))
 
         config_data = {
-            "included_formats": config.get("included_formats"),
-            "included_platforms": config.get("included_platforms"),
-            "included_sizes": config.get("included_sizes"),
-            "included_geos": config.get("included_geos"),
-            "excluded_geos": config.get("excluded_geos"),
+            "included_formats": parse_list_payload(config.get("included_formats")),
+            "included_platforms": parse_list_payload(config.get("included_platforms")),
+            "included_sizes": parse_list_payload(config.get("included_sizes")),
+            "included_geos": parse_list_payload(config.get("included_geos")),
+            "excluded_geos": parse_list_payload(config.get("excluded_geos")),
             "state": config.get("state"),
         }
         performance_data = {

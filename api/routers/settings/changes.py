@@ -11,6 +11,7 @@ from api.dependencies import get_current_user, require_seat_admin_or_sudo
 from services.auth_service import User
 from services.changes_service import ChangesService
 from services.pretargeting_service import PretargetingService
+from utils.list_payloads import parse_list_payload
 
 from .models import ConfigDetailResponse, PendingChangeCreate, PendingChangeResponse
 
@@ -343,11 +344,11 @@ async def get_pretargeting_config_detail(
         pending_rows = list(reversed(pending_rows))
 
         # Parse current values (handles both JSONB and TEXT columns)
-        included_sizes = _parse_json_field(config.get("included_sizes")) or []
-        included_geos = _parse_json_field(config.get("included_geos")) or []
-        excluded_geos = _parse_json_field(config.get("excluded_geos")) or []
-        included_formats = _parse_json_field(config.get("included_formats")) or []
-        included_platforms = _parse_json_field(config.get("included_platforms")) or []
+        included_sizes = parse_list_payload(config.get("included_sizes"))
+        included_geos = parse_list_payload(config.get("included_geos"))
+        excluded_geos = parse_list_payload(config.get("excluded_geos"))
+        included_formats = parse_list_payload(config.get("included_formats"))
+        included_platforms = parse_list_payload(config.get("included_platforms"))
         raw_config = _parse_json_field(config.get("raw_config")) or {}
         publisher_targeting = raw_config.get("publisherTargeting") or {}
         publisher_mode = publisher_targeting.get("targetingMode")

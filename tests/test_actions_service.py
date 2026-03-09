@@ -158,5 +158,10 @@ def test_parse_json_list_logs_warning_and_defaults_on_invalid_json(
 ) -> None:
     with caplog.at_level(logging.WARNING):
         parsed = ActionsService._parse_json_list("{not-json}")
-    assert parsed == []
-    assert "Failed to parse JSON list payload in ActionsService" in caplog.text
+    assert parsed == ["not-json"]
+    assert caplog.text == ""
+
+
+def test_parse_json_list_handles_postgres_array_literal() -> None:
+    parsed = ActionsService._parse_json_list('{HTML,"VIDEO"}')
+    assert parsed == ["HTML", "VIDEO"]

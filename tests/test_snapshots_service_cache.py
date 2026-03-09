@@ -11,6 +11,7 @@ class _StubSnapshotsRepo:
     def __init__(self) -> None:
         self.list_calls = 0
         self.create_calls = 0
+        self.last_create_payload: dict[str, object] | None = None
         self.rows: list[dict[str, object]] = [
             {
                 "id": 1,
@@ -44,6 +45,16 @@ class _StubSnapshotsRepo:
         notes: str | None,
     ) -> int:
         self.create_calls += 1
+        self.last_create_payload = {
+            "billing_id": billing_id,
+            "snapshot_name": snapshot_name,
+            "snapshot_type": snapshot_type,
+            "config_data": dict(config_data),
+            "performance_data": dict(performance_data),
+            "publisher_targeting_mode": publisher_targeting_mode,
+            "publisher_targeting_values": list(publisher_targeting_values or []),
+            "notes": notes,
+        }
         snapshot_id = len(self.rows) + 1
         self.rows.insert(
             0,
@@ -185,6 +196,49 @@ async def test_create_snapshot_invalidates_snapshot_list_cache() -> None:
 
     assert snapshots_repo.create_calls == 1
     assert snapshots_repo.list_calls == 2
+
+
+class _LegacyPretargetingRepo:
+    async def get_config_by_billing_id(self, billing_id: str) -> dict[str, object] | None:
+        if billing_id != "billing-1":
+            return None
+        return {
+            "included_formats": "{HTML,VIDEO}",
+            "included_platforms": '["PHONE"]',
+            "included_sizes": "{300x250,320x50}",
+            "included_geos": "{US,CA}",
+            "excluded_geos": "{}",
+            "state": "ACTIVE",
+            "raw_config": '{"publisherTargeting":{"targetingMode":"EXCLUSIVE","values":"{123,456}"}}',
+        }
+
+
+@pytest.mark.asyncio
+async def test_create_snapshot_normalizes_legacy_list_payloads() -> None:
+    SnapshotsService.clear_caches()
+    snapshots_repo = _StubSnapshotsRepo()
+    service = SnapshotsService(
+        snapshots_repo=snapshots_repo,
+        pretargeting_repo=_LegacyPretargetingRepo(),
+        performance_repo=_StubPerformanceRepo(),
+        comparisons_repo=_StubComparisonsRepo(),
+    )
+
+    await service.create_snapshot(
+        billing_id="billing-1",
+        snapshot_name="Legacy snapshot",
+        snapshot_type="manual",
+        notes=None,
+    )
+
+    assert snapshots_repo.last_create_payload is not None
+    config_data = snapshots_repo.last_create_payload["config_data"]
+    assert config_data["included_formats"] == ["HTML", "VIDEO"]
+    assert config_data["included_platforms"] == ["PHONE"]
+    assert config_data["included_sizes"] == ["300x250", "320x50"]
+    assert config_data["included_geos"] == ["US", "CA"]
+    assert config_data["excluded_geos"] == []
+    assert snapshots_repo.last_create_payload["publisher_targeting_values"] == ["123", "456"]
 
 
 @pytest.mark.asyncio
