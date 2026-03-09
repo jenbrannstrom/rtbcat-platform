@@ -4,11 +4,18 @@ from __future__ import annotations
 
 from typing import Any
 
+from psycopg.types.json import Jsonb
+
 from storage.postgres_database import pg_query, pg_query_one
+from utils.list_payloads import parse_list_payload
 
 
 class SnapshotsRepository:
     """SQL-only repository for snapshot CRUD."""
+
+    @staticmethod
+    def _jsonb_list_param(value: Any) -> Jsonb:
+        return Jsonb(parse_list_payload(value))
 
     async def create_snapshot(
         self,
@@ -39,14 +46,14 @@ class SnapshotsRepository:
                 billing_id,
                 snapshot_name,
                 snapshot_type,
-                config_data.get("included_formats"),
-                config_data.get("included_platforms"),
-                config_data.get("included_sizes"),
-                config_data.get("included_geos"),
-                config_data.get("excluded_geos"),
+                self._jsonb_list_param(config_data.get("included_formats")),
+                self._jsonb_list_param(config_data.get("included_platforms")),
+                self._jsonb_list_param(config_data.get("included_sizes")),
+                self._jsonb_list_param(config_data.get("included_geos")),
+                self._jsonb_list_param(config_data.get("excluded_geos")),
                 config_data.get("state"),
                 publisher_targeting_mode,
-                publisher_targeting_values,
+                self._jsonb_list_param(publisher_targeting_values),
                 performance_data.get("total_impressions", 0),
                 performance_data.get("total_clicks", 0),
                 performance_data.get("total_spend_usd", 0),
