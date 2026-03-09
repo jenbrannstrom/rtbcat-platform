@@ -29,6 +29,7 @@ export interface PretargetingConfig {
   waste_rate: number;
   has_performance: boolean;
   metrics_delayed?: boolean;
+  pending_changes_count?: number;
 }
 
 interface PretargetingConfigCardProps {
@@ -179,7 +180,7 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
   const { data: configDetail, isFetching: configDetailFetching } = useQuery({
     queryKey: ['pretargeting-detail', config.billing_id],
     queryFn: () => getPretargetingConfigDetail(config.billing_id),
-    enabled: expanded || isEditingQps,
+    enabled: expanded || isEditingQps || (config.pending_changes_count ?? 0) > 0,
     staleTime: 30_000,
   });
 
@@ -319,7 +320,8 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
     : null;
   const persistedQpsLimit = configDetail?.maximum_qps ?? config.maximum_qps ?? null;
   const pendingChanges = configDetail?.pending_changes || [];
-  const hasPendingChanges = pendingChanges.length > 0;
+  const pendingChangesCount = configDetail?.pending_changes_count ?? config.pending_changes_count ?? 0;
+  const hasPendingChanges = pendingChangesCount > 0;
   const activeMajorChangeType = resolveActiveMajorChangeType(pendingChanges);
 
   const canStageChange = (nextChangeType: string): boolean => {
@@ -425,10 +427,11 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
   };
 
   const formatMutationPending = createChangeMutation.isPending || cancelChangeMutation.isPending;
-  const openCommitToast = () => {
-    if (!hasPendingChanges) return;
-    setShowCommitToast(true);
-  };
+  useEffect(() => {
+    if (hasPendingChanges) {
+      setShowCommitToast(true);
+    }
+  }, [hasPendingChanges, config.billing_id]);
 
   // Determine status indicator
   const isHighWaste = config.has_performance && config.waste_rate >= 70;
@@ -521,6 +524,11 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
               <span className="font-medium text-gray-900 truncate">
                 {config.name}
               </span>
+              {hasPendingChanges && (
+                <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800">
+                  {pendingChangesCount} pending
+                </span>
+              )}
               <button
                 onClick={handleStartEdit}
                 className="p-1 text-gray-400 hover:text-gray-600"
@@ -733,7 +741,7 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
                 {t.pretargeting.clearAll}
               </button>
               <button
-                onClick={openCommitToast}
+                onClick={() => setShowCommitToast(true)}
                 disabled={isPushing}
                 className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
               >
@@ -825,6 +833,26 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
         </div>
       )}
 
+      {!showCommitToast && hasPendingChanges && (
+        <div className="fixed bottom-4 right-4 z-40 w-full max-w-sm rounded-lg border border-amber-200 bg-white shadow-lg">
+          <div className="flex items-center justify-between gap-3 px-3 py-2">
+            <div>
+              <p className="text-sm font-medium text-amber-900">
+                {pendingChangesCount} pending change{pendingChangesCount === 1 ? '' : 's'}
+              </p>
+              <p className="text-xs text-amber-700">{t.pretargeting.clickPushToGoogleHint}</p>
+            </div>
+            <button
+              onClick={() => setShowCommitToast(true)}
+              className="inline-flex items-center gap-1 rounded bg-amber-500 px-2.5 py-1 text-xs font-medium text-white hover:bg-amber-600"
+            >
+              <Upload className="h-3 w-3" />
+              Review
+            </button>
+          </div>
+        </div>
+      )}
+
       {showCommitToast && hasPendingChanges && (
         <div className="fixed bottom-4 right-4 z-50 w-full max-w-md rounded-lg border border-blue-200 bg-white shadow-xl">
           <div className="border-b border-blue-100 bg-blue-50 px-3 py-2">
@@ -834,7 +862,7 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
             <p className="mt-1 text-xs text-blue-700">{t.pretargeting.pushConfirmLiveChangeWarning}</p>
           </div>
           <div className="max-h-40 overflow-y-auto px-3 py-2">
-            {pendingChanges.map((change) => (
+            {pendingChanges.length > 0 ? pendingChanges.map((change) => (
               <div key={`toast-${change.id}`} className="text-xs text-gray-700">
                 • {change.change_type === 'set_maximum_qps'
                   ? t.pretargeting.pendingChangeSetQpsLimit.replace('{value}', change.value)
@@ -844,7 +872,12 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
                       ? t.pretargeting.pendingChangeDisableFormat.replace('{value}', change.value)
                       : `${change.change_type}: ${change.value}`}
               </div>
-            ))}
+            )) : (
+              <div className="flex items-center gap-2 text-xs text-gray-700">
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-gray-400" />
+                <span>{pendingChangesCount} pending change{pendingChangesCount === 1 ? '' : 's'} ready to push.</span>
+              </div>
+            )}
           </div>
           <div className="border-t border-gray-100 px-3 py-2 text-xs text-blue-700">
             {t.pretargeting.pushConfirmSnapshotCreated}

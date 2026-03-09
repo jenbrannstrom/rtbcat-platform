@@ -45,6 +45,7 @@ export interface PretargetingConfigResponse {
   user_name: string | null;
   state: string;
   maximum_qps?: number | null;
+  pending_changes_count?: number;
   included_formats: string[] | null;
   included_platforms: string[] | null;
   included_sizes: string[] | null;
@@ -76,6 +77,7 @@ export interface ConfigDetail {
   publisher_targeting_values?: string[];
   synced_at: string | null;
   pending_changes: PendingChange[];
+  pending_changes_count: number;
   effective_sizes: string[];
   effective_geos: string[];
   effective_formats: string[];

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from psycopg.types.json import Jsonb
+
 from storage.postgres_database import (
     pg_execute,
     pg_insert_returning_id,
@@ -76,6 +78,7 @@ class PretargetingRepository:
                 deduped.display_name,
                 deduped.user_name,
                 deduped.state,
+                deduped.pending_changes_count,
                 NULL::jsonb AS included_formats,
                 NULL::jsonb AS included_platforms,
                 NULL::jsonb AS included_sizes,
@@ -93,6 +96,7 @@ class PretargetingRepository:
                 pc.display_name,
                 pc.user_name,
                 pc.state,
+                COALESCE(pcc.pending_changes_count, 0) AS pending_changes_count,
                 CASE
                     WHEN (pc.raw_config->>'maximumQps') ~ '^[0-9]+$'
                         THEN (pc.raw_config->>'maximumQps')::integer
@@ -109,6 +113,7 @@ class PretargetingRepository:
                 deduped.display_name,
                 deduped.user_name,
                 deduped.state,
+                deduped.pending_changes_count,
                 deduped.included_formats,
                 deduped.included_platforms,
                 deduped.included_sizes,
@@ -126,6 +131,7 @@ class PretargetingRepository:
                 pc.display_name,
                 pc.user_name,
                 pc.state,
+                COALESCE(pcc.pending_changes_count, 0) AS pending_changes_count,
                 pc.included_formats,
                 pc.included_platforms,
                 pc.included_sizes,
@@ -148,6 +154,12 @@ class PretargetingRepository:
                 SELECT DISTINCT ON ({dedupe_expr})
                     {inner_projection}
                 FROM pretargeting_configs pc
+                LEFT JOIN (
+                    SELECT billing_id, COUNT(*)::integer AS pending_changes_count
+                    FROM pretargeting_pending_changes
+                    WHERE status = 'pending'
+                    GROUP BY billing_id
+                ) pcc ON pcc.billing_id = pc.billing_id
                 {where_sql}
                 ORDER BY
                     {dedupe_expr},
@@ -310,7 +322,7 @@ class PretargetingRepository:
                 new_value,
                 changed_by,
                 change_source,
-                raw_config_snapshot,
+                Jsonb(raw_config_snapshot) if raw_config_snapshot is not None else None,
             ),
         )
 

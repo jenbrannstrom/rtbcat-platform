@@ -326,6 +326,7 @@ async def get_pretargeting_configs(
                     included_geos=parse_list_payload(row["included_geos"]),
                     excluded_geos=parse_list_payload(row["excluded_geos"]),
                     maximum_qps=maximum_qps,
+                    pending_changes_count=int(row.get("pending_changes_count") or 0),
                     included_operating_systems=os_names,
                     synced_at=str(row["synced_at"]) if row["synced_at"] else None,
                 )

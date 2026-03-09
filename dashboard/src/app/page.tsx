@@ -63,6 +63,7 @@ interface PretargetingConfigCacheSeedRow {
   user_name: string | null;
   state: string;
   maximum_qps: number | null;
+  pending_changes_count: number;
   synced_at: string | null;
 }
 
@@ -176,6 +177,9 @@ function readPretargetingConfigCache(buyerId: string | null): PretargetingConfig
           user_name: typeof seedRow.user_name === "string" ? seedRow.user_name : null,
           state: typeof seedRow.state === "string" && seedRow.state ? seedRow.state : "ACTIVE",
           maximum_qps: maximumQps,
+          pending_changes_count: Number.isFinite(seedRow.pending_changes_count)
+            ? Math.trunc(Number(seedRow.pending_changes_count))
+            : 0,
           included_formats: null,
           included_platforms: null,
           included_sizes: null,
@@ -204,6 +208,7 @@ function writePretargetingConfigCache(buyerId: string | null, rows: Pretargeting
     user_name: row.user_name ?? null,
     state: row.state || "ACTIVE",
     maximum_qps: row.maximum_qps ?? null,
+    pending_changes_count: row.pending_changes_count ?? 0,
     synced_at: row.synced_at ?? null,
   }));
   const writeRows = (candidateRows: PretargetingConfigCacheSeedRow[]): void => {
@@ -465,6 +470,7 @@ function transformConfigToProps(
     user_name: apiConfig.user_name,
     state: (apiConfig.state as 'ACTIVE' | 'SUSPENDED') || 'ACTIVE',
     maximum_qps: apiConfig.maximum_qps ?? null,
+    pending_changes_count: apiConfig.pending_changes_count ?? 0,
     formats: apiConfig.included_formats || [],
     platforms: apiConfig.included_platforms || [],
     sizes: apiConfig.included_sizes || [],
