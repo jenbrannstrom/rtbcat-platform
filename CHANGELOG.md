@@ -4,6 +4,23 @@ All notable changes to Cat-Scan are documented in this file.
 
 > Versioning note (March 5, 2026): canonical OSS release versions use `VERSION` + git tags (`vX.Y.Z`). Historical entries below with `10.x`-`17.x` were internal milestone labels and were not published semver release tags.
 
+## [0.9.4] - 2026-03-10
+
+### Release
+
+- Restored legacy password-login compatibility and long-password hash upgrades during the auth migration.
+- Fixed pretargeting settings persistence and operator visibility:
+  - restored suspend and commit flows
+  - normalized legacy JSONB list payloads correctly
+  - surfaced pending changes and commit history in the dashboard
+- Fixed snapshot/settings JSONB list-field serialization.
+- Completed the multi-provider language-AI settings surface and migrated Gemini integration to the `google-genai` SDK.
+- Hardened deploy and CI promotion flow after the OSS publication, including image readiness and contract-artifact handling.
+- Cleaned post-release public repo checks:
+  - corrected public clone and install links
+  - aligned middleware tests with the live `/creatives` route
+  - revalidated OSS preflight, dependency audits, and hosted security/regression workflows on `main`
+
 ## [0.9.3] - 2026-03-07
 
 ### Release

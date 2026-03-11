@@ -215,7 +215,7 @@ The repo preflight and secret scanning are designed around that assumption. See 
 
 Release engineering is in good shape.
 
-As of `v0.9.3`:
+As of `v0.9.4`:
 - the OSS preflight passes
 - the full Python suite passes in this repo
 - dashboard build and lint pass
