@@ -1,4 +1,10 @@
-# Cat-Scan: an Optimizer for Google Authorized Buyers' signal 
+# Cat-Scan: an Optimizer for Google Authorized Buyers' signal
+
+[![CI Build and Push](https://github.com/jenbrannstrom/rtbcat-platform/actions/workflows/build-and-push.yml/badge.svg)](https://github.com/jenbrannstrom/rtbcat-platform/actions/workflows/build-and-push.yml)
+[![CI Schema Compatibility](https://github.com/jenbrannstrom/rtbcat-platform/actions/workflows/schema-compatibility.yml/badge.svg)](https://github.com/jenbrannstrom/rtbcat-platform/actions/workflows/schema-compatibility.yml)
+[![v1 Regression Gate](https://github.com/jenbrannstrom/rtbcat-platform/actions/workflows/phase0-regression.yml/badge.svg)](https://github.com/jenbrannstrom/rtbcat-platform/actions/workflows/phase0-regression.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://github.com/jenbrannstrom/rtbcat-platform/blob/main/LICENSE)
+[![Python 3.10+](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://www.python.org/)
 
 **Version:** 0.9.2 | **Runtime Build ID:** `sha-<gitsha>` | **Last Updated:** March 2026
 
