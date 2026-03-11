@@ -27,7 +27,7 @@ VM rebuilds. The previous `docs/vm-rebuild-runbook.md` has been merged here.
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/yourorg/rtbcat-platform.git
+git clone https://github.com/jenbrannstrom/rtbcat-platform.git
 cd rtbcat-platform
 ```
 

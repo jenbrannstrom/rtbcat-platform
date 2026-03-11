@@ -111,18 +111,18 @@ describe("proxy - legacy aliases", () => {
     expect(result.type).toBe("redirect");
   });
 
-  it("preserves buyer prefix on legacy alias redirect", () => {
+  it("passes through buyer-prefixed /creatives (real route)", () => {
     const result = proxy(makeRequest("/42/creatives"));
-    expect(result.type).toBe("redirect");
-    expect(mockRedirect).toHaveBeenCalledWith("/42/clusters");
+    expect(result.type).toBe("next");
+    expect(mockRedirect).not.toHaveBeenCalled();
   });
 
-  it("injects cookie buyer into alias redirect when no prefix", () => {
+  it("injects cookie buyer into /creatives when no prefix", () => {
     const result = proxy(
       makeRequest("/creatives", { [SELECTED_BUYER_COOKIE]: "42" })
     );
     expect(result.type).toBe("redirect");
-    expect(mockRedirect).toHaveBeenCalledWith("/42/clusters");
+    expect(mockRedirect).toHaveBeenCalledWith("/42/creatives");
   });
 
   it("redirects legacy pretargeting publishers route to canonical bill_id route", () => {

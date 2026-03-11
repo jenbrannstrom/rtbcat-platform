@@ -414,7 +414,7 @@ export function GmailReportsTab() {
               )}
             </p>
             <a
-              href="https://github.com/yourorg/rtbcat-platform/blob/main/INSTALL.md#automatic-report-import-gmail"
+              href="https://github.com/jenbrannstrom/rtbcat-platform/blob/main/INSTALL.md#automatic-report-import-gmail"
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800"
