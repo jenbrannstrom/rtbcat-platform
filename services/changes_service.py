@@ -103,6 +103,13 @@ class ChangesService:
         self._invalidate_list_pending_changes_cache()
         return updated
 
+    async def cancel_pending_changes_for_billing(self, billing_id: str) -> int:
+        if not billing_id:
+            raise ValueError("billing_id is required")
+        updated = await self._repo.cancel_pending_changes_for_billing(billing_id)
+        self._invalidate_list_pending_changes_cache()
+        return updated
+
     async def mark_pending_change_applied(
         self, change_id: int, applied_by: str | None = None
     ) -> int:

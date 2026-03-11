@@ -41,6 +41,7 @@ _MODEL_EXPORTS = {
     "ApplyChangeRequest",
     "ApplyChangeResponse",
     "ApplyAllResponse",
+    "DiscardAllPendingChangesResponse",
     "SuspendActivateResponse",
     "RollbackRequest",
     "RollbackResponse",

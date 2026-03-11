@@ -105,6 +105,15 @@ def test_changes_mark_applied_forbidden_without_seat_admin() -> None:
     assert "admin access" in response.json()["detail"].lower()
 
 
+def test_changes_discard_all_forbidden_without_seat_admin() -> None:
+    client = _build_changes_client()
+
+    response = client.post("/api/settings/pretargeting/123/discard-all")
+
+    assert response.status_code == 403
+    assert "admin access" in response.json()["detail"].lower()
+
+
 def test_endpoints_sync_forbidden_without_seat_admin() -> None:
     client = _build_endpoints_client()
 

@@ -97,3 +97,31 @@ def test_changes_create_pending_change_preserves_not_found_http_exception(
 
     assert response.status_code == 404
     assert "not found" in response.json()["detail"].lower()
+
+
+def test_changes_discard_all_preserves_http_exception_status(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _StubChangesService:
+        async def cancel_pending_changes_for_billing(self, billing_id: str):
+            _ = billing_id
+            raise HTTPException(status_code=409, detail="discard conflict")
+
+    class _StubPretargetingService:
+        async def get_config(self, _billing_id: str):
+            return {"billing_id": "123", "config_id": "cfg-1"}
+
+        async def discard_pending_publisher_changes(self, _billing_id: str):
+            return 0
+
+    app = FastAPI()
+    app.include_router(changes_router.router, prefix="/api")
+    app.dependency_overrides[changes_router.require_seat_admin_or_sudo] = _allow_seat_admin()
+    monkeypatch.setattr(changes_router, "ChangesService", _StubChangesService)
+    monkeypatch.setattr(changes_router, "PretargetingService", _StubPretargetingService)
+
+    client = SyncASGIClient(app)
+    response = client.post("/api/settings/pretargeting/123/discard-all")
+
+    assert response.status_code == 409
+    assert "discard conflict" in response.json()["detail"].lower()

@@ -9,6 +9,7 @@ import {
   cancelPendingChange,
   markChangeApplied,
   applyAllPendingChanges,
+  discardAllPretargetingChanges,
   suspendPretargeting,
   activatePretargeting,
   syncPretargetingConfigs,
@@ -498,6 +499,7 @@ function PublisherTargetingSection({
   onSetMode,
   onShowHistory,
   onApplyPending,
+  onDiscardPending,
   onBulkAdd,
   onExportCsv,
   disabled = false,
@@ -511,6 +513,7 @@ function PublisherTargetingSection({
   onSetMode: (mode: string) => void;
   onShowHistory: () => void;
   onApplyPending: () => void;
+  onDiscardPending: () => void;
   onBulkAdd: (values: string[]) => void;
   onExportCsv: (values: string[]) => void;
   disabled?: boolean;
@@ -834,8 +837,16 @@ function PublisherTargetingSection({
               </div>
               <div className="mt-3 flex items-center gap-2">
                 <button
+                  onClick={onDiscardPending}
+                  disabled={disabled}
+                  className="px-3 py-1.5 text-xs bg-white text-gray-700 rounded border hover:bg-gray-50 disabled:opacity-50"
+                >
+                  {t.pretargeting.discardAll}
+                </button>
+                <button
                   onClick={onApplyPending}
-                  className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded hover:bg-blue-700"
+                  disabled={disabled}
+                  className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
                 >
                   {t.pretargeting.pushToGoogle}
                 </button>
@@ -1111,7 +1122,22 @@ export function PretargetingSettingsEditor({
       queryClient.invalidateQueries({ queryKey: ['pretargeting-detail', billing_id] });
       queryClient.invalidateQueries({ queryKey: ['pretargeting-configs'] });
       queryClient.invalidateQueries({ queryKey: ['pretargeting-history', billing_id] });
+      queryClient.invalidateQueries({ queryKey: ['pretargeting-publishers', billing_id] });
       setShowCommitToast(false);
+    },
+    onError: (error: Error) => {
+      setPushResult({ success: false, message: error.message });
+    },
+  });
+
+  const discardAllMutation = useMutation({
+    mutationFn: () => discardAllPretargetingChanges(billing_id),
+    onSuccess: (data) => {
+      setPushResult({ success: true, message: data.message });
+      setShowCommitToast(false);
+      queryClient.invalidateQueries({ queryKey: ['pretargeting-detail', billing_id] });
+      queryClient.invalidateQueries({ queryKey: ['pretargeting-configs'] });
+      queryClient.invalidateQueries({ queryKey: ['pretargeting-publishers', billing_id] });
     },
     onError: (error: Error) => {
       setPushResult({ success: false, message: error.message });
@@ -1162,7 +1188,11 @@ export function PretargetingSettingsEditor({
     },
   });
 
-  const isPushing = applyAllMutation.isPending || suspendMutation.isPending || activateMutation.isPending;
+  const isPushing =
+    applyAllMutation.isPending ||
+    discardAllMutation.isPending ||
+    suspendMutation.isPending ||
+    activateMutation.isPending;
 
   // Get pending changes by type
   const getPendingByType = (changeType: string): string[] => {
@@ -1668,13 +1698,11 @@ export function PretargetingSettingsEditor({
                   {t.pretargeting.pushToGoogle}
                 </button>
                 <button
-                  onClick={() => {
-                    // Cancel all pending changes
-                    pendingChanges.forEach(c => cancelChangeMutation.mutate(c.id));
-                  }}
-                  className="px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded hover:bg-gray-200 transition-colors"
+                  onClick={() => discardAllMutation.mutate()}
+                  disabled={isPushing}
+                  className="px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded hover:bg-gray-200 transition-colors disabled:opacity-50"
                 >
-                  {t.pretargeting.clearAll}
+                  {t.pretargeting.discardAll}
                 </button>
               </div>
             </div>
@@ -1713,6 +1741,7 @@ export function PretargetingSettingsEditor({
               setShowHistory(true);
             }}
             onApplyPending={openCommitToast}
+            onDiscardPending={() => discardAllMutation.mutate()}
             onBulkAdd={(values) => values.forEach((publisherId) => queuePublisherAdd(publisherId))}
             onExportCsv={handleExportPublishers}
             disabled={isPushing || addPublisherMutation.isPending || removePublisherMutation.isPending}
@@ -1806,14 +1835,22 @@ export function PretargetingSettingsEditor({
           <div className="flex items-center justify-end gap-2 px-3 py-2">
             <button
               onClick={() => setShowCommitToast(false)}
-              disabled={applyAllMutation.isPending}
+              disabled={applyAllMutation.isPending || discardAllMutation.isPending}
               className="rounded border px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50"
             >
-              {t.common.cancel}
+              {t.common.back}
+            </button>
+            <button
+              onClick={() => discardAllMutation.mutate()}
+              disabled={applyAllMutation.isPending || discardAllMutation.isPending}
+              className="inline-flex items-center gap-1 rounded border border-red-200 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"
+            >
+              {discardAllMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+              {t.pretargeting.discardAll}
             </button>
             <button
               onClick={() => applyAllMutation.mutate()}
-              disabled={applyAllMutation.isPending}
+              disabled={applyAllMutation.isPending || discardAllMutation.isPending}
               className="inline-flex items-center gap-1 rounded bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
             >
               {applyAllMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}

@@ -79,6 +79,16 @@ class ChangesRepository:
             (change_id,),
         )
 
+    async def cancel_pending_changes_for_billing(self, billing_id: str) -> int:
+        return await pg_execute(
+            """
+            UPDATE pretargeting_pending_changes
+            SET status = 'cancelled'
+            WHERE billing_id = %s AND status = 'pending'
+            """,
+            (billing_id,),
+        )
+
     async def mark_pending_change_applied(
         self, change_id: int, applied_by: str | None = None
     ) -> int:

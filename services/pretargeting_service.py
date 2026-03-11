@@ -379,6 +379,13 @@ class PretargetingService:
         )
         return rows
 
+    async def discard_pending_publisher_changes(self, billing_id: str) -> int:
+        if not billing_id:
+            raise ValueError("billing_id is required")
+        discarded = await self._repo.discard_pending_publisher_changes(billing_id)
+        self._invalidate_publishers_cache(billing_id)
+        return discarded
+
     async def get_publisher_rows(self, billing_id: str, publisher_id: str) -> list[dict[str, Any]]:
         if not billing_id or not publisher_id:
             raise ValueError("billing_id and publisher_id are required")

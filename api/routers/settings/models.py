@@ -262,6 +262,16 @@ class ApplyAllResponse(BaseModel):
     message: str
 
 
+class DiscardAllPendingChangesResponse(BaseModel):
+    """Response for discarding all staged changes for a config."""
+    status: str
+    billing_id: str
+    pending_changes_discarded: int
+    publisher_changes_discarded: int
+    changes_discarded: int
+    message: str
+
+
 class SuspendActivateResponse(BaseModel):
     """Response for suspend/activate operations."""
     status: str

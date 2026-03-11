@@ -102,6 +102,15 @@ export interface ApplyAllResponse {
   message: string;
 }
 
+export interface DiscardAllPendingChangesResponse {
+  status: string;
+  billing_id: string;
+  pending_changes_discarded: number;
+  publisher_changes_discarded: number;
+  changes_discarded: number;
+  message: string;
+}
+
 export interface SuspendActivateResponse {
   status: string;
   billing_id: string;
@@ -354,6 +363,15 @@ export async function applyAllPendingChanges(
 ): Promise<ApplyAllResponse> {
   return fetchApi<ApplyAllResponse>(
     `/settings/pretargeting/${encodeURIComponent(billingId)}/apply-all?dry_run=${dryRun}`,
+    { method: "POST" }
+  );
+}
+
+export async function discardAllPretargetingChanges(
+  billingId: string
+): Promise<DiscardAllPendingChangesResponse> {
+  return fetchApi<DiscardAllPendingChangesResponse>(
+    `/settings/pretargeting/${encodeURIComponent(billingId)}/discard-all`,
     { method: "POST" }
   );
 }
