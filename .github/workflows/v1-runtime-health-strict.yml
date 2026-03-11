@@ -34,6 +34,10 @@ on:
         description: "Optional JSON waiver for buyers with known 100% missing bidstream dimensions"
         required: false
         default: ""
+      conversion_readiness_waiver_json:
+        description: "Optional JSON waiver for buyers with known conversion-readiness gaps"
+        required: false
+        default: ""
       canary_timeout_seconds:
         description: "Per-request timeout for canary HTTP calls (seconds)"
         required: false
@@ -61,7 +65,8 @@ jobs:
       CATSCAN_CANARY_QPS_PAGE_SLO_SINCE_HOURS: ${{ github.event.inputs.qps_page_slo_since_hours || vars.CATSCAN_RUNTIME_HEALTH_QPS_PAGE_SLO_SINCE_HOURS || '168' }}
       CATSCAN_CANARY_MAX_HOME_ENDPOINT_EFFICIENCY_LATENCY_MS: ${{ vars.CATSCAN_RUNTIME_HEALTH_MAX_HOME_ENDPOINT_EFFICIENCY_LATENCY_MS || '12000' }}
       CATSCAN_RUNTIME_HEALTH_ENDPOINT_EFFICIENCY_BUDGET_WAIVER_EXPIRES_ON: ${{ vars.CATSCAN_RUNTIME_HEALTH_ENDPOINT_EFFICIENCY_BUDGET_WAIVER_EXPIRES_ON || '2026-03-12' }}
-      CATSCAN_CANARY_BIDSTREAM_DIMENSION_WAIVER_JSON: ${{ github.event.inputs.bidstream_dimension_waiver_json || vars.CATSCAN_RUNTIME_HEALTH_BIDSTREAM_WAIVER_JSON || '[{"buyer_id":"1111111111","expires_on":"2026-06-30","note":"Google RTB source for this buyer does not provide platform/environment/transaction_type dimensions","allow_unavailable":true,"allow_zero_rows":true,"allow_all_dimensions_missing":true,"allow_report_completeness_degraded":true,"allow_seat_day_completeness_degraded":true}]' }}
+      CATSCAN_CANARY_BIDSTREAM_DIMENSION_WAIVER_JSON: ${{ github.event.inputs.bidstream_dimension_waiver_json || vars.CATSCAN_RUNTIME_HEALTH_BIDSTREAM_WAIVER_JSON || '[{"buyer_id":"1111111111","expires_on":"2026-06-30","note":"Google RTB source for this buyer does not provide platform/environment/transaction_type dimensions","allow_unavailable":true,"allow_zero_rows":true,"allow_all_dimensions_missing":true,"allow_report_completeness_degraded":true,"allow_seat_day_completeness_degraded":true,"allow_seat_day_zero_rows":true}]' }}
+      CATSCAN_CANARY_CONVERSION_READINESS_WAIVER_JSON: ${{ github.event.inputs.conversion_readiness_waiver_json || vars.CATSCAN_RUNTIME_HEALTH_CONVERSION_READINESS_WAIVER_JSON || '' }}
       CATSCAN_CANARY_TIMEOUT_SECONDS: ${{ github.event.inputs.canary_timeout_seconds || vars.CATSCAN_RUNTIME_HEALTH_TIMEOUT_SECONDS || '240' }}
       CATSCAN_BEARER_TOKEN: ${{ secrets.CATSCAN_CANARY_BEARER_TOKEN }}
       CATSCAN_SESSION_COOKIE: ${{ secrets.CATSCAN_CANARY_SESSION_COOKIE }}

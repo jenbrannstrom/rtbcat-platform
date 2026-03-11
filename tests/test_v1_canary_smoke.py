@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+from datetime import date
 import urllib.error
 import pytest
 
 from scripts.v1_canary_smoke import (
+    BidstreamDimensionWaiver,
+    ConversionReadinessWaiver,
     SmokeFailure,
     SmokeEnvironmentBlocked,
     SmokeClient,
@@ -19,6 +22,7 @@ from scripts.v1_canary_smoke import (
     build_workflow_request_params,
     is_auth_blocked_http_response,
     is_network_blocked_urlerror,
+    validate_conversion_readiness_payload,
     validate_data_health_payload,
 )
 
@@ -40,6 +44,15 @@ def _base_payload() -> dict:
                 "summary": {"total_seat_days": 2},
             },
         }
+    }
+
+
+def _base_conversion_readiness_payload(state: str = "ready") -> dict:
+    return {
+        "state": state,
+        "accepted_total": 5,
+        "active_sources": 1,
+        "reasons": [],
     }
 
 
@@ -103,6 +116,88 @@ def test_validate_data_health_payload_rejects_non_healthy_when_strict():
             max_dimension_missing_pct=99.9,
             bidstream_dimension_waiver=None,
         )
+
+
+def test_validate_data_health_payload_rejects_zero_seat_day_rows_without_waiver():
+    payload = _base_payload()
+    payload["optimizer_readiness"]["seat_day_completeness"]["summary"]["total_seat_days"] = 0
+
+    with pytest.raises(SmokeFailure, match="seat_day_completeness has zero seat-day rows"):
+        validate_data_health_payload(
+            payload,
+            require_healthy_readiness=False,
+            max_dimension_missing_pct=99.9,
+            bidstream_dimension_waiver=None,
+        )
+
+
+def test_validate_data_health_payload_allows_zero_seat_day_rows_with_waiver():
+    payload = _base_payload()
+    payload["optimizer_readiness"]["seat_day_completeness"]["summary"]["total_seat_days"] = 0
+
+    validate_data_health_payload(
+        payload,
+        require_healthy_readiness=False,
+        max_dimension_missing_pct=99.9,
+        bidstream_dimension_waiver=BidstreamDimensionWaiver(
+            buyer_id="buyer-1",
+            expires_on=date(2026, 6, 30),
+            note="known staging seat-day gap",
+            allow_seat_day_zero_rows=True,
+        ),
+    )
+
+
+def test_validate_conversion_readiness_payload_rejects_degraded_without_waiver():
+    payload = _base_conversion_readiness_payload(state="degraded")
+
+    with pytest.raises(SmokeFailure, match="/conversions/readiness state is 'degraded', expected 'ready'"):
+        validate_conversion_readiness_payload(
+            payload,
+            require_conversion_ready=True,
+            conversion_readiness_waiver=None,
+        )
+
+
+def test_validate_conversion_readiness_payload_allows_degraded_with_waiver():
+    payload = _base_conversion_readiness_payload(state="degraded")
+
+    validate_conversion_readiness_payload(
+        payload,
+        require_conversion_ready=True,
+        conversion_readiness_waiver=ConversionReadinessWaiver(
+            buyer_id="buyer-1",
+            expires_on=date(2026, 3, 31),
+            note="known staging conversion lag",
+            allow_degraded=True,
+        ),
+    )
+
+
+def test_validate_conversion_readiness_payload_blocks_unavailable_without_waiver():
+    payload = _base_conversion_readiness_payload(state="unavailable")
+
+    with pytest.raises(SmokeEnvironmentBlocked, match="/conversions/readiness state is 'unavailable'"):
+        validate_conversion_readiness_payload(
+            payload,
+            require_conversion_ready=True,
+            conversion_readiness_waiver=None,
+        )
+
+
+def test_validate_conversion_readiness_payload_allows_unavailable_with_waiver():
+    payload = _base_conversion_readiness_payload(state="unavailable")
+
+    validate_conversion_readiness_payload(
+        payload,
+        require_conversion_ready=True,
+        conversion_readiness_waiver=ConversionReadinessWaiver(
+            buyer_id="buyer-1",
+            expires_on=date(2026, 3, 31),
+            note="known staging conversion outage",
+            allow_unavailable=True,
+        ),
+    )
 
 
 def test_build_workflow_request_params_includes_profile_when_present():

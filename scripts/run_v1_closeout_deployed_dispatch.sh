@@ -12,6 +12,8 @@ MODEL_ID="${CATSCAN_MODEL_ID:-}"
 CANARY_PROFILE="${CATSCAN_CANARY_PROFILE:-balanced}"
 QPS_PAGE_SLO_SINCE_HOURS="${CATSCAN_CANARY_QPS_PAGE_SLO_SINCE_HOURS:-168}"
 ALLOW_BLOCKED_RAW="${CATSCAN_CLOSEOUT_ALLOW_BLOCKED:-false}"
+WAIVER_JSON="${CATSCAN_CANARY_BIDSTREAM_DIMENSION_WAIVER_JSON:-}"
+CONVERSION_WAIVER_JSON="${CATSCAN_CANARY_CONVERSION_READINESS_WAIVER_JSON:-}"
 CANARY_TIMEOUT_SECONDS="${CATSCAN_CANARY_TIMEOUT_SECONDS:-240}"
 
 WATCH_RUN=1
@@ -37,6 +39,8 @@ Options:
                                   Canary profile (default: balanced)
   --since-hours <n>               QPS page SLO lookback hours (default: 168)
   --allow-blocked <true|false>    Treat blocked checks as non-fatal (default: false)
+  --bidstream-waiver-json <json>  Optional waiver JSON for known bidstream/data-health gaps
+  --conversion-waiver-json <json> Optional waiver JSON for known conversion-readiness gaps
   --canary-timeout <seconds>      Per-request canary HTTP timeout (default: 240)
   --repo <owner/repo>             GitHub repo (default: YOUR_ORG/rtbcat-platform)
   --ref <branch>                  Git ref/branch (default: main)
@@ -225,6 +229,8 @@ dispatch_deployed_workflow() {
     -f inputs[canary_profile]="$CANARY_PROFILE" \
     -f inputs[qps_page_slo_since_hours]="$QPS_PAGE_SLO_SINCE_HOURS" \
     -f inputs[allow_blocked]="$ALLOW_BLOCKED" \
+    -f inputs[bidstream_dimension_waiver_json]="$WAIVER_JSON" \
+    -f inputs[conversion_readiness_waiver_json]="$CONVERSION_WAIVER_JSON" \
     -f inputs[canary_timeout_seconds]="$CANARY_TIMEOUT_SECONDS"
 
   local run_id
@@ -334,6 +340,14 @@ while [[ $# -gt 0 ]]; do
       ;;
     --allow-blocked)
       ALLOW_BLOCKED_RAW="${2:-}"
+      shift 2
+      ;;
+    --bidstream-waiver-json)
+      WAIVER_JSON="${2:-}"
+      shift 2
+      ;;
+    --conversion-waiver-json)
+      CONVERSION_WAIVER_JSON="${2:-}"
       shift 2
       ;;
     --canary-timeout)

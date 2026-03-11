@@ -11,6 +11,7 @@ MODEL_ID="${CATSCAN_MODEL_ID:-}"
 CANARY_PROFILE="${CATSCAN_CANARY_PROFILE:-balanced}"
 QPS_PAGE_SLO_SINCE_HOURS="${CATSCAN_CANARY_QPS_PAGE_SLO_SINCE_HOURS:-168}"
 WAIVER_JSON="${CATSCAN_CANARY_BIDSTREAM_DIMENSION_WAIVER_JSON:-}"
+CONVERSION_WAIVER_JSON="${CATSCAN_CANARY_CONVERSION_READINESS_WAIVER_JSON:-}"
 CANARY_TIMEOUT_SECONDS="${CATSCAN_CANARY_TIMEOUT_SECONDS:-240}"
 POLL_TIMEOUT_SECONDS="${CATSCAN_CLOSEOUT_POLL_TIMEOUT_SECONDS:-180}"
 
@@ -27,6 +28,7 @@ Options:
                                   Canary profile (default: balanced)
   --since-hours <n>               QPS page SLO lookback hours (default: 168)
   --bidstream-waiver-json <json>  Optional waiver JSON for known bidstream dimension gaps
+  --conversion-waiver-json <json> Optional waiver JSON for known conversion-readiness gaps
   --canary-timeout <seconds>      Per-request canary HTTP timeout (default: 240)
   --repo <owner/repo>             GitHub repo (default: YOUR_ORG/rtbcat-platform)
   --ref <branch>                  Git ref/branch (default: main)
@@ -94,6 +96,10 @@ while [[ $# -gt 0 ]]; do
       WAIVER_JSON="${2:-}"
       shift 2
       ;;
+    --conversion-waiver-json)
+      CONVERSION_WAIVER_JSON="${2:-}"
+      shift 2
+      ;;
     --repo)
       REPO="${2:-}"
       shift 2
@@ -130,6 +136,7 @@ gh api "repos/${REPO}/actions/workflows/${WORKFLOW}/dispatches" \
   -f inputs[canary_profile]="$CANARY_PROFILE" \
   -f inputs[qps_page_slo_since_hours]="$QPS_PAGE_SLO_SINCE_HOURS" \
   -f inputs[bidstream_dimension_waiver_json]="$WAIVER_JSON" \
+  -f inputs[conversion_readiness_waiver_json]="$CONVERSION_WAIVER_JSON" \
   -f inputs[canary_timeout_seconds]="$CANARY_TIMEOUT_SECONDS"
 
 run_id="$(wait_for_new_run_id "$previous_run_id")"
