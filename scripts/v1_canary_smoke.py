@@ -28,7 +28,7 @@ class SmokeEnvironmentBlocked(SmokeFailure):
 
 @dataclass(frozen=True)
 class BidstreamDimensionWaiver:
-    """Buyer-scoped waiver for missing bidstream dimensions."""
+    """Buyer-scoped waiver for known data-health gaps in deployed canaries."""
 
     buyer_id: str
     expires_on: date
@@ -38,6 +38,18 @@ class BidstreamDimensionWaiver:
     allow_all_dimensions_missing: bool = True
     allow_report_completeness_degraded: bool = False
     allow_seat_day_completeness_degraded: bool = False
+    allow_seat_day_zero_rows: bool = False
+
+
+@dataclass(frozen=True)
+class ConversionReadinessWaiver:
+    """Buyer-scoped waiver for known conversion-readiness gaps in deployed canaries."""
+
+    buyer_id: str
+    expires_on: date
+    note: str
+    allow_degraded: bool = False
+    allow_unavailable: bool = False
 
 
 def _join_url(base_url: str, path: str) -> str:
@@ -46,15 +58,9 @@ def _join_url(base_url: str, path: str) -> str:
     return f"{base}{suffix}"
 
 
-def parse_bidstream_dimension_waivers(raw_json: str | None) -> dict[str, BidstreamDimensionWaiver]:
-    """Parse buyer waivers from JSON.
-
-    Accepted shapes:
-      - single object: {"buyer_id":"...","expires_on":"YYYY-MM-DD","note":"..."}
-      - list of objects with the same keys.
-    """
+def _parse_waiver_entries(raw_json: str | None) -> list[dict[str, Any]]:
     if raw_json is None or not raw_json.strip():
-        return {}
+        return []
 
     try:
         parsed = json.loads(raw_json)
@@ -68,24 +74,37 @@ def parse_bidstream_dimension_waivers(raw_json: str | None) -> dict[str, Bidstre
     else:
         raise ValueError("expected object or array")
 
-    waivers: dict[str, BidstreamDimensionWaiver] = {}
-
-    def _parse_bool(entry: dict[str, Any], key: str, default: bool) -> bool:
-        value = entry.get(key, default)
-        if isinstance(value, bool):
-            return value
-        if isinstance(value, str):
-            normalized = value.strip().lower()
-            if normalized in {"1", "true", "yes", "on"}:
-                return True
-            if normalized in {"0", "false", "no", "off"}:
-                return False
-        raise ValueError(f"invalid boolean for {key}")
-
     for idx, entry in enumerate(entries):
         if not isinstance(entry, dict):
             raise ValueError(f"entry {idx} must be an object")
+    return entries
 
+
+def _parse_waiver_bool(entry: dict[str, Any], key: str, default: bool) -> bool:
+    value = entry.get(key, default)
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"1", "true", "yes", "on"}:
+            return True
+        if normalized in {"0", "false", "no", "off"}:
+            return False
+    raise ValueError(f"invalid boolean for {key}")
+
+
+def parse_bidstream_dimension_waivers(raw_json: str | None) -> dict[str, BidstreamDimensionWaiver]:
+    """Parse buyer waivers from JSON.
+
+    Accepted shapes:
+      - single object: {"buyer_id":"...","expires_on":"YYYY-MM-DD","note":"..."}
+      - list of objects with the same keys.
+    """
+    entries = _parse_waiver_entries(raw_json)
+
+    waivers: dict[str, BidstreamDimensionWaiver] = {}
+
+    for idx, entry in enumerate(entries):
         buyer_id = str(entry.get("buyer_id") or "").strip()
         expires_raw = str(entry.get("expires_on") or "").strip()
         note = str(entry.get("note") or "").strip()
@@ -100,14 +119,19 @@ def parse_bidstream_dimension_waivers(raw_json: str | None) -> dict[str, Bidstre
         except ValueError as exc:
             raise ValueError(f"entry {idx} invalid expires_on (expected YYYY-MM-DD)") from exc
         try:
-            allow_unavailable = _parse_bool(entry, "allow_unavailable", False)
-            allow_zero_rows = _parse_bool(entry, "allow_zero_rows", False)
-            allow_all_dimensions_missing = _parse_bool(entry, "allow_all_dimensions_missing", True)
-            allow_report_completeness_degraded = _parse_bool(
+            allow_unavailable = _parse_waiver_bool(entry, "allow_unavailable", False)
+            allow_zero_rows = _parse_waiver_bool(entry, "allow_zero_rows", False)
+            allow_all_dimensions_missing = _parse_waiver_bool(
+                entry, "allow_all_dimensions_missing", True
+            )
+            allow_report_completeness_degraded = _parse_waiver_bool(
                 entry, "allow_report_completeness_degraded", False
             )
-            allow_seat_day_completeness_degraded = _parse_bool(
+            allow_seat_day_completeness_degraded = _parse_waiver_bool(
                 entry, "allow_seat_day_completeness_degraded", False
+            )
+            allow_seat_day_zero_rows = _parse_waiver_bool(
+                entry, "allow_seat_day_zero_rows", False
             )
         except ValueError as exc:
             raise ValueError(f"entry {idx} {exc}") from exc
@@ -121,6 +145,45 @@ def parse_bidstream_dimension_waivers(raw_json: str | None) -> dict[str, Bidstre
             allow_all_dimensions_missing=allow_all_dimensions_missing,
             allow_report_completeness_degraded=allow_report_completeness_degraded,
             allow_seat_day_completeness_degraded=allow_seat_day_completeness_degraded,
+            allow_seat_day_zero_rows=allow_seat_day_zero_rows,
+        )
+    return waivers
+
+
+def parse_conversion_readiness_waivers(
+    raw_json: str | None,
+) -> dict[str, ConversionReadinessWaiver]:
+    """Parse buyer waivers for conversion readiness from JSON."""
+    entries = _parse_waiver_entries(raw_json)
+
+    waivers: dict[str, ConversionReadinessWaiver] = {}
+
+    for idx, entry in enumerate(entries):
+        buyer_id = str(entry.get("buyer_id") or "").strip()
+        expires_raw = str(entry.get("expires_on") or "").strip()
+        note = str(entry.get("note") or "").strip()
+        if not buyer_id:
+            raise ValueError(f"entry {idx} missing buyer_id")
+        if not expires_raw:
+            raise ValueError(f"entry {idx} missing expires_on")
+        if not note:
+            raise ValueError(f"entry {idx} missing note")
+        try:
+            expires_on = date.fromisoformat(expires_raw)
+        except ValueError as exc:
+            raise ValueError(f"entry {idx} invalid expires_on (expected YYYY-MM-DD)") from exc
+        try:
+            allow_degraded = _parse_waiver_bool(entry, "allow_degraded", False)
+            allow_unavailable = _parse_waiver_bool(entry, "allow_unavailable", False)
+        except ValueError as exc:
+            raise ValueError(f"entry {idx} {exc}") from exc
+
+        waivers[buyer_id] = ConversionReadinessWaiver(
+            buyer_id=buyer_id,
+            expires_on=expires_on,
+            note=note,
+            allow_degraded=allow_degraded,
+            allow_unavailable=allow_unavailable,
         )
     return waivers
 
@@ -436,10 +499,18 @@ def validate_data_health_payload(
                     f"{field}={value:.2f}% exceeds max {max_dimension_missing_pct:.2f}%",
                 )
 
-    _assert(
-        int(seat_day_summary.get("total_seat_days") or 0) > 0,
-        "seat_day_completeness has zero seat-day rows",
-    )
+    total_seat_days = int(seat_day_summary.get("total_seat_days") or 0)
+    if total_seat_days <= 0:
+        if waiver_active and bidstream_dimension_waiver.allow_seat_day_zero_rows:
+            print(
+                "INFO  Data health waiver applied -> "
+                f"buyer_id={bidstream_dimension_waiver.buyer_id}, "
+                "scope=seat_day_zero_rows, "
+                f"expires_on={bidstream_dimension_waiver.expires_on.isoformat()}, "
+                f"note={bidstream_dimension_waiver.note}"
+            )
+        else:
+            _assert(False, "seat_day_completeness has zero seat-day rows")
 
     if require_healthy_readiness:
         report_state = str(report.get("availability_state", "")).lower()
@@ -484,6 +555,76 @@ def validate_data_health_payload(
                 f"seat_day_completeness state is {seat_day_state!r}, expected healthy",
             )
     return
+
+
+def validate_conversion_readiness_payload(
+    payload: dict[str, Any],
+    *,
+    require_conversion_ready: bool,
+    conversion_readiness_waiver: ConversionReadinessWaiver | None,
+) -> None:
+    """Validate conversion readiness invariants for canary checks."""
+    _assert("state" in payload, "state missing from /conversions/readiness")
+    _assert("accepted_total" in payload, "accepted_total missing from /conversions/readiness")
+    _assert("active_sources" in payload, "active_sources missing from /conversions/readiness")
+    _assert(isinstance(payload.get("reasons"), list), "reasons missing from /conversions/readiness")
+
+    if not require_conversion_ready:
+        return
+
+    state = str(payload.get("state", "")).lower()
+    if state == "ready":
+        return
+
+    today_utc = datetime.now(timezone.utc).date()
+    waiver_active = (
+        conversion_readiness_waiver is not None
+        and today_utc <= conversion_readiness_waiver.expires_on
+    )
+
+    if state == "degraded" and waiver_active and conversion_readiness_waiver.allow_degraded:
+        print(
+            "INFO  Conversion readiness waiver applied -> "
+            f"buyer_id={conversion_readiness_waiver.buyer_id}, "
+            "scope=state_degraded, "
+            f"expires_on={conversion_readiness_waiver.expires_on.isoformat()}, "
+            f"note={conversion_readiness_waiver.note}"
+        )
+        return
+
+    if state == "unavailable":
+        if waiver_active and conversion_readiness_waiver.allow_unavailable:
+            print(
+                "INFO  Conversion readiness waiver applied -> "
+                f"buyer_id={conversion_readiness_waiver.buyer_id}, "
+                "scope=state_unavailable, "
+                f"expires_on={conversion_readiness_waiver.expires_on.isoformat()}, "
+                f"note={conversion_readiness_waiver.note}"
+            )
+            return
+        if conversion_readiness_waiver is not None and not waiver_active:
+            raise SmokeEnvironmentBlocked(
+                f"/conversions/readiness state is {state!r} "
+                "(no conversion data ingested for this buyer). "
+                f"Waiver expired on {conversion_readiness_waiver.expires_on.isoformat()} "
+                f"(note: {conversion_readiness_waiver.note})"
+            )
+        raise SmokeEnvironmentBlocked(
+            f"/conversions/readiness state is {state!r} "
+            "(no conversion data ingested for this buyer)"
+        )
+
+    if state == "degraded" and conversion_readiness_waiver is not None and not waiver_active:
+        raise SmokeFailure(
+            f"/conversions/readiness state is {state!r}, expected 'ready'. "
+            f"Waiver expired on {conversion_readiness_waiver.expires_on.isoformat()} "
+            f"(note: {conversion_readiness_waiver.note})"
+        )
+
+    _assert(
+        state == "ready",
+        f"/conversions/readiness state is {state!r}, expected 'ready'",
+    )
 
 
 def build_workflow_request_params(
@@ -695,6 +836,14 @@ def main() -> int:
         help=(
             "Optional JSON waiver object/array for buyers with known 100%%-missing bidstream "
             "dimensions. Schema: [{\"buyer_id\":\"...\",\"expires_on\":\"YYYY-MM-DD\",\"note\":\"...\"}]"
+        ),
+    )
+    parser.add_argument(
+        "--conversion-readiness-waiver-json",
+        default=os.getenv("CATSCAN_CANARY_CONVERSION_READINESS_WAIVER_JSON", ""),
+        help=(
+            "Optional JSON waiver object/array for buyers with known conversion-readiness "
+            "gaps. Schema: [{\"buyer_id\":\"...\",\"expires_on\":\"YYYY-MM-DD\",\"note\":\"...\"}]"
         ),
     )
     parser.add_argument(
@@ -1026,6 +1175,15 @@ def main() -> int:
     active_bidstream_dimension_waiver = bidstream_dimension_waivers.get(
         str(args.buyer_id or "").strip()
     )
+    try:
+        conversion_readiness_waivers = parse_conversion_readiness_waivers(
+            args.conversion_readiness_waiver_json
+        )
+    except ValueError as exc:
+        parser.error(f"--conversion-readiness-waiver-json invalid: {exc}")
+    active_conversion_readiness_waiver = conversion_readiness_waivers.get(
+        str(args.buyer_id or "").strip()
+    )
 
     client = SmokeClient(
         base_url=args.base_url,
@@ -1071,21 +1229,11 @@ def main() -> int:
                 freshness_hours=args.conversion_readiness_freshness_hours,
             ),
         )
-        _assert("state" in payload, "state missing from /conversions/readiness")
-        _assert("accepted_total" in payload, "accepted_total missing from /conversions/readiness")
-        _assert("active_sources" in payload, "active_sources missing from /conversions/readiness")
-        _assert(isinstance(payload.get("reasons"), list), "reasons missing from /conversions/readiness")
-        if args.require_conversion_ready:
-            state = str(payload.get("state", "")).lower()
-            if state == "unavailable":
-                raise SmokeEnvironmentBlocked(
-                    f"/conversions/readiness state is {state!r} "
-                    "(no conversion data ingested for this buyer)"
-                )
-            _assert(
-                state == "ready",
-                f"/conversions/readiness state is {state!r}, expected 'ready'",
-            )
+        validate_conversion_readiness_payload(
+            payload,
+            require_conversion_ready=args.require_conversion_ready,
+            conversion_readiness_waiver=active_conversion_readiness_waiver,
+        )
 
     def check_conversion_stats() -> None:
         payload = client.request(
