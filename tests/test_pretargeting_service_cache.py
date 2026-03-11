@@ -27,6 +27,7 @@ class _StubPretargetingRepo:
         self.delete_publisher_calls = 0
         self.clear_sync_publishers_calls = 0
         self.list_pending_publisher_changes_calls = 0
+        self.discard_pending_publisher_changes_calls = 0
         self.rows: list[dict[str, object]] = [{"billing_id": "1001"}]
         self.history_rows: list[dict[str, object]] = [{"config_id": "cfg-1", "change_type": "update"}]
         self.config_row: dict[str, object] | None = {"billing_id": "1001", "state": "ACTIVE"}
@@ -176,6 +177,16 @@ class _StubPretargetingRepo:
             for row in self.pending_publisher_rows
             if row["billing_id"] == billing_id
         ]
+
+    async def discard_pending_publisher_changes(self, billing_id: str) -> int:
+        self.discard_pending_publisher_changes_calls += 1
+        before = len(self.pending_publisher_rows)
+        self.pending_publisher_rows = [
+            row
+            for row in self.pending_publisher_rows
+            if row["billing_id"] != billing_id
+        ]
+        return before - len(self.pending_publisher_rows)
 
 
 @pytest.mark.asyncio
@@ -398,6 +409,24 @@ async def test_update_publisher_status_invalidates_pending_changes_cache() -> No
     assert repo.update_publisher_status_calls == 1
     assert repo.list_pending_publisher_changes_calls == 2
     assert refreshed[0]["publisher_id"] == "pub-9"
+
+
+@pytest.mark.asyncio
+async def test_discard_pending_publisher_changes_invalidates_pending_changes_cache() -> None:
+    _clear_service_caches()
+    repo = _StubPretargetingRepo()
+    service = PretargetingService(repo=repo)
+
+    await service.list_pending_publisher_changes("1001")
+    assert repo.list_pending_publisher_changes_calls == 1
+
+    discarded = await service.discard_pending_publisher_changes("1001")
+    refreshed = await service.list_pending_publisher_changes("1001")
+
+    assert discarded == 1
+    assert repo.discard_pending_publisher_changes_calls == 1
+    assert repo.list_pending_publisher_changes_calls == 2
+    assert refreshed == []
 
 
 @pytest.mark.asyncio

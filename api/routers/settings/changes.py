@@ -13,7 +13,12 @@ from services.changes_service import ChangesService
 from services.pretargeting_service import PretargetingService
 from utils.list_payloads import parse_list_payload
 
-from .models import ConfigDetailResponse, PendingChangeCreate, PendingChangeResponse
+from .models import (
+    ConfigDetailResponse,
+    DiscardAllPendingChangesResponse,
+    PendingChangeCreate,
+    PendingChangeResponse,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -271,6 +276,54 @@ async def cancel_pending_change(
     except Exception as e:
         logger.error(f"Failed to cancel pending change: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to cancel pending change: {str(e)}")
+
+
+@router.post(
+    "/settings/pretargeting/{billing_id}/discard-all",
+    response_model=DiscardAllPendingChangesResponse,
+)
+async def discard_all_pending_changes(
+    billing_id: str,
+    _user: User = Depends(require_seat_admin_or_sudo),
+) -> DiscardAllPendingChangesResponse:
+    """Discard all staged changes for a pretargeting config."""
+    try:
+        change_service = ChangesService()
+        pretargeting_service = PretargetingService()
+
+        config = await pretargeting_service.get_config(billing_id)
+        if not config:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Pretargeting config not found for ID (billing_id): {billing_id}",
+            )
+
+        pending_changes_discarded, publisher_changes_discarded = await asyncio.gather(
+            change_service.cancel_pending_changes_for_billing(billing_id),
+            pretargeting_service.discard_pending_publisher_changes(billing_id),
+        )
+        changes_discarded = pending_changes_discarded + publisher_changes_discarded
+        noun = "change" if changes_discarded == 1 else "changes"
+
+        return DiscardAllPendingChangesResponse(
+            status="discarded",
+            billing_id=billing_id,
+            pending_changes_discarded=pending_changes_discarded,
+            publisher_changes_discarded=publisher_changes_discarded,
+            changes_discarded=changes_discarded,
+            message=f"Discarded {changes_discarded} pending {noun} for {billing_id}.",
+        )
+
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to discard pending changes: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to discard pending changes: {str(e)}",
+        )
 
 
 @router.post("/settings/pretargeting/pending-change/{change_id}/mark-applied")

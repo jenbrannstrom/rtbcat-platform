@@ -12,6 +12,7 @@ import {
   createPendingChange,
   cancelPendingChange,
   applyAllPendingChanges,
+  discardAllPretargetingChanges,
   syncPretargetingConfigs,
   searchGeoTargets,
   getPretargetingHistory,
@@ -260,13 +261,31 @@ export function ConfigBreakdownPanel({
       queryClient.invalidateQueries({ queryKey: ['pretargeting-detail', billing_id] });
       queryClient.invalidateQueries({ queryKey: ['pretargeting-configs'] });
       queryClient.invalidateQueries({ queryKey: ['config-breakdown', billing_id] });
+      queryClient.invalidateQueries({ queryKey: ['pretargeting-publishers', billing_id] });
+    },
+    onError: (error: Error) => {
+      setPushResult({ success: false, message: error.message });
+    },
+  });
+  const discardAllMutation = useMutation({
+    mutationFn: () => discardAllPretargetingChanges(billing_id),
+    onSuccess: (result) => {
+      setPushResult({ success: true, message: result.message });
+      setShowCommitToast(false);
+      queryClient.invalidateQueries({ queryKey: ['pretargeting-detail', billing_id] });
+      queryClient.invalidateQueries({ queryKey: ['pretargeting-configs'] });
+      queryClient.invalidateQueries({ queryKey: ['config-breakdown', billing_id] });
+      queryClient.invalidateQueries({ queryKey: ['pretargeting-publishers', billing_id] });
     },
     onError: (error: Error) => {
       setPushResult({ success: false, message: error.message });
     },
   });
   const changeActionBusy =
-    createChangeMutation.isPending || cancelChangeMutation.isPending || applyAllMutation.isPending;
+    createChangeMutation.isPending ||
+    cancelChangeMutation.isPending ||
+    applyAllMutation.isPending ||
+    discardAllMutation.isPending;
 
   // Animate height changes
   useEffect(() => {
@@ -2060,7 +2079,7 @@ export function ConfigBreakdownPanel({
                 </div>
                 <div className="mt-3 flex items-center justify-between">
                   <button
-                    onClick={() => pendingChanges.forEach((change) => cancelChangeMutation.mutate(change.id))}
+                    onClick={() => discardAllMutation.mutate()}
                     disabled={changeActionBusy}
                     className="text-xs text-yellow-700 hover:text-yellow-900 disabled:opacity-50"
                   >
@@ -2107,14 +2126,22 @@ export function ConfigBreakdownPanel({
             <div className="flex justify-end gap-2 px-3 py-2">
               <button
                 onClick={() => setShowCommitToast(false)}
-                disabled={applyAllMutation.isPending}
+                disabled={applyAllMutation.isPending || discardAllMutation.isPending}
                 className="rounded border px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50"
               >
-                {t.common.cancel}
+                {t.common.back}
+              </button>
+              <button
+                onClick={() => discardAllMutation.mutate()}
+                disabled={applyAllMutation.isPending || discardAllMutation.isPending}
+                className="inline-flex items-center gap-1 rounded border border-red-200 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"
+              >
+                {discardAllMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+                {t.pretargeting.discardAll}
               </button>
               <button
                 onClick={() => applyAllMutation.mutate()}
-                disabled={applyAllMutation.isPending}
+                disabled={applyAllMutation.isPending || discardAllMutation.isPending}
                 className="inline-flex items-center gap-1 rounded bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
               >
                 {applyAllMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}

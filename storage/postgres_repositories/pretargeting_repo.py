@@ -425,6 +425,24 @@ class PretargetingRepository:
         )
         return [dict(row) for row in rows]
 
+    async def discard_pending_publisher_changes(self, billing_id: str) -> int:
+        deleted = await pg_execute(
+            """
+            DELETE FROM pretargeting_publishers
+            WHERE billing_id = %s AND status = 'pending_add'
+            """,
+            (billing_id,),
+        )
+        restored = await pg_execute(
+            """
+            UPDATE pretargeting_publishers
+            SET status = 'active', updated_at = NOW()
+            WHERE billing_id = %s AND status = 'pending_remove'
+            """,
+            (billing_id,),
+        )
+        return deleted + restored
+
     async def get_publisher_rows(
         self, billing_id: str, publisher_id: str
     ) -> list[dict[str, Any]]:

@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, type MouseEvent } from 'react';
 import Link from 'next/link';
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
-import { setPretargetingName, lookupGeoNames, suspendPretargeting, activatePretargeting, syncPretargetingConfigs, getPretargetingConfigDetail, createPendingChange, cancelPendingChange, applyAllPendingChanges } from '@/lib/api';
+import { setPretargetingName, lookupGeoNames, suspendPretargeting, activatePretargeting, syncPretargetingConfigs, getPretargetingConfigDetail, createPendingChange, cancelPendingChange, applyAllPendingChanges, discardAllPretargetingChanges } from '@/lib/api';
 import { ChevronRight, Pencil, Check, X, AlertTriangle, AlertCircle, Pause, Play, Loader2, History, Upload } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { SnapshotComparisonPanel } from './snapshot-comparison-panel';
@@ -248,6 +248,21 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
       await syncPretargetingConfigs();
       queryClient.invalidateQueries({ queryKey: ['pretargeting-detail', config.billing_id] });
       queryClient.invalidateQueries({ queryKey: ['pretargeting-configs'] });
+      queryClient.invalidateQueries({ queryKey: ['pretargeting-publishers', config.billing_id] });
+    },
+    onError: (error: Error) => {
+      setPushResult({ success: false, message: error.message });
+    },
+  });
+
+  const discardAllMutation = useMutation({
+    mutationFn: () => discardAllPretargetingChanges(config.billing_id),
+    onSuccess: (data) => {
+      setPushResult({ success: true, message: data.message });
+      setShowCommitToast(false);
+      queryClient.invalidateQueries({ queryKey: ['pretargeting-detail', config.billing_id] });
+      queryClient.invalidateQueries({ queryKey: ['pretargeting-configs'] });
+      queryClient.invalidateQueries({ queryKey: ['pretargeting-publishers', config.billing_id] });
     },
     onError: (error: Error) => {
       setPushResult({ success: false, message: error.message });
@@ -426,7 +441,10 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
     });
   };
 
-  const formatMutationPending = createChangeMutation.isPending || cancelChangeMutation.isPending;
+  const formatMutationPending =
+    createChangeMutation.isPending ||
+    cancelChangeMutation.isPending ||
+    discardAllMutation.isPending;
   useEffect(() => {
     if (hasPendingChanges) {
       setShowCommitToast(true);
@@ -440,8 +458,11 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
 
   // Check if using display_name from Google (not user-defined)
   const stateMutationPending = suspendMutation.isPending || activateMutation.isPending;
-  const isPushing = applyAllMutation.isPending || stateMutationPending;
-  const qpsMutationPending = createChangeMutation.isPending || cancelChangeMutation.isPending;
+  const isPushing = applyAllMutation.isPending || discardAllMutation.isPending || stateMutationPending;
+  const qpsMutationPending =
+    createChangeMutation.isPending ||
+    cancelChangeMutation.isPending ||
+    discardAllMutation.isPending;
   const configDetailHref = toBuyerScopedPath(
     `/bill_id/${encodeURIComponent(config.billing_id)}`,
     selectedBuyerId
@@ -734,11 +755,11 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
             </div>
             <div className="flex items-center gap-2 shrink-0">
               <button
-                onClick={() => pendingChanges.forEach((change) => cancelChangeMutation.mutate(change.id))}
-                disabled={cancelChangeMutation.isPending}
+                onClick={() => discardAllMutation.mutate()}
+                disabled={isPushing}
                 className="px-2 py-1 text-xs bg-white text-gray-600 rounded border hover:bg-gray-50 disabled:opacity-50"
               >
-                {t.pretargeting.clearAll}
+                {t.pretargeting.discardAll}
               </button>
               <button
                 onClick={() => setShowCommitToast(true)}
@@ -844,6 +865,7 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
             </div>
             <button
               onClick={() => setShowCommitToast(true)}
+              disabled={isPushing}
               className="inline-flex items-center gap-1 rounded bg-amber-500 px-2.5 py-1 text-xs font-medium text-white hover:bg-amber-600"
             >
               <Upload className="h-3 w-3" />
@@ -885,14 +907,22 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
           <div className="flex items-center justify-end gap-2 px-3 py-2">
             <button
               onClick={() => setShowCommitToast(false)}
-              disabled={applyAllMutation.isPending}
+              disabled={applyAllMutation.isPending || discardAllMutation.isPending}
               className="rounded border px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50"
             >
-              {t.common.cancel}
+              {t.common.back}
+            </button>
+            <button
+              onClick={() => discardAllMutation.mutate()}
+              disabled={applyAllMutation.isPending || discardAllMutation.isPending}
+              className="inline-flex items-center gap-1 rounded border border-red-200 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"
+            >
+              {discardAllMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+              {t.pretargeting.discardAll}
             </button>
             <button
               onClick={() => applyAllMutation.mutate()}
-              disabled={applyAllMutation.isPending}
+              disabled={applyAllMutation.isPending || discardAllMutation.isPending}
               className="inline-flex items-center gap-1 rounded bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
             >
               {applyAllMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}

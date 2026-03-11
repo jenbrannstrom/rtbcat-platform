@@ -12,6 +12,7 @@ class _StubChangesRepo:
         self.list_calls = 0
         self.create_calls = 0
         self.cancel_calls = 0
+        self.cancel_for_billing_calls = 0
         self.mark_applied_calls = 0
         self.rows: list[dict[str, object]] = [
             {"id": 1, "billing_id": "billing-1", "status": "pending"}
@@ -48,6 +49,11 @@ class _StubChangesRepo:
 
     async def cancel_pending_change(self, change_id: int) -> int:
         self.cancel_calls += 1
+        return 1
+
+    async def cancel_pending_changes_for_billing(self, billing_id: str) -> int:
+        _ = billing_id
+        self.cancel_for_billing_calls += 1
         return 1
 
     async def mark_pending_change_applied(
@@ -130,3 +136,25 @@ async def test_cancel_or_mark_applied_invalidates_list_cache() -> None:
     await service.list_pending_changes(billing_id="billing-1", status="pending", limit=100)
     assert repo.mark_applied_calls == 1
     assert repo.list_calls == 3
+
+
+@pytest.mark.asyncio
+async def test_cancel_pending_changes_for_billing_invalidates_list_cache() -> None:
+    ChangesService.clear_list_pending_changes_cache()
+    repo = _StubChangesRepo()
+    service = ChangesService(repo=repo)
+
+    await service.list_pending_changes(billing_id="billing-1", status="pending", limit=100)
+    assert repo.list_calls == 1
+
+    repo.rows = []
+    await service.cancel_pending_changes_for_billing("billing-1")
+    refreshed = await service.list_pending_changes(
+        billing_id="billing-1",
+        status="pending",
+        limit=100,
+    )
+
+    assert repo.cancel_for_billing_calls == 1
+    assert repo.list_calls == 2
+    assert refreshed == []
