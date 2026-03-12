@@ -94,7 +94,7 @@ class PretargetingRecommender:
 
         # Get traffic by format with geo breakdown
         format_traffic = {}
-        cursor = conn.execute(f"""
+        cursor = conn.execute("""
             SELECT
                 c.format,
                 pm.geography,
@@ -103,11 +103,11 @@ class PretargetingRecommender:
                 SUM(pm.clicks) as clicks
             FROM performance_metrics pm
             JOIN creatives c ON pm.creative_id = c.id
-            WHERE pm.metric_date >= CURRENT_DATE - INTERVAL '{days} days'
+            WHERE pm.metric_date >= CURRENT_DATE - %s::interval
               AND pm.geography IS NOT NULL
             GROUP BY c.format, pm.geography
             ORDER BY impressions DESC
-        """)
+        """, [f"{int(days)} days"])
 
         for row in cursor:
             fmt = row['format']
@@ -128,11 +128,11 @@ class PretargetingRecommender:
         # Calculate average CTR per format
         total_impressions = 0
         total_clicks = 0
-        cursor = conn.execute(f"""
+        cursor = conn.execute("""
             SELECT SUM(impressions) as imps, SUM(clicks) as clicks
             FROM performance_metrics
-            WHERE metric_date >= CURRENT_DATE - INTERVAL '{days} days'
-        """)
+            WHERE metric_date >= CURRENT_DATE - %s::interval
+        """, [f"{int(days)} days"])
         row = cursor.fetchone()
         if row:
             total_impressions = row['imps'] or 0
