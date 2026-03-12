@@ -1,0 +1,105 @@
+# Local development: Postgres + API + Dashboard — zero external dependencies
+#
+# Usage:
+#   docker compose -f docker-compose.local.yml up --build
+#
+# First run:
+#   1. Postgres starts and creates the "catscan" database
+#   2. API auto-runs all migrations on startup
+#   3. Visit http://localhost:3000, register with any email/password
+#   4. First registered user is automatically promoted to admin
+#
+# Reset everything:
+#   docker compose -f docker-compose.local.yml down -v
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: catscan-postgres
+    environment:
+      - POSTGRES_USER=catscan
+      - POSTGRES_PASSWORD=catscan
+      - POSTGRES_DB=catscan
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U catscan"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: catscan-api
+    init: true
+    ports:
+      - "8000:8000"
+    volumes:
+      - api_data:/home/rtbcat/.catscan
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # Database — both point to the local Postgres container
+      - POSTGRES_DSN=postgresql://catscan:catscan@postgres:5432/catscan
+      - POSTGRES_SERVING_DSN=postgresql://catscan:catscan@postgres:5432/catscan
+      # Auth — password login, no OAuth2 proxy, no bootstrap token
+      - OAUTH2_PROXY_ENABLED=false
+      - CATSCAN_REQUIRE_BOOTSTRAP_TOKEN=false
+      - CATSCAN_ENABLE_PASSWORD_LOGIN=true
+      - CATSCAN_ENABLE_GOOGLE_LOGIN=false
+      - CATSCAN_ENABLE_AUTHING_LOGIN=false
+      # Disable schedulers (no webhook secrets needed locally)
+      - CATSCAN_ENABLE_GMAIL_IMPORT_SCHEDULER=false
+      - CATSCAN_ENABLE_PRECOMPUTE_SCHEDULER=false
+      - CATSCAN_ENABLE_CREATIVE_CACHE_SCHEDULER=false
+      # Relax health checks for local dev
+      - SECRETS_HEALTH_STRICT=false
+      - UVICORN_WORKERS=1
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  dashboard:
+    build:
+      context: ./dashboard
+      dockerfile: Dockerfile
+      args:
+        - API_HOST=api
+        - OAUTH2_PROXY_MODE=false
+    container_name: catscan-dashboard
+    init: true
+    ports:
+      - "3000:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  postgres_data:
+  api_data:
