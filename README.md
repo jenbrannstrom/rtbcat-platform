@@ -1,5 +1,19 @@
 # Cat-Scan
 
+![Google Authorized Buyers](https://img.shields.io/badge/Google%20Authorized%20Buyers-compatible-4285F4?logo=google&logoColor=white)
+![Version](https://img.shields.io/badge/version-v0.9.4-blue)
+![License](https://img.shields.io/badge/license-MIT-brightgreen)
+![Python](https://img.shields.io/badge/python-3.11%2B-3776AB?logo=python&logoColor=white)
+![Node.js](https://img.shields.io/badge/node.js-18%2B-339933?logo=nodedotjs&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-backend-009688?logo=fastapi&logoColor=white)
+![Next.js](https://img.shields.io/badge/Next.js-frontend-000000?logo=nextdotjs&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-14%2B-4169E1?logo=postgresql&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-ready-2496ED?logo=docker&logoColor=white)
+![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)
+[![Stars](https://img.shields.io/github/stars/jenbrannstrom/rtbcat-platform?style=social)](https://github.com/jenbrannstrom/rtbcat-platform)
+[![Forks](https://img.shields.io/github/forks/jenbrannstrom/rtbcat-platform?style=social)](https://github.com/jenbrannstrom/rtbcat-platform)
+[![Issues](https://img.shields.io/github/issues/jenbrannstrom/rtbcat-platform)](https://github.com/jenbrannstrom/rtbcat-platform/issues)
+
 Cat-Scan is a QPS control plane for Google Authorized Buyers.
 
 It does not replace the bidder. It gives the bidder and the operator a better view of what is happening, then helps adjust the levers Google actually exposes: pretargeting configs, seat-level traffic mix, creative hygiene, and reporting.
@@ -60,6 +74,65 @@ That logic is described in [docs/OPTIMIZATION_LOGIC.md](docs/OPTIMIZATION_LOGIC.
 ### Under active build
 - conversion ingestion and attribution, with AppsFlyer first
 - stronger optimizer decisions once conversion and value data are connected
+
+## What it looks like
+
+### QPS and efficiency at a glance
+
+See allocated versus observed QPS per config, and overall utilization across your seat.
+
+<p float="left">
+<img src="docs/screenshots/allocated-vs-actual-qps.png" width="320" alt="Allocated vs actual QPS per pretargeting config" />
+<img src="docs/screenshots/utilization.png" width="380" alt="Seat-level utilization and efficiency summary" />
+</p>
+
+### Win rates and waste per config
+
+Each pretargeting config shows reached queries, win rate, and waste percentage. Edit QPS limits or pause configs directly.
+
+<p float="left">
+<img src="docs/screenshots/win-rates.png" width="320" alt="Win rates and waste by pretargeting config" />
+<img src="docs/screenshots/edit-pause-qps.png" width="480" alt="Edit QPS limits and pause configs inline" />
+</p>
+
+### Creative management
+
+Browse synced creatives by approval status, spend tier, and format. Filter to disapproved creatives to find what is blocking signal.
+
+<p float="left">
+<img src="docs/screenshots/creative-metrics.png" width="420" alt="Creative grid with spend, impressions, and approval status" />
+<img src="docs/screenshots/disapproved-creatives.png" width="380" alt="Disapproved creatives filtered view" />
+</p>
+
+### Click macro audit
+
+Google requires click macro support. This table shows which creatives include it and which do not.
+
+![Click macro coverage audit](docs/screenshots/click-macro-audit.png)
+
+### Campaign clustering
+
+Creatives are grouped automatically by destination URL. This surfaces which campaigns target the same audience and where spend overlaps.
+
+![Auto-clustered campaigns by destination](docs/screenshots/auto-clustering.png)
+
+### Publisher block/allow
+
+See publishers ranked by spend, impressions, and win rate. Block underperformers directly.
+
+![Publisher list with block controls](docs/screenshots/block-allow-pubs.png)
+
+### Staged changes with confirmation
+
+Changes you make are staged first. Nothing is sent to Google until you review the list and click "Yes, Push to Google." A snapshot is created automatically so you can roll back if needed.
+
+![Change preview before pushing to Google](docs/screenshots/change-preview.png)
+
+### Data retention
+
+Control how long raw and summary data is kept. Auto-aggregation compresses old data without losing trend visibility.
+
+![Data retention settings](docs/screenshots/data-retention-config.png)
 
 ## Quick start
 
