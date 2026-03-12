@@ -1745,8 +1745,8 @@ class PostgresStore:
         limit: int = 500,
     ) -> list[dict]:
         """Get pretargeting change history."""
-        conditions = [f"ph.changed_at >= CURRENT_TIMESTAMP - INTERVAL '{days} days'"]
-        params: list[Any] = []
+        conditions = ["ph.changed_at >= CURRENT_TIMESTAMP - %s::interval"]
+        params: list[Any] = [f"{int(days)} days"]
 
         if config_id:
             conditions.append("ph.config_id = %s")
@@ -2053,8 +2053,8 @@ class PostgresStore:
         limit: int = 100,
     ) -> list[dict]:
         """Get pretargeting change log."""
-        conditions = [f"detected_at >= CURRENT_TIMESTAMP - INTERVAL '{days} days'"]
-        params: list[Any] = []
+        conditions = ["detected_at >= CURRENT_TIMESTAMP - %s::interval"]
+        params: list[Any] = [f"{int(days)} days"]
 
         if billing_id:
             conditions.append("billing_id = %s")

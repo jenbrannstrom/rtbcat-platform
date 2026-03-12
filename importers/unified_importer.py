@@ -18,6 +18,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from dataclasses import dataclass, field
 
 import psycopg
+from psycopg import sql
 from psycopg.rows import dict_row
 
 from datetime import date, timedelta
@@ -226,7 +227,12 @@ def ensure_columns_exist(cursor, table_name: str, columns: List[Tuple[str, str]]
         pg_type = col_type.replace("INTEGER", "INTEGER").replace("TEXT", "TEXT")
         if col_name not in existing:
             try:
-                cursor.execute(f"ALTER TABLE {table_name} ADD COLUMN {col_name} {pg_type}")
+                cursor.execute(
+                    sql.SQL("ALTER TABLE {} ADD COLUMN {} " + pg_type).format(
+                        sql.Identifier(table_name),
+                        sql.Identifier(col_name),
+                    )
+                )
                 logger.info(f"Added column {col_name} to {table_name}")
             except Exception as e:
                 logger.warning(f"Could not add column {col_name}: {e}")

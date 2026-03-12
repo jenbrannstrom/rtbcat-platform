@@ -119,14 +119,14 @@ class GeoWasteAnalyzer:
                 COUNT(DISTINCT pm.creative_id) as creative_count
             FROM performance_metrics pm
             LEFT JOIN seats s ON pm.seat_id = s.id
-            WHERE pm.metric_date >= CURRENT_DATE - INTERVAL '{days} days'
+            WHERE pm.metric_date >= CURRENT_DATE - %s::interval
               AND pm.geography IS NOT NULL
               AND pm.geography != ''
               {billing_filter}
             GROUP BY pm.geography
-            HAVING SUM(pm.impressions) >= {min_impressions}
+            HAVING SUM(pm.impressions) >= %s
             ORDER BY SUM(pm.impressions) DESC
-        """, billing_params)
+        """, [f"{int(days)} days", *billing_params, int(min_impressions)])
 
         geo_data = []
         for row in cursor:

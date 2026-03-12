@@ -138,8 +138,8 @@ class CreativeHealthService:
                 COUNT(DISTINCT metric_date) as days_observed
             FROM rtb_daily
             WHERE creative_id = %s
-              AND metric_date >= CURRENT_DATE - INTERVAL '{days} days'
-        """, (creative_id,))
+              AND metric_date >= CURRENT_DATE - %s::interval
+        """, (creative_id, f"{int(days)} days"))
         perf = cursor.fetchone()
 
         # Get thumbnail status for video creatives
@@ -216,11 +216,11 @@ class CreativeHealthService:
         cursor = conn.cursor()
 
         # Get all creative IDs with activity in timeframe
-        cursor.execute(f"""
+        cursor.execute("""
             SELECT DISTINCT creative_id
             FROM rtb_daily
-            WHERE metric_date >= CURRENT_DATE - INTERVAL '{days} days'
-        """)
+            WHERE metric_date >= CURRENT_DATE - %s::interval
+        """, (f"{int(days)} days",))
         creative_ids = [row["creative_id"] for row in cursor.fetchall()]
         conn.close()
 
