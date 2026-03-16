@@ -10,9 +10,10 @@
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-14%2B-4169E1?logo=postgresql&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-ready-2496ED?logo=docker&logoColor=white)
 ![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)
-[![Stars](https://img.shields.io/github/stars/jenbrannstrom/rtbcat-platform?style=social)](https://github.com/jenbrannstrom/rtbcat-platform)
-[![Forks](https://img.shields.io/github/forks/jenbrannstrom/rtbcat-platform?style=social)](https://github.com/jenbrannstrom/rtbcat-platform)
-[![Issues](https://img.shields.io/github/issues/jenbrannstrom/rtbcat-platform)](https://github.com/jenbrannstrom/rtbcat-platform/issues)
+[![Stars](https://gitee.com/jenbrannstrom/rtbcat-platform/badge/star.svg)](https://gitee.com/jenbrannstrom/rtbcat-platform/stargazers)
+[![Forks](https://gitee.com/jenbrannstrom/rtbcat-platform/badge/fork.svg)](https://gitee.com/jenbrannstrom/rtbcat-platform/members)
+
+[English](README-en.md)
 
 Cat-Scan 是一个适用于 Google Authorized Buyers 的 QPS 控制平面。
 
@@ -140,7 +141,7 @@ Google 要求支持点击宏。此表显示哪些广告素材包含点击宏，�
 ## 快速开始
 
 ```bash
-git clone https://github.com/jenbrannstrom/rtbcat-platform.git
+git clone https://gitee.com/jenbrannstrom/rtbcat-platform.git
 cd rtbcat-platform
 cp .env.example .env
 # 首先在 .env 中设置 POSTGRES_DSN 和 POSTGRES_SERVING_DSN
@@ -317,7 +318,7 @@ cd dashboard && npm run lint && npm run build
 
 项目官网：[rtb.cat](https://rtb.cat)
 
-问题和功能请求：[GitHub Issues](https://github.com/jenbrannstrom/rtbcat-platform/issues)
+问题和功能请求：[Gitee Issues](https://gitee.com/jenbrannstrom/rtbcat-platform/issues) | [GitHub Issues](https://github.com/jenbrannstrom/rtbcat-platform/issues)
 
 微信：jenbrannstrom
 

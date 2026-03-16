@@ -10,9 +10,10 @@
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-14%2B-4169E1?logo=postgresql&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-ready-2496ED?logo=docker&logoColor=white)
 ![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)
-[![Stars](https://img.shields.io/github/stars/jenbrannstrom/rtbcat-platform?style=social)](https://github.com/jenbrannstrom/rtbcat-platform)
-[![Forks](https://img.shields.io/github/forks/jenbrannstrom/rtbcat-platform?style=social)](https://github.com/jenbrannstrom/rtbcat-platform)
-[![Issues](https://img.shields.io/github/issues/jenbrannstrom/rtbcat-platform)](https://github.com/jenbrannstrom/rtbcat-platform/issues)
+[![Stars](https://gitee.com/jenbrannstrom/rtbcat-platform/badge/star.svg)](https://gitee.com/jenbrannstrom/rtbcat-platform/stargazers)
+[![Forks](https://gitee.com/jenbrannstrom/rtbcat-platform/badge/fork.svg)](https://gitee.com/jenbrannstrom/rtbcat-platform/members)
+
+[中文](README.md)
 
 Cat-Scan is a QPS control plane for Google Authorized Buyers.
 
