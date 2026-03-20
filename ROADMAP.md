@@ -1,6 +1,6 @@
 # Cat-Scan Roadmap
 
-Last updated: March 7, 2026
+Last updated: March 11, 2026
 
 This roadmap is forward-looking. It is not an internal incident diary.
 
@@ -43,7 +43,28 @@ Next steps:
 - feed conversion and value evidence into optimizer scoring
 - keep hard automation gated behind confidence and coverage thresholds
 
-### 2. Language analysis as a real optional subsystem
+### 2. Troubleshooting API as a verification and diagnostics layer
+
+This is useful, but it is not a replacement for the Daily CSV path.
+
+Why:
+- the RTB Troubleshooting API can expose exchange-side signals we do not want to wait a full day to inspect
+- it can help explain observable no-bid, timeout, filtering, and auction-loss patterns at the exchange boundary
+- it can provide parity checks for overlapping metrics such as bids, wins, and impression-side counts
+- it does not provide the click, geo, or conversion data needed to replace the existing reporting backbone
+
+Current state:
+- the product still depends on the five daily Authorized Buyers CSV reports for historical analytics
+- limited troubleshooting client code exists in the repo, but it is not productized end to end
+- the API is useful for operator debugging and verification, not for full customer reporting
+
+Next steps:
+- productize a narrow troubleshooting collection flow for transient filter-set queries
+- store only the metrics and dimensions that help validate CSV imports and explain exchange-observed waste
+- surface troubleshooting results as operator diagnostics and verification checks
+- avoid positioning this as a substitute for Daily CSVs or AppsFlyer-backed value analysis
+
+### 3. Language analysis as a real optional subsystem
 
 Current state:
 - the UI and API paths exist
@@ -57,7 +78,7 @@ Next steps:
 - keep the feature optional and explicitly configured
 - preserve manual override and operator review in the creative flow
 
-### 3. Better operator proof, not bigger claims
+### 4. Better operator proof, not bigger claims
 
 Current state:
 - the product is useful
@@ -68,7 +89,7 @@ Next steps:
 - measure exact improvements in areas we can prove
 - keep public claims narrow until the evidence exists
 
-### 4. Cleaner onboarding for self-hosted users
+### 5. Cleaner onboarding for self-hosted users
 
 Current state:
 - the install path works
