@@ -58,6 +58,7 @@ async def list_creatives(
     slim: bool = Query(True, description="Exclude large fields (vast_xml, html snippets) for faster loading"),
     days: int = Query(7, ge=1, le=365, description="Timeframe for waste detection (default 7 days)"),
     active_only: bool = Query(False, description="Only return creatives with activity (impressions/clicks/spend) in timeframe"),
+    sort_by: Optional[str] = Query(None, pattern="^(spend|impressions|clicks)$", description="Sort by performance metric (server-side)"),
     store=Depends(get_store),
     user: User = Depends(get_current_user),
 ) -> list[CreativeResponse]:
@@ -78,6 +79,8 @@ async def list_creatives(
         limit=limit if not active_only else limit * 3,
         offset=offset,
         include_raw_data=not slim,
+        sort_by=sort_by,
+        sort_days=days,
     )
 
     if active_only and creatives:
@@ -124,6 +127,7 @@ async def list_creatives_paginated(
     slim: bool = Query(True, description="Exclude large fields for faster loading"),
     days: int = Query(7, ge=1, le=365, description="Timeframe for waste detection"),
     active_only: bool = Query(False, description="Only return creatives with activity in timeframe"),
+    sort_by: Optional[str] = Query(None, pattern="^(spend|impressions|clicks)$", description="Sort by performance metric (server-side)"),
     store=Depends(get_store),
     user: User = Depends(get_current_user),
 ) -> PaginatedCreativesResponse:
@@ -170,6 +174,8 @@ async def list_creatives_paginated(
         limit=limit if not active_only else limit * 3,
         offset=offset,
         include_raw_data=not slim,
+        sort_by=sort_by,
+        sort_days=days,
     )
 
     if active_only and creatives:

@@ -286,6 +286,8 @@ class PostgresStore:
         approval_status: Optional[str] = None,
         search: Optional[str] = None,
         include_raw_data: bool = True,
+        sort_by: Optional[str] = None,
+        sort_days: int = 30,
     ) -> list[Creative]:
         """List creatives with optional filters."""
         select_columns = (
@@ -301,45 +303,67 @@ class PostgresStore:
                 "created_at, updated_at"
             )
         )
-        sql = f"SELECT {select_columns} FROM creatives"
-        params: list[Any] = []
+
+        sort_by_metric = sort_by in ("spend", "impressions", "clicks")
+        sort_metric = {"spend": "spend_micros", "impressions": "impressions", "clicks": "clicks"}.get(sort_by or "", "spend_micros")
+
+        if sort_by_metric:
+            sql = f"""
+                SELECT c.*
+                FROM creatives c
+                LEFT JOIN (
+                    SELECT creative_id, SUM({sort_metric}) AS _sort_val
+                    FROM rtb_daily
+                    WHERE metric_date >= CURRENT_DATE - make_interval(days => %s)
+                    GROUP BY creative_id
+                ) perf ON perf.creative_id = c.id
+            """
+            params: list[Any] = [sort_days]
+        else:
+            sql = f"SELECT {select_columns} FROM creatives"
+            params = []
+
         conditions = []
+        col_prefix = "c." if sort_by_metric else ""
 
         if format:
-            conditions.append("format = %s")
+            conditions.append(f"{col_prefix}format = %s")
             params.append(format)
         if campaign_id:
-            conditions.append("campaign_id = %s")
+            conditions.append(f"{col_prefix}campaign_id = %s")
             params.append(campaign_id)
         if cluster_id:
-            conditions.append("cluster_id = %s")
+            conditions.append(f"{col_prefix}cluster_id = %s")
             params.append(cluster_id)
         if buyer_id:
-            conditions.append("buyer_id = %s")
+            conditions.append(f"{col_prefix}buyer_id = %s")
             params.append(buyer_id)
         if approval_status:
             if approval_status.upper() == "NOT_APPROVED":
-                conditions.append("(approval_status IS NULL OR approval_status != 'APPROVED')")
+                conditions.append(f"({col_prefix}approval_status IS NULL OR {col_prefix}approval_status != 'APPROVED')")
             else:
-                conditions.append("approval_status = %s")
+                conditions.append(f"{col_prefix}approval_status = %s")
                 params.append(approval_status)
         search_term = (search or "").strip()
         if search_term:
             pattern = f"%{search_term}%"
             conditions.append(
-                "("
-                "id ILIKE %s OR "
-                "COALESCE(name, '') ILIKE %s OR "
-                "COALESCE(advertiser_name, '') ILIKE %s OR "
-                "COALESCE(utm_campaign, '') ILIKE %s"
-                ")"
+                f"("
+                f"{col_prefix}id ILIKE %s OR "
+                f"COALESCE({col_prefix}name, '') ILIKE %s OR "
+                f"COALESCE({col_prefix}advertiser_name, '') ILIKE %s OR "
+                f"COALESCE({col_prefix}utm_campaign, '') ILIKE %s"
+                f")"
             )
             params.extend([pattern, pattern, pattern, pattern])
 
         if conditions:
             sql += " WHERE " + " AND ".join(conditions)
 
-        sql += " ORDER BY created_at DESC LIMIT %s OFFSET %s"
+        if sort_by_metric:
+            sql += " ORDER BY perf._sort_val DESC NULLS LAST, c.created_at DESC LIMIT %s OFFSET %s"
+        else:
+            sql += " ORDER BY created_at DESC LIMIT %s OFFSET %s"
         params.extend([limit, offset])
 
         rows = await pg_query(sql, tuple(params))
