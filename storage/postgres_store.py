@@ -308,6 +308,11 @@ class PostgresStore:
         sort_metric = {"spend": "spend_micros", "impressions": "impressions", "clicks": "clicks"}.get(sort_by or "", "spend_micros")
 
         if sort_by_metric:
+            perf_buyer_clause = ""
+            params: list[Any] = [sort_days]
+            if buyer_id:
+                perf_buyer_clause = "AND buyer_id = %s"
+                params.append(buyer_id)
             sql = f"""
                 SELECT c.*
                 FROM creatives c
@@ -315,10 +320,10 @@ class PostgresStore:
                     SELECT creative_id, SUM({sort_metric}) AS _sort_val
                     FROM rtb_daily
                     WHERE metric_date >= CURRENT_DATE - make_interval(days => %s)
+                    {perf_buyer_clause}
                     GROUP BY creative_id
                 ) perf ON perf.creative_id = c.id
             """
-            params: list[Any] = [sort_days]
         else:
             sql = f"SELECT {select_columns} FROM creatives"
             params = []
