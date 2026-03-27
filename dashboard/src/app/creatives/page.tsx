@@ -728,7 +728,7 @@ function CreativesContent() {
           )}
         >
           <TrendingUp className="h-3.5 w-3.5" />
-          {sortBySpend ? t.creatives.spend7Days.split(' ')[0] : t.creatives.defaultOrder}
+          {sortBySpend ? "Spend Hi/Lo" : "Default Order"}
         </button>
 
         {/* Clear Filters */}
