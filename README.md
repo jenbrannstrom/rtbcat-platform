@@ -10,297 +10,311 @@
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-14%2B-4169E1?logo=postgresql&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-ready-2496ED?logo=docker&logoColor=white)
 ![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)
-[![Stars](https://img.shields.io/github/stars/jenbrannstrom/rtbcat-platform?style=social)](https://github.com/jenbrannstrom/rtbcat-platform)
-[![Forks](https://img.shields.io/github/forks/jenbrannstrom/rtbcat-platform?style=social)](https://github.com/jenbrannstrom/rtbcat-platform)
-[![Issues](https://img.shields.io/github/issues/jenbrannstrom/rtbcat-platform)](https://github.com/jenbrannstrom/rtbcat-platform/issues)
+[![Stars](https://gitee.com/jenbrannstrom/rtbcat-platform/badge/star.svg)](https://gitee.com/jenbrannstrom/rtbcat-platform/stargazers)
+[![Forks](https://gitee.com/jenbrannstrom/rtbcat-platform/badge/fork.svg)](https://gitee.com/jenbrannstrom/rtbcat-platform/members)
 
-Cat-Scan is a QPS control plane for Google Authorized Buyers.
+[English](README-en.md)
 
-It does not replace the bidder. It gives the bidder and the operator a better view of what is happening, then helps adjust the levers Google actually exposes: pretargeting configs, seat-level traffic mix, creative hygiene, and reporting.
+Cat-Scan 是一个适用于 Google Authorized Buyers 的 QPS 控制平面。
 
-Google already does a lot of waste reduction on its side. That is real. Cat-Scan exists for the last layer you can still control on your side.
+它不会取代您的竞价器。它能让竞价器和操作员更清晰地了解当前状况，并帮助调整 Google 实际暴露的可用杠杆：预定位配置、席位级流量组合、广告素材规范以及报表。
 
-What it does today:
-- imports Google Authorized Buyers CSV reports from Gmail or manual upload
-- syncs creatives, seats, endpoints, and pretargeting data from the Authorized Buyers API
-- shows QPS, bidstream, publisher, geo, size, and config-level waste signals
-- groups creatives into campaigns from destination patterns
-- recommends and applies pretargeting changes, with rollback and audit history
-- supports multi-seat operation with user roles and seat-scoped access
+Google 自身已经在它的侧做了很多减少浪费的工作，这是事实。Cat-Scan 的存在是为了处理您在自己这一侧仍能控制的最后一层问题。
 
-What it does not do today:
-- it does not have enough public deployment data to claim a typical percentage improvement
-- it does not magically know advertiser value or lifetime value without external conversion data
-- it does not replace bidder-side logic; it complements it
+目前的功能：
+- 通过 Gmail 或手动上传导入 Google Authorized Buyers 的 CSV 报表
+- 从 Authorized Buyers API 同步广告素材、席位、端点和预定位数据
+- 展示按预定位配置、QPS、竞价流、媒体、地域、尺寸划分的浪费信号
+- 根据目标地址模式将广告素材分组为广告活动
+- 推荐并应用预定位更改，支持回滚和审计历史
+- 支持多席位操作，具有用户角色和按席位划分的访问权限
 
-## The problem in one picture
+目前不包含的功能：
+- 尚无足够的公开部署数据来声称典型的改进百分比
+- 如果没有外部转化数据，无法获知广告主价值或生命周期价值
+- 不会取代竞价器端的逻辑；它是竞价器的补充
 
-![QPS Funnel](https://docs.rtb.cat/assets/qps-funnel.svg)
+## 问题一图概览
 
-## Why this exists
+![QPS 漏斗图](https://docs.rtb.cat/assets/qps-funnel.svg)
 
-Authorized Buyers gives you a lot of traffic and only a limited set of controls.
+## 为何存在
 
-The bidder sees the firehose it receives. Google sees its own side of the exchange. Neither side gives you a clean control plane for understanding where QPS is wasted, where spend actually concentrates, or which pretargeting configs are carrying dead weight.
+Authorized Buyers 为您提供了大量流量，但只有有限的控制手段。
 
-Cat-Scan fills that gap.
+竞价器看到的是它接收到的数据洪流。Google 看到的是它自己一方的交易平台状况。这两方都无法为您提供一个清晰的控制面板，来了解 QPS 浪费在哪里、支出实际集中在何处、或者哪些预定位配置带来了无效负担。
 
-The current optimizer logic is simple on purpose:
-- follow the bids
-- follow the spend
-- cut dead weight
-- treat post-click data as the missing signal until it is actually connected
+Cat-Scan 填补了这一空白。
 
-That logic is described in [docs/OPTIMIZATION_LOGIC.md](docs/OPTIMIZATION_LOGIC.md).
+当前的优化器逻辑特意保持简单：
+- 跟踪竞价
+- 跟踪支出
+- 削减无效负担
+- 在真正接入前，将点击后数据视为缺失的信号
 
-## Current scope
+该逻辑在 [docs/OPTIMIZATION_LOGIC.md](docs/OPTIMIZATION_LOGIC.md) 中有描述。
 
-### Built and usable
-- Gmail and manual CSV ingestion for the five core Authorized Buyers report types
-- creative sync from Authorized Buyers
-- QPS analysis by publisher, geo, and size
-- config and campaign views
-- pretargeting recommendations, apply flow, rollback, and audit trail
-- import history, data freshness, and retention controls
-- multi-user auth with seat-scoped access
-- campaign clustering from destination URLs and creative metadata
-- click-macro audit and AppsFlyer readiness diagnostics
+## 当前范围
 
-### Built but optional
-- AI-assisted language detection and geo-linguistic mismatch analysis in the creative modal
-- provider choice for language analysis (Gemini, Claude, or Grok)
-- these features require explicit provider configuration and are disabled by default in production deploys
+### 已构建并可用
 
-### Under active build
-- conversion ingestion and attribution, with AppsFlyer first
-- stronger optimizer decisions once conversion and value data are connected
+- 通过 Gmail 和手动方式导入五种核心的 Authorized Buyers 报表类型
+- 从 Authorized Buyers 同步广告素材
+- 按媒体、地域和尺寸进行 QPS 分析
+- 配置和广告活动视图
+- 预定位建议、应用流程、回滚和审计跟踪
+- 导入历史、数据新鲜度和保留控制
+- 具有按席位划分的访问权限的多用户认证
+- 基于目标 URL 和广告素材元数据的广告活动聚类
+- 点击宏审计和 AppsFlyer 就绪性诊断
 
-## What it looks like
+### 已构建但为可选的 AI 功能
 
-### QPS and efficiency at a glance
+- 广告素材模态框中的 AI 辅助语言检测和地域-语言不匹配分析
+- 可选择的语言分析提供商（Gemini、Claude 或 Grok）
+- 这些功能需要显式配置提供商，在生产部署中默认禁用
 
-See allocated versus observed QPS per config, and overall utilization across your seat.
+### 正在积极构建
 
-<p float="left">
-<img src="docs/screenshots/allocated-vs-actual-qps.png" width="320" alt="Allocated vs actual QPS per pretargeting config" />
-<img src="docs/screenshots/utilization.png" width="380" alt="Seat-level utilization and efficiency summary" />
-</p>
+- 转化数据接入和归因，首选 AppsFlyer
+- 接入转化和价值数据后，使优化器决策更加强大
 
-### Win rates and waste per config
+## 界面预览
 
-Each pretargeting config shows reached queries, win rate, and waste percentage. Edit QPS limits or pause configs directly.
+### QPS 与效率一览
+
+查看每个配置的已分配 QPS 与实际 QPS，以及整个席位的整体利用率。
 
 <p float="left">
-<img src="docs/screenshots/win-rates.png" width="320" alt="Win rates and waste by pretargeting config" />
-<img src="docs/screenshots/edit-pause-qps.png" width="480" alt="Edit QPS limits and pause configs inline" />
+<img src="docs/screenshots/allocated-vs-actual-qps.png" width="320" alt="每个预定位配置的已分配与实际 QPS" />
+<img src="docs/screenshots/utilization.png" width="380" alt="席位级利用率和效率摘要" />
 </p>
 
-### Creative management
+### 各配置的赢得率与浪费率
 
-Browse synced creatives by approval status, spend tier, and format. Filter to disapproved creatives to find what is blocking signal.
+每个预定位配置都显示达到的查询量、赢得率和浪费百分比。可直接在此编辑 QPS 限制或暂停配置。
 
 <p float="left">
-<img src="docs/screenshots/creative-metrics.png" width="420" alt="Creative grid with spend, impressions, and approval status" />
-<img src="docs/screenshots/disapproved-creatives.png" width="380" alt="Disapproved creatives filtered view" />
+<img src="docs/screenshots/win-rates.png" width="320" alt="按预定位配置划分的赢得率与浪费率" />
+<img src="docs/screenshots/edit-pause-qps.png" width="480" alt="内联编辑 QPS 限制和暂停配置" />
 </p>
 
-### Click macro audit
+### 广告素材管理
 
-Google requires click macro support. This table shows which creatives include it and which do not.
+按审核状态、支出层级和格式浏览已同步的广告素材。筛选出未通过的广告素材，找出阻碍信号的原因。
 
-![Click macro coverage audit](docs/screenshots/click-macro-audit.png)
+<p float="left">
+<img src="docs/screenshots/creative-metrics.png" width="420" alt="广告素材网格，显示支出、展示次数和审核状态" />
+<img src="docs/screenshots/disapproved-creatives.png" width="380" alt="筛选出的未通过广告素材视图" />
+</p>
 
-### Campaign clustering
+### 点击宏审计
 
-Creatives are grouped automatically by destination URL. This surfaces which campaigns target the same audience and where spend overlaps.
+Google 要求支持点击宏。此表显示哪些广告素材包含点击宏，哪些不包含。
 
-![Auto-clustered campaigns by destination](docs/screenshots/auto-clustering.png)
+![点击宏覆盖率审计](docs/screenshots/click-macro-audit.png)
 
-### Publisher block/allow
+### 广告活动聚类
 
-See publishers ranked by spend, impressions, and win rate. Block underperformers directly.
+广告素材根据目标 URL 自动分组。这可以揭示哪些广告活动针对相同的受众，以及支出在哪里重叠。
 
-![Publisher list with block controls](docs/screenshots/block-allow-pubs.png)
+![按目标自动聚类的广告活动](docs/screenshots/auto-clustering.png)
 
-### Staged changes with confirmation
+### 媒体屏蔽/允许
 
-Changes you make are staged first. Nothing is sent to Google until you review the list and click "Yes, Push to Google." A snapshot is created automatically so you can roll back if needed.
+查看按支出、展示次数和赢得率排名的媒体。直接屏蔽表现不佳的媒体。
 
-![Change preview before pushing to Google](docs/screenshots/change-preview.png)
+![带有屏蔽控件的媒体列表](docs/screenshots/block-allow-pubs.png)
 
-### Data retention
+### 带确认的分阶段更改
 
-Control how long raw and summary data is kept. Auto-aggregation compresses old data without losing trend visibility.
+您所做的更改会先被暂存。在您审核列表并点击"是，推送到 Google"之前，不会向 Google 发送任何内容。系统会自动创建快照，以便您在需要时回滚。
 
-![Data retention settings](docs/screenshots/data-retention-config.png)
+![推送到 Google 前的更改预览](docs/screenshots/change-preview.png)
 
-## Quick start
+### 数据保留
+
+控制原始数据和汇总数据的保留时长。自动汇总功能可压缩旧数据，同时不丢失趋势可见性。
+
+![数据保留设置](docs/screenshots/data-retention-config.png)
+
+## 快速开始
 
 ```bash
-git clone https://github.com/jenbrannstrom/rtbcat-platform.git
+git clone https://gitee.com/jenbrannstrom/rtbcat-platform.git
 cd rtbcat-platform
 cp .env.example .env
-# set POSTGRES_DSN and POSTGRES_SERVING_DSN in .env first
+# 首先在 .env 中设置 POSTGRES_DSN 和 POSTGRES_SERVING_DSN
 ./setup.sh
 ./run.sh
 ```
 
-Open `http://localhost:3000`.
+打开 `http://localhost:3000`。
 
-Requirements:
+环境要求：
 - Python 3.11+
 - Node.js 18+
 - Postgres 14+
-- `ffmpeg` optional, for video thumbnails
+- `ffmpeg` 可选，用于生成视频缩略图
 
-`./setup.sh` expects Postgres connection strings before it can initialize the schema. More setup detail is in [INSTALL.md](INSTALL.md).
+`./setup.sh` 在初始化数据库模式之前，需要先配置好 Postgres 连接字符串。更多安装细节请参阅 [INSTALL.md](INSTALL.md)。
 
-## Install model
+## 安装模式
 
-The install is split on purpose.
+安装过程有意分步进行。
 
-1. Boot the app.
-2. Add Gmail import.
-3. Verify the data path.
-4. Add Google write access only when you actually want live pretargeting changes.
+1. 启动应用。
+2. 添加 Gmail 导入。
+3. 验证数据路径。
+4. 仅在您真正想要实时更改预定位配置时，才添加 Google 写入权限。
 
-That keeps a fresh install useful without forcing high-risk credentials on day one.
+这样，即使是全新安装也能发挥作用，而无需在第一天就强制使用高风险凭证。
 
-Authentication and first-admin bootstrap are documented in [docs/AUTHENTICATION.md](docs/AUTHENTICATION.md).
+身份验证和首个管理员引导流程在 [docs/AUTHENTICATION.md](docs/AUTHENTICATION.md) 中有详细说明。
 
-## Main routes
+## 主要路由
 
-These are the routes that matter for an operator.
+以下是操作员需要关注的主要路由。
 
-| Area | Route | Purpose |
+| 功能区域 | 路由 | 目的 |
 |---|---|---|
-| Home | `/` | Top-level status and summary |
-| Setup | `/setup` | First-run checks and onboarding |
-| Creatives | `/creatives` | Creative list and review |
-| Click macros | `/creatives/click-macros` | Click macro audit |
-| Attribution readiness | `/creatives/attribution-readiness` | Seat-level AppsFlyer readiness |
-| Campaigns | `/campaigns` | Campaign and cluster views |
-| Import | `/import` | Manual uploads, Gmail status, import history |
-| History | `/history` | Change and import history |
-| QPS by publisher | `/qps/publisher` | Publisher-side QPS and waste |
-| QPS by geo | `/qps/geo` | Geo-side QPS and waste |
-| QPS by size | `/qps/size` | Size coverage and waste |
-| Waste analysis | `/waste-analysis` | Waste and inefficiency analysis |
-| Settings | `/settings` | Main settings entry |
-| Connected accounts | `/settings/accounts` | Google API, Gmail, and optional AI provider config |
-| Retention | `/settings/retention` | Retention controls |
-| System | `/settings/system` | Runtime, DB, thumbnails, health |
-| Admin | `/admin` | Users, config, audit log |
+| 首页 | `/` | 顶级状态和摘要 |
+| 初始设置 | `/setup` | 首次运行检查与引导 |
+| 广告素材 | `/creatives` | 广告素材列表与审核 |
+| 点击宏 | `/creatives/click-macros` | 点击宏审计 |
+| 归因就绪性 | `/creatives/attribution-readiness` | 席位级 AppsFlyer 就绪性 |
+| 广告活动 | `/campaigns` | 广告活动与聚类视图 |
+| 导入 | `/import` | 手动上传、Gmail 状态、导入历史 |
+| 历史记录 | `/history` | 更改和导入历史 |
+| 按媒体划分的 QPS | `/qps/publisher` | 媒体侧的 QPS 与浪费 |
+| 按地域划分的 QPS | `/qps/geo` | 地域侧的 QPS 与浪费 |
+| 按尺寸划分的 QPS | `/qps/size` | 尺寸覆盖范围与浪费 |
+| 浪费分析 | `/waste-analysis` | 浪费与低效分析 |
+| 设置 | `/settings` | 主要设置入口 |
+| 已关联账户 | `/settings/accounts` | Google API、Gmail 以及可选的 AI 提供商配置 |
+| 数据保留 | `/settings/retention` | 保留控制 |
+| 系统 | `/settings/system` | 运行时、数据库、缩略图、健康状态 |
+| 管理后台 | `/admin` | 用户、配置、审计日志 |
 
-Buyer-scoped equivalents also exist under `/{buyerId}/...`.
+同时，`/{buyerId}/...` 路径下也存在按买家范围划分的等效路由。
 
-## Architecture in one paragraph
+## 架构简述
 
-The frontend is Next.js. The backend is FastAPI. The serving database is Postgres. In the GCP deployment path, Cloud SQL is reached through `cloud-sql-proxy`. Raw export and archive paths can use GCS and BigQuery, but the operator-facing app runs from Postgres. Reverse proxy and auth depend on deployment mode: local/dev can use Caddy, while the GCP path expects external Nginx and OAuth proxy wiring.
+前端使用 Next.js。后端使用 FastAPI。服务数据库是 Postgres。在 GCP 部署路径中，通过 `cloud-sql-proxy` 连接 Cloud SQL。原始数据导出和归档路径可以使用 GCS 和 BigQuery，但面向操作员的应用运行在 Postgres 之上。反向代理和身份验证取决于部署模式：本地/开发环境可以使用 Caddy，而 GCP 路径则需要外部的 Nginx 和 OAuth 代理配合。
 
-The full technical layout is in [ARCHITECTURE.md](ARCHITECTURE.md).
+完整的技术布局请参阅 [ARCHITECTURE.md](ARCHITECTURE.md)。
 
-## The five CSV reports
+## 五种 CSV 报表
 
-Cat-Scan still depends on five separate Authorized Buyers reports because Google does not let you combine all required fields in one export.
+Cat-Scan 仍然依赖五种独立的 Authorized Buyers 报表，因为 Google 不允许在一次导出中组合所有必需的字段。
 
-Required reports:
+必需的报表：
 1. `catscan-bidsinauction`
 2. `catscan-quality`
 3. `catscan-pipeline-geo`
 4. `catscan-pipeline`
 5. `catscan-bid-filtering`
 
-Why five:
-- bid requests and pretargeting config are not available in the same report
-- creative-level and publisher-level views also split across incompatible report shapes
+为何需要五种：
+- 竞价请求和预定位配置无法在同一份报表中获取
+- 广告素材级别和媒体级别的视图也因不兼容的报表格式而分开
 
-The importer joins those reports into a usable dataset. Details are in [DATA_MODEL.md](DATA_MODEL.md) and [importers/README.md](importers/README.md).
+导入器将这些报表合并成一个可用的数据集。详情请参阅 [DATA_MODEL.md](DATA_MODEL.md) 和 [importers/README.md](importers/README.md)。
 
-## API surface
+## API 接口
 
-The API is larger than a short README table can capture. The current router surface includes:
-- auth and bootstrap
-- system and health
-- creatives, live creative fetch, creative cache
-- language and geo-linguistic analysis
-- seats and seat admin
-- campaigns
-- settings and pretargeting flows
-- analytics home, waste, traffic, spend, RTB bidstream, and QPS
-- uploads, Gmail, retention, precompute, troubleshooting
-- conversions and optimizer routes
-- admin
+API 接口数量较多，无法在简短的 README 表格中完整列出。当前的路由器范围包括：
+- 认证与引导
+- 系统与健康检查
+- 广告素材、实时广告素材获取、广告素材缓存
+- 语言与地域语言分析
+- 席位与席位管理
+- 广告活动
+- 设置与预定位流程
+- 分析首页、浪费分析、流量、支出、RTB 竞价流和 QPS
+- 上传、Gmail、数据保留、预计算、故障排查
+- 转化与优化器路由
+- 管理后台
 
-Run locally and use `http://localhost:8000/docs` for the current OpenAPI surface.
+在本地运行后，可使用 `http://localhost:8000/docs` 查看当前的 OpenAPI 接口文档。
 
-## Deployment
+## 部署
 
-There are two real deployment modes in this repo.
+此仓库支持两种主要的部署模式。
 
-### Local or simple self-host
-- Next.js on port `3000`
-- FastAPI on port `8000`
-- local Postgres or external Postgres
-- optional Caddy reverse proxy
+### 本地或简单的自托管
+- Next.js 运行在 `3000` 端口
+- FastAPI 运行在 `8000` 端口
+- 本地 Postgres 或外部 Postgres
+- 可选的 Caddy 反向代理
 
-### GCP path
-- external reverse proxy and auth in front
-- `cloud-sql-proxy` sidecar
-- FastAPI container
-- Next.js container
-- Postgres serving database in Cloud SQL
-- optional GCS / BigQuery pipeline for raw and archival data
+### GCP 路径
+- 前置外部反向代理和身份验证
+- `cloud-sql-proxy` 边车容器
+- FastAPI 容器
+- Next.js 容器
+- Cloud SQL 中的 Postgres 服务数据库
+- 可选的用于原始数据和归档数据的 GCS / BigQuery 管道
 
-Start with [INSTALL.md](INSTALL.md). For release/build rules, use [docs/VERSIONING.md](docs/VERSIONING.md).
+从 [INSTALL.md](INSTALL.md) 开始。有关发布/构建规则，请使用 [docs/VERSIONING.md](docs/VERSIONING.md)。
 
-## Documentation
+## 文档
 
-| Document | Use it for |
+**[中文用户手册](manual/zh/index.md)** — 完整的中文使用指南，涵盖从入门到部署的所有内容。
+
+| 文档 | 用途 |
 |---|---|
-| [INSTALL.md](INSTALL.md) | local install, production install, Gmail setup |
-| [SECURITY.md](SECURITY.md) | security policy and deployment precautions |
-| [ARCHITECTURE.md](ARCHITECTURE.md) | current system layout |
-| [DATA_MODEL.md](DATA_MODEL.md) | Postgres schema and import model |
-| [docs/OPTIMIZATION_LOGIC.md](docs/OPTIMIZATION_LOGIC.md) | what the optimizer uses and what it still lacks |
-| [METRICS_GUIDE.md](METRICS_GUIDE.md) | metric definitions |
-| [ROADMAP.md](ROADMAP.md) | what is built, what is partial, what comes next |
-| [CHANGELOG.md](CHANGELOG.md) | release history |
-| [CONTRIBUTING.md](CONTRIBUTING.md) | contribution flow |
+| [用户手册](manual/zh/index.md) | 完整中文使用指南 |
+| [什么是 Cat-Scan](manual/zh/00-what-is-cat-scan.md) | 产品介绍与核心概念 |
+| [QPS 漏斗](manual/zh/03-qps-funnel.md) | 理解 QPS 浪费分析 |
+| [浪费分析](manual/zh/04-analyzing-waste.md) | 如何分析和减少浪费 |
+| [预定位管理](manual/zh/06-pretargeting.md) | 预定位配置管理 |
+| [优化器](manual/zh/07-optimizer.md) | 优化器逻辑与使用 |
+| [数据导入](manual/zh/09-data-import.md) | CSV 报表导入流程 |
+| [部署](manual/zh/12-deployment.md) | 部署与运维 |
+| [常见问题](manual/zh/faq.md) | FAQ |
+| [术语表](manual/zh/glossary.md) | 术语中英对照 |
+|---|---|
+| [INSTALL.md](INSTALL.md) | 本地安装、生产环境安装、Gmail 设置 |
+| [ARCHITECTURE.md](ARCHITECTURE.md) | 当前系统架构 |
+| [DATA_MODEL.md](DATA_MODEL.md) | Postgres 模式与导入模型 |
+| [ROADMAP.md](ROADMAP.md) | 已完成、部分完成和未来计划的功能 |
+| [CHANGELOG.md](CHANGELOG.md) | 发布历史 |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | 贡献流程 |
 
-## Security model
+## 安全模型
 
-The rule is simple:
-- code can be public
-- data and credentials cannot
+规则很简单：
+- 代码可以公开
+- 数据和凭证不能公开
 
-Keep private:
-- `.env`
-- service-account keys
-- Gmail tokens
-- Postgres credentials
-- `terraform.tfvars`
-- local databases, imports, and thumbnails under `~/.catscan/`
+请务必保密：
+- `.env` 文件
+- 服务账号密钥
+- Gmail 令牌
+- Postgres 凭证
+- `terraform.tfvars` 文件
+- `~/.catscan/` 目录下的本地数据库、导入文件和缩略图
 
-The repo preflight and secret scanning are designed around that assumption. See [SECURITY.md](SECURITY.md).
+仓库的预检和密钥扫描都基于此假设设计。请参阅 [SECURITY.md](SECURITY.md)。
 
-## Current status
+## 当前状态
 
-Release engineering is in good shape.
+发布工程状态良好。
 
-As of `v0.9.4`:
-- the OSS preflight passes
-- the full Python suite passes in this repo
-- dashboard build and lint pass
+截至 `v0.9.4` 版本：
+- OSS 预检检查通过
+- 此仓库中的完整 Python 测试套件通过
+- 仪表板构建和代码检查通过
 
-What still needs more proof:
-- measured efficiency uplift across multiple real deployments
-- end-to-end conversion-driven optimization at production scale
-- provider-agnostic language analysis instead of a single optional AI path
+仍需更多验证的方面：
+- 在多个真实部署中，可衡量的效率提升
+- 在生产规模下，端到端的、由转化数据驱动的优化
+- 与提供商无关的语言分析，而非单一的、可选的 AI 路径
 
-## Contributing
+## 贡献
 
-Run the basics before you open a change:
+在提交更改前，请运行基础检查：
 
 ```bash
 ./venv/bin/ruff check .
@@ -308,8 +322,18 @@ Run the basics before you open a change:
 cd dashboard && npm run lint && npm run build
 ```
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for the rest.
+其余内容请参阅 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
-## License
+## 联系方式
 
-MIT. See [LICENSE](LICENSE).
+项目官网：[rtb.cat](https://rtb.cat)
+
+问题和功能请求：[Gitee Issues](https://gitee.com/jenbrannstrom/rtbcat-platform/issues) | [GitHub Issues](https://github.com/jenbrannstrom/rtbcat-platform/issues)
+
+微信：jenbrannstrom
+
+LinkedIn：[jenbrannstrom](https://www.linkedin.com/in/jenbrannstrom)
+
+## 许可证
+
+MIT。参见 [LICENSE](LICENSE)。
