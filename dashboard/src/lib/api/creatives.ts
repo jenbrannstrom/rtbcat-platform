@@ -53,6 +53,8 @@ export async function getCreativesPaginated(params?: {
   limit?: number;
   offset?: number;
   slim?: boolean;
+  sort_by?: "spend" | "impressions" | "clicks";
+  days?: number;
 }): Promise<PaginatedCreativesResponse> {
   const searchParams = new URLSearchParams();
   if (params?.campaign_id) searchParams.set("campaign_id", params.campaign_id);
@@ -64,6 +66,8 @@ export async function getCreativesPaginated(params?: {
   if (params?.limit) searchParams.set("limit", String(params.limit));
   if (params?.offset) searchParams.set("offset", String(params.offset));
   if (params?.slim !== undefined) searchParams.set("slim", String(params.slim));
+  if (params?.sort_by) searchParams.set("sort_by", params.sort_by);
+  if (params?.days) searchParams.set("days", String(params.days));
 
   const query = searchParams.toString();
   return fetchApi<PaginatedCreativesResponse>(`/creatives/v2${query ? `?${query}` : ""}`);

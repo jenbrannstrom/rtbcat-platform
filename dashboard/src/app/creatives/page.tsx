@@ -377,7 +377,7 @@ function CreativesContent() {
     error,
     refetch,
   } = useQuery({
-    queryKey: ["creatives", selectedSeatId, CREATIVES_PAGE_SIZE, creativesOffset, search, approvalFilter],
+    queryKey: ["creatives", selectedSeatId, CREATIVES_PAGE_SIZE, creativesOffset, search, approvalFilter, sortBySpend ? "spend" : null, days],
     queryFn: () =>
       getCreativesPaginated({
         limit: CREATIVES_PAGE_SIZE,
@@ -386,6 +386,8 @@ function CreativesContent() {
         search: search.trim() || undefined,
         approval_filter: approvalFilter,
         slim: true,
+        sort_by: sortBySpend ? "spend" : undefined,
+        days: sortBySpend ? days : undefined,
       }),
   });
 
