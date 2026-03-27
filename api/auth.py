@@ -38,9 +38,20 @@ def generate_api_key() -> str:
     return secrets.token_urlsafe(32)
 
 
+_PUBLIC_PREFIXES = (
+    "/conversions/appsflyer/postback",
+    "/conversions/generic/postback",
+    "/conversions/redtrack/postback",
+    "/conversions/voluum/postback",
+    "/conversions/pixel",
+)
+
+
 def is_public_path(path: str) -> bool:
     """Check if the path is public (no auth required)."""
-    return path in PUBLIC_PATHS
+    if path in PUBLIC_PATHS:
+        return True
+    return any(path.startswith(p) for p in _PUBLIC_PREFIXES)
 
 
 class APIKeyAuthMiddleware(BaseHTTPMiddleware):
