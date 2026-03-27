@@ -101,7 +101,7 @@ class CreativePreviewService:
         if not vast_xml:
             return None
         match = re.search(
-            r"<MediaFile[^>]*>(?:<!\\[CDATA\\[)?(https?://[^\\]<]+)",
+            r"<MediaFile[^>]*>(?:<!\[CDATA\[)?(https?://[^\]<]+)",
             vast_xml,
             re.IGNORECASE,
         )
