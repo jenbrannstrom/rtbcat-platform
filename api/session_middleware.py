@@ -53,7 +53,13 @@ PUBLIC_PATHS = {
 }
 
 # Path prefixes that are public
-PUBLIC_PREFIXES: list[str] = []
+PUBLIC_PREFIXES: list[str] = [
+    "/conversions/appsflyer/postback",   # Webhook (secret-gated)
+    "/conversions/generic/postback",     # Webhook (secret-gated)
+    "/conversions/redtrack/postback",    # Webhook (secret-gated)
+    "/conversions/voluum/postback",      # Webhook (secret-gated)
+    "/conversions/pixel",                # Pixel tracking
+]
 
 
 def is_public_path(path: str) -> bool:
