@@ -5,6 +5,7 @@ Supports Gemini, Claude, and Grok for creative language detection.
 
 from __future__ import annotations
 
+import base64
 import json
 import logging
 import os
@@ -12,6 +13,7 @@ import re
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Optional
 
 from services.gemini_client import generate_gemini_content
@@ -376,26 +378,215 @@ Rules:
                 error=f"Failed to parse API response: {exc}",
             )
 
+    def _resolve_image_for_creative(
+        self,
+        creative_id: str,
+        raw_data: dict,
+        creative_format: str,
+    ) -> Optional[str]:
+        """Find an image source (local path or URL) for vision-based detection."""
+        if creative_format == "VIDEO":
+            thumb = Path.home() / ".catscan" / "thumbnails" / f"{creative_id}.jpg"
+            if thumb.exists():
+                return str(thumb)
+
+        if creative_format == "HTML":
+            snippet = (raw_data.get("html") or {}).get("snippet", "")
+            if snippet:
+                from utils.html_thumbnail import extract_image_urls_from_html
+                urls = extract_image_urls_from_html(snippet)
+                if urls:
+                    return urls[0]
+
+        if creative_format == "IMAGE":
+            image_data = raw_data.get("image", {})
+            if isinstance(image_data, dict):
+                url = image_data.get("url", "")
+                if url and url.startswith("http"):
+                    return url
+
+        return None
+
+    @staticmethod
+    def _load_image_base64(source: str) -> Optional[tuple[str, str]]:
+        """Load image from local path or URL, return (media_type, base64_data)."""
+        try:
+            if source.startswith("http"):
+                req = urllib.request.Request(source, headers={"User-Agent": "CatScan/1.0"})
+                with urllib.request.urlopen(req, timeout=10) as resp:
+                    data = resp.read(5 * 1024 * 1024)  # 5MB cap
+                    content_type = resp.headers.get("Content-Type", "image/jpeg")
+                    media_type = content_type.split(";")[0].strip()
+            else:
+                path = Path(source)
+                if not path.exists():
+                    return None
+                data = path.read_bytes()
+                ext = path.suffix.lower()
+                media_type = {"jpg": "image/jpeg", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".webp": "image/webp", ".gif": "image/gif"}.get(ext, "image/jpeg")
+            return media_type, base64.b64encode(data).decode("ascii")
+        except Exception as exc:
+            logger.debug("Failed to load image %s: %s", source, exc)
+            return None
+
+    def _build_vision_prompt(self) -> str:
+        return """Analyze this advertising creative image and detect the primary language of any visible text.
+
+Respond ONLY with valid JSON in this exact format:
+{
+  "language": "English",
+  "language_code": "en",
+  "confidence": 0.95
+}
+
+Rules:
+- "language" should be the full English name of the language (e.g., "German", "French", "Spanish")
+- "language_code" should be the ISO 639-1 two-letter code (e.g., "de", "fr", "es")
+- "confidence" should be between 0.0 and 1.0
+- If you cannot see any text in the image, respond with: {"language": null, "language_code": null, "confidence": 0.0}
+"""
+
+    def detect_language_from_image(
+        self,
+        image_source: str,
+        timeout: float = 15.0,
+    ) -> LanguageDetectionResult:
+        """Detect language from an image using vision API."""
+        if not self.is_configured:
+            return LanguageDetectionResult(
+                source=self.provider,
+                error=f"{self.provider.capitalize()} API key not configured",
+            )
+
+        img = self._load_image_base64(image_source)
+        if not img:
+            return LanguageDetectionResult(
+                source=self.provider,
+                error="Could not load image for vision analysis",
+            )
+        media_type, b64_data = img
+        prompt = self._build_vision_prompt()
+
+        try:
+            if self.provider == "claude":
+                return self._detect_vision_claude(prompt, media_type, b64_data, timeout)
+            if self.provider == "gemini":
+                return self._detect_vision_gemini(prompt, media_type, b64_data, timeout)
+            if self.provider == "grok":
+                return self._detect_vision_grok(prompt, media_type, b64_data, timeout)
+            return LanguageDetectionResult(
+                source=self.provider,
+                error=f"Vision not supported for provider: {self.provider}",
+            )
+        except Exception as exc:
+            logger.error("Vision detection error (%s): %s", self.provider, exc)
+            return LanguageDetectionResult(source=self.provider, error=str(exc))
+
+    def _detect_vision_claude(self, prompt: str, media_type: str, b64_data: str, timeout: float) -> LanguageDetectionResult:
+        model = os.getenv("CATSCAN_CLAUDE_MODEL", "claude-3-5-sonnet-latest")
+        payload = {
+            "model": model,
+            "max_tokens": 200,
+            "temperature": 0,
+            "messages": [{
+                "role": "user",
+                "content": [
+                    {"type": "image", "source": {"type": "base64", "media_type": media_type, "data": b64_data}},
+                    {"type": "text", "text": prompt},
+                ],
+            }],
+        }
+        response_data = self._post_json(
+            url="https://api.anthropic.com/v1/messages",
+            headers={"x-api-key": self.api_key or "", "anthropic-version": "2023-06-01", "content-type": "application/json"},
+            payload=payload,
+            timeout=timeout,
+        )
+        text = self._extract_claude_text(response_data)
+        result = self._parse_response(text)
+        if result.source:
+            result.source = f"{self.provider}_vision"
+        return result
+
+    def _detect_vision_gemini(self, prompt: str, media_type: str, b64_data: str, timeout: float) -> LanguageDetectionResult:
+        payload = {
+            "contents": [{"parts": [
+                {"inline_data": {"mime_type": media_type, "data": b64_data}},
+                {"text": prompt},
+            ]}],
+            "generationConfig": {"temperature": 0.1, "maxOutputTokens": 200},
+        }
+        model = os.getenv("CATSCAN_GEMINI_MODEL", "gemini-2.0-flash")
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={self.api_key}"
+        response_data = self._post_json(url=url, headers={"Content-Type": "application/json"}, payload=payload, timeout=timeout)
+        candidates = response_data.get("candidates", [])
+        if not candidates:
+            raise RuntimeError("Gemini vision returned no candidates")
+        parts = candidates[0].get("content", {}).get("parts", [])
+        text = parts[0].get("text", "") if parts else ""
+        result = self._parse_response(text)
+        if result.source:
+            result.source = f"{self.provider}_vision"
+        return result
+
+    def _detect_vision_grok(self, prompt: str, media_type: str, b64_data: str, timeout: float) -> LanguageDetectionResult:
+        model = os.getenv("CATSCAN_GROK_MODEL", "grok-2-latest")
+        data_url = f"data:{media_type};base64,{b64_data}"
+        payload = {
+            "model": model,
+            "temperature": 0,
+            "messages": [
+                {"role": "system", "content": "You are a language detection engine. Return only valid JSON."},
+                {"role": "user", "content": [
+                    {"type": "image_url", "image_url": {"url": data_url}},
+                    {"type": "text", "text": prompt},
+                ]},
+            ],
+        }
+        response_data = self._post_json(
+            url="https://api.x.ai/v1/chat/completions",
+            headers={"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"},
+            payload=payload,
+            timeout=timeout,
+        )
+        text = self._extract_grok_text(response_data)
+        result = self._parse_response(text)
+        if result.source:
+            result.source = f"{self.provider}_vision"
+        return result
+
     async def analyze_creative(
         self,
         creative_id: str,
         raw_data: dict,
         creative_format: str,
     ) -> LanguageDetectionResult:
-        """Analyze a creative and detect its language."""
-        text = self.extract_text_from_creative(raw_data, creative_format)
-        if not text:
-            return LanguageDetectionResult(
-                source=self.provider,
-                error=f"No text content found in {creative_format} creative",
-            )
+        """Analyze a creative and detect its language.
 
-        logger.debug(
-            "Analyzing language for creative %s with %s",
-            creative_id,
-            self.provider,
+        Tries text extraction first, falls back to vision-based detection
+        when text content is insufficient (common for image-based HTML ads
+        and video creatives).
+        """
+        text = self.extract_text_from_creative(raw_data, creative_format)
+
+        if text:
+            logger.debug("Analyzing language for creative %s with %s (text)", creative_id, self.provider)
+            result = self.detect_language(text)
+            if result.success:
+                return result
+
+        # Vision fallback: use thumbnail or extracted image URL
+        image_source = self._resolve_image_for_creative(creative_id, raw_data, creative_format)
+        if image_source:
+            logger.debug("Falling back to vision for creative %s with %s", creative_id, self.provider)
+            result = self.detect_language_from_image(image_source)
+            if result.success:
+                return result
+
+        return LanguageDetectionResult(
+            source=self.provider,
+            error=f"No text or image content found in {creative_format} creative",
         )
-        return self.detect_language(text)
 
 
 # Backward-compatible alias used by existing imports.
