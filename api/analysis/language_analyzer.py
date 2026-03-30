@@ -254,7 +254,7 @@ Rules:
         prompt: str,
         timeout: float,
     ) -> LanguageDetectionResult:
-        model = os.getenv("CATSCAN_CLAUDE_MODEL", "claude-3-5-sonnet-latest")
+        model = os.getenv("CATSCAN_CLAUDE_MODEL", "claude-haiku-4-5-20251001")
         payload = {
             "model": model,
             "max_tokens": 200,
@@ -483,7 +483,7 @@ Rules:
             return LanguageDetectionResult(source=self.provider, error=str(exc))
 
     def _detect_vision_claude(self, prompt: str, media_type: str, b64_data: str, timeout: float) -> LanguageDetectionResult:
-        model = os.getenv("CATSCAN_CLAUDE_MODEL", "claude-3-5-sonnet-latest")
+        model = os.getenv("CATSCAN_CLAUDE_MODEL", "claude-haiku-4-5-20251001")
         payload = {
             "model": model,
             "max_tokens": 200,

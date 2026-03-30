@@ -168,7 +168,7 @@ class GeoLinguisticAnalyzer:
         image_paths: list[str] | None,
         timeout: float,
     ) -> str:
-        model = os.getenv("CATSCAN_CLAUDE_MODEL", "claude-3-5-sonnet-latest")
+        model = os.getenv("CATSCAN_CLAUDE_MODEL", "claude-haiku-4-5-20251001")
         content: list[dict] = [{"type": "text", "text": prompt}]
         for image in (image_paths or [])[:4]:
             encoded = self._load_image_base64(image)
