@@ -235,11 +235,13 @@ def get_mismatch_alert(
 
     result = check_language_country_match(language_code, serving_countries)
 
-    # No alert if there's a match or no mismatches
-    if result["is_match"] and not result["mismatched_countries"]:
+    # No alert if language matches at least one serving country.
+    # Mixed serving (e.g. English creative in US + Brazil) is normal — the
+    # creative matches the US audience, Brazil is just additional reach.
+    if result["is_match"]:
         return None
 
-    # Generate alert for significant mismatches
+    # Only alert when creative language matches NONE of the serving countries.
     mismatched = result["mismatched_countries"]
     expected = result["expected_countries"]
 
