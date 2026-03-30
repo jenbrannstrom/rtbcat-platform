@@ -142,6 +142,9 @@ export default function ClickMacroCoveragePage() {
                 <th className="px-3 py-2 text-left font-medium text-gray-600">Creative</th>
                 <th className="px-3 py-2 text-left font-medium text-gray-600">Format</th>
                 <th className="px-3 py-2 text-left font-medium text-gray-600">Approval</th>
+                <th className="px-3 py-2 text-right font-medium text-gray-600">Spend (30d)</th>
+                <th className="px-3 py-2 text-right font-medium text-gray-600">Imps (30d)</th>
+                <th className="px-3 py-2 text-left font-medium text-gray-600">Last Active</th>
                 <th className="px-3 py-2 text-left font-medium text-gray-600">Click Macro Tokens</th>
                 <th className="px-3 py-2 text-left font-medium text-gray-600">Sources</th>
                 <th className="px-3 py-2 text-left font-medium text-gray-600">Sample URL</th>
@@ -169,6 +172,27 @@ export default function ClickMacroCoveragePage() {
                   </td>
                   <td className="px-3 py-2 align-top text-xs text-gray-700">{row.format || "-"}</td>
                   <td className="px-3 py-2 align-top text-xs text-gray-700">{row.approval_status || "-"}</td>
+                  <td className="px-3 py-2 align-top text-right text-xs">
+                    {row.spend_30d_micros > 0 ? (
+                      <span className="font-medium text-gray-900">${(row.spend_30d_micros / 1_000_000).toFixed(2)}</span>
+                    ) : (
+                      <span className="text-gray-400">-</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2 align-top text-right text-xs">
+                    {row.impressions_30d > 0 ? (
+                      <span className="text-gray-700">{row.impressions_30d.toLocaleString()}</span>
+                    ) : (
+                      <span className="text-gray-400">-</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2 align-top text-xs">
+                    {row.is_active ? (
+                      <span className="inline-flex items-center gap-1 rounded bg-green-50 px-1.5 py-0.5 text-green-700">{row.last_active_date}</span>
+                    ) : (
+                      <span className="text-gray-400">Inactive</span>
+                    )}
+                  </td>
                   <td className="px-3 py-2 align-top text-xs text-gray-700">
                     {row.click_macro_tokens.length > 0 ? row.click_macro_tokens.join(", ") : "-"}
                   </td>
@@ -194,7 +218,7 @@ export default function ClickMacroCoveragePage() {
               ))}
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-3 py-8 text-center text-sm text-gray-500">
+                  <td colSpan={10} className="px-3 py-8 text-center text-sm text-gray-500">
                     No creatives matched this filter.
                   </td>
                 </tr>

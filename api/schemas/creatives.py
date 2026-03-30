@@ -157,6 +157,10 @@ class CreativeClickMacroCoverageRow(BaseModel):
     has_appsflyer_url: bool = False
     has_appsflyer_clickid: bool = False
     sample_appsflyer_url: Optional[str] = None
+    spend_30d_micros: int = 0
+    impressions_30d: int = 0
+    last_active_date: Optional[str] = None
+    is_active: bool = False
 
 
 class CreativeClickMacroCoverageSummary(BaseModel):
