@@ -118,6 +118,10 @@ export interface CreativeClickMacroCoverageRow {
   has_appsflyer_url?: boolean;
   has_appsflyer_clickid?: boolean;
   sample_appsflyer_url?: string | null;
+  spend_30d_micros: number;
+  impressions_30d: number;
+  last_active_date: string | null;
+  is_active: boolean;
 }
 
 export interface CreativeClickMacroCoverageSummary {
