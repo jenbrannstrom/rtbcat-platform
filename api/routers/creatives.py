@@ -285,6 +285,31 @@ async def get_creative_click_macro_coverage(
         include_raw_data=True,
     )
 
+    # Fetch spend data from precomputed table (fast)
+    creative_ids = [c.id for c in creatives]
+    spend_data: dict[str, dict] = {}
+    if creative_ids:
+        from storage.postgres_database import pg_query
+        spend_rows = await pg_query(
+            """
+            SELECT creative_id,
+                   COALESCE(SUM(spend_micros), 0) AS spend,
+                   COALESCE(SUM(impressions), 0) AS imps,
+                   MAX(metric_date)::text AS last_active
+            FROM config_creative_daily
+            WHERE creative_id = ANY(%s)
+              AND metric_date >= CURRENT_DATE - 30
+            GROUP BY creative_id
+            """,
+            (creative_ids,),
+        )
+        for row in spend_rows:
+            spend_data[row["creative_id"]] = {
+                "spend": int(row["spend"]),
+                "imps": int(row["imps"]),
+                "last_active": row["last_active"],
+            }
+
     search_term = (search or "").strip().lower()
     rows: list[CreativeClickMacroCoverageRow] = []
 
@@ -298,6 +323,11 @@ async def get_creative_click_macro_coverage(
             continue
         if macro_state == "missing_click_macro" and has_click_macro:
             continue
+
+        perf = spend_data.get(creative.id, {})
+        spend_micros = perf.get("spend", 0)
+        impressions = perf.get("imps", 0)
+        last_active = perf.get("last_active")
 
         rows.append(
             CreativeClickMacroCoverageRow(
@@ -316,12 +346,17 @@ async def get_creative_click_macro_coverage(
                 has_appsflyer_url=bool(macro_summary.get("has_appsflyer_url")),
                 has_appsflyer_clickid=bool(macro_summary.get("has_appsflyer_clickid")),
                 sample_appsflyer_url=macro_summary.get("sample_appsflyer_url"),
+                spend_30d_micros=spend_micros,
+                impressions_30d=impressions,
+                last_active_date=last_active,
+                is_active=spend_micros > 0,
             )
         )
 
     rows.sort(
         key=lambda item: (
             item.has_click_macro,
+            -item.spend_30d_micros,
             item.creative_name.lower(),
             item.creative_id,
         )
