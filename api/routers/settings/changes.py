@@ -11,7 +11,7 @@ from api.dependencies import get_current_user, require_seat_admin_or_sudo
 from services.auth_service import User
 from services.changes_service import ChangesService
 from services.pretargeting_service import PretargetingService
-from storage.postgres_repositories.rtb_bidstream_repo import RTBBidstreamRepository
+from storage.postgres_repositories.rtb_bidstream_repo import RtbBidstreamRepository
 from utils.list_payloads import parse_list_payload
 
 from .models import (
@@ -469,7 +469,7 @@ async def get_pretargeting_config_detail(
         effective_geo_country_codes: list[str] = []
         if effective_geos:
             try:
-                effective_geo_country_codes = await RTBBidstreamRepository().get_country_codes_for_geo_ids(
+                effective_geo_country_codes = await RtbBidstreamRepository().get_country_codes_for_geo_ids(
                     sorted(list(effective_geos))
                 )
             except Exception:

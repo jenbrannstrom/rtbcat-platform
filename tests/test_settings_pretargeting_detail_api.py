@@ -88,7 +88,7 @@ def _build_client(monkeypatch: pytest.MonkeyPatch) -> SyncASGIClient:
     )
     monkeypatch.setattr(
         changes_router,
-        "RTBBidstreamRepository",
+        "RtbBidstreamRepository",
         lambda: _StubBidstreamRepo(),
     )
     return SyncASGIClient(app)
