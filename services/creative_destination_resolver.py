@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 from typing import Any, Optional
@@ -139,12 +140,6 @@ def extract_macro_tokens(value: Optional[str]) -> list[str]:
 
 
 def build_creative_click_macro_summary(creative: Any) -> dict[str, Any]:
-    creative_format = (getattr(creative, "format", "") or "").upper()
-
-    # Native creatives are exempt: Google handles click tracking automatically
-    # at serving time — no %%CLICK_URL%% macro needed in the payload.
-    is_native_exempt = creative_format == "NATIVE"
-
     candidates = extract_creative_destination_candidates(creative)
     macro_tokens: set[str] = set()
     click_macro_tokens: set[str] = set()
@@ -174,43 +169,24 @@ def build_creative_click_macro_summary(creative: Any) -> dict[str, Any]:
             if _is_click_url_macro(token):
                 click_macro_tokens.add(token)
 
-    # Also scan raw HTML snippet, VAST XML, and native clickLinkUrl directly
-    # — the URL extraction pipeline strips macro prefixes, so click macros
-    # embedded in HTML hrefs (e.g. href="%%CLICK_URL_UNESC%%https://...") are
-    # lost by the time we inspect candidate URLs above.
+    # Scan the entire raw_data JSON blob as text for %%CLICK_URL%% tokens.
+    # The URL extraction pipeline strips macro prefixes, and format-specific
+    # field scanning misses macros in unexpected locations (e.g. JS object
+    # literals in native creatives that contain full HTML, VAST XML click
+    # trackers, etc.). Scanning the full blob catches everything.
     raw_data = getattr(creative, "raw_data", {}) or {}
-    raw_text_sources: list[tuple[str, str]] = []
-    html_payload = raw_data.get("html")
-    if isinstance(html_payload, dict):
-        snippet = html_payload.get("snippet") or ""
-        if snippet:
-            raw_text_sources.append(("html_snippet", str(snippet)))
-    native_payload = raw_data.get("native")
-    if isinstance(native_payload, dict):
-        click_link = native_payload.get("clickLinkUrl") or ""
-        if click_link:
-            raw_text_sources.append(("native_click_link_url", str(click_link)))
-    video_payload = raw_data.get("video")
-    if isinstance(video_payload, dict):
-        for key in ("videoVastXml", "vastXml"):
-            vast_xml = video_payload.get(key) or ""
-            if vast_xml:
-                raw_text_sources.append(("video_vast_xml", str(vast_xml)))
-                break
-    for source, text in raw_text_sources:
-        tokens = extract_macro_tokens(text)
-        for token in tokens:
+    if raw_data:
+        raw_text = json.dumps(raw_data)
+        raw_tokens = extract_macro_tokens(raw_text)
+        for token in raw_tokens:
             macro_tokens.add(token)
             if _is_click_url_macro(token):
                 click_macro_tokens.add(token)
-                source_hints.add(source)
-
-    has_click_macro = bool(click_macro_tokens) or is_native_exempt
+                source_hints.add("raw_data")
 
     return {
         "has_any_macro": bool(macro_tokens),
-        "has_click_macro": has_click_macro,
-        "is_native_exempt": is_native_exempt,
+        "has_click_macro": bool(click_macro_tokens),
         "macro_tokens": sorted(macro_tokens),
         "click_macro_tokens": sorted(click_macro_tokens),
         "url_sources": sorted(source_hints),

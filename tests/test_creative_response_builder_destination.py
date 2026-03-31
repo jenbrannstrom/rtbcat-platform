@@ -129,7 +129,7 @@ def test_click_macro_summary_detects_macro_in_html_snippet() -> None:
 
     assert summary["has_click_macro"] is True
     assert "%%CLICK_URL_UNESC%%" in summary["click_macro_tokens"]
-    assert "html_snippet" in summary["url_sources"]
+    assert "raw_data" in summary["url_sources"]
 
 
 def test_click_macro_summary_detects_macro_in_html_js_clickthrough() -> None:
@@ -153,10 +153,32 @@ def test_click_macro_summary_detects_macro_in_html_js_clickthrough() -> None:
     assert "%%CLICK_URL%%" in summary["click_macro_tokens"]
 
 
-def test_click_macro_summary_native_exempt_without_macro() -> None:
-    """Native creatives are exempt — Google handles click tracking automatically."""
+def test_click_macro_summary_native_with_macro_in_js() -> None:
+    """Native creatives with click macros embedded in JS must be detected via raw_data scan."""
     creative = SimpleNamespace(
-        format="NATIVE",
+        final_url=None,
+        display_url=None,
+        raw_data={
+            "native": {
+                "headline": "Great App",
+                "clickLinkUrl": "https://play.google.com/store/apps/details?id=com.example",
+                "snippet": (
+                    '<script>const urls={click:"%%CLICK_URL_UNESC%%'
+                    'https://play.google.com/store/apps/details?id=com.example"};</script>'
+                ),
+            }
+        },
+    )
+
+    summary = build_creative_click_macro_summary(creative)
+
+    assert summary["has_click_macro"] is True
+    assert "%%CLICK_URL_UNESC%%" in summary["click_macro_tokens"]
+
+
+def test_click_macro_summary_native_without_macro() -> None:
+    """Native creatives without any click macro must show as missing."""
+    creative = SimpleNamespace(
         final_url=None,
         display_url=None,
         raw_data={
@@ -169,15 +191,12 @@ def test_click_macro_summary_native_exempt_without_macro() -> None:
 
     summary = build_creative_click_macro_summary(creative)
 
-    assert summary["has_click_macro"] is True
-    assert summary["is_native_exempt"] is True
-    assert summary["click_macro_tokens"] == []
+    assert summary["has_click_macro"] is False
 
 
 def test_click_macro_summary_video_vast_xml() -> None:
     """Click macros in VAST XML must be detected for video creatives."""
     creative = SimpleNamespace(
-        format="VIDEO",
         final_url=None,
         display_url=None,
         raw_data={
@@ -195,7 +214,7 @@ def test_click_macro_summary_video_vast_xml() -> None:
 
     assert summary["has_click_macro"] is True
     assert "%%CLICK_URL_ESC%%" in summary["click_macro_tokens"]
-    assert "video_vast_xml" in summary["url_sources"]
+    assert "raw_data" in summary["url_sources"]
 
 
 def test_click_macro_summary_detects_appsflyer_without_clickid() -> None:
