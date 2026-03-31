@@ -153,6 +153,51 @@ def test_click_macro_summary_detects_macro_in_html_js_clickthrough() -> None:
     assert "%%CLICK_URL%%" in summary["click_macro_tokens"]
 
 
+def test_click_macro_summary_native_exempt_without_macro() -> None:
+    """Native creatives are exempt — Google handles click tracking automatically."""
+    creative = SimpleNamespace(
+        format="NATIVE",
+        final_url=None,
+        display_url=None,
+        raw_data={
+            "native": {
+                "headline": "Great App",
+                "clickLinkUrl": "https://play.google.com/store/apps/details?id=com.example",
+            }
+        },
+    )
+
+    summary = build_creative_click_macro_summary(creative)
+
+    assert summary["has_click_macro"] is True
+    assert summary["is_native_exempt"] is True
+    assert summary["click_macro_tokens"] == []
+
+
+def test_click_macro_summary_video_vast_xml() -> None:
+    """Click macros in VAST XML must be detected for video creatives."""
+    creative = SimpleNamespace(
+        format="VIDEO",
+        final_url=None,
+        display_url=None,
+        raw_data={
+            "video": {
+                "videoVastXml": (
+                    '<VAST><Ad><InLine><Creatives><Creative>'
+                    '<VideoClicks><ClickThrough>%%CLICK_URL_ESC%%https://example.com</ClickThrough>'
+                    '</VideoClicks></Creative></Creatives></InLine></Ad></VAST>'
+                )
+            }
+        },
+    )
+
+    summary = build_creative_click_macro_summary(creative)
+
+    assert summary["has_click_macro"] is True
+    assert "%%CLICK_URL_ESC%%" in summary["click_macro_tokens"]
+    assert "video_vast_xml" in summary["url_sources"]
+
+
 def test_click_macro_summary_detects_appsflyer_without_clickid() -> None:
     creative = SimpleNamespace(
         final_url=(
