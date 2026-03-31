@@ -223,6 +223,7 @@ class ConfigDetailResponse(BaseModel):
     pending_changes: list[PendingChangeResponse] = []
     effective_sizes: list[str] = []
     effective_geos: list[str] = []
+    effective_geo_country_codes: list[str] = []
     effective_formats: list[str] = []
     effective_maximum_qps: Optional[int] = None
     effective_publisher_targeting_mode: Optional[str] = None

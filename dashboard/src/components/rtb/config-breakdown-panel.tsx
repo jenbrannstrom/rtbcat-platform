@@ -2307,6 +2307,7 @@ export function ConfigBreakdownPanel({
               previewPerformanceResponse?.performance?.[selectedCreative.id] ||
               selectedCreative.performance
             }
+            targetCountryCodes={configDetail?.effective_geo_country_codes || []}
             onClose={() => {
               setSelectedCreative(null);
               setFullCreative(null);

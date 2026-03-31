@@ -569,19 +569,21 @@ class HomeAnalyticsService:
         # This keeps seat-scoped Home analytics bounded and predictable.
         if buyer_id is not None and bidder_id is None:
             endpoints = []
-            observed_rows = []
+            observed_rows_all = []
         else:
-            endpoints, observed_rows = await asyncio.gather(
+            endpoints, observed_rows_all = await asyncio.gather(
                 self._repo.get_endpoints_for_bidder(bidder_id),
                 self._repo.get_observed_endpoint_rows(bidder_id),
             )
-        observed_rows = [r for r in observed_rows if float(r.get("current_qps") or 0) > 0]
+        observed_rows_positive = [
+            r for r in observed_rows_all if float(r.get("current_qps") or 0) > 0
+        ]
 
         # observed_query_rate_qps from actual endpoint delivery data only
         observed_qps: float | None = None
         endpoint_delivery_state = "missing"
-        if observed_rows:
-            observed_qps = sum(float(r.get("current_qps") or 0) for r in observed_rows)
+        if observed_rows_all:
+            observed_qps = sum(float(r.get("current_qps") or 0) for r in observed_rows_all)
             endpoint_delivery_state = "available"
 
         allocated_qps = int(sum(int(r.get("maximum_qps") or 0) for r in endpoints))
@@ -597,7 +599,7 @@ class HomeAnalyticsService:
         )
 
         endpoint_by_id = {str(r.get("endpoint_id")): r for r in endpoints}
-        observed_by_id = {str(r.get("endpoint_id")): r for r in observed_rows}
+        observed_by_id = {str(r.get("endpoint_id")): r for r in observed_rows_all}
 
         mapped = [eid for eid in endpoint_by_id.keys() if eid in observed_by_id]
         missing = [eid for eid in endpoint_by_id.keys() if eid not in observed_by_id]
@@ -703,7 +705,11 @@ class HomeAnalyticsService:
             status = "warning"
 
         latest_observed_at = max(
-            (r.get("observed_at") for r in observed_rows if r.get("observed_at") is not None),
+            (
+                r.get("observed_at")
+                for r in observed_rows_all
+                if r.get("observed_at") is not None
+            ),
             default=None,
         )
 
@@ -742,7 +748,7 @@ class HomeAnalyticsService:
                     "latest_observed_at": latest_observed_at.isoformat()
                     if hasattr(latest_observed_at, "isoformat")
                     else latest_observed_at,
-                    "rows_with_positive_qps": len(observed_rows),
+                    "rows_with_positive_qps": len(observed_rows_positive),
                 },
             },
             "summary": {

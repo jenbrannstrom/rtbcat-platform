@@ -28,13 +28,19 @@ import { GeoLinguisticSection } from "./GeoLinguisticSection";
 interface PreviewModalProps {
   creative: Creative;
   performance?: CreativePerformanceSummary;
+  targetCountryCodes?: string[];
   onClose: () => void;
 }
 
 /**
  * Main preview modal component for displaying creative details.
  */
-export function PreviewModal({ creative: initialCreative, performance, onClose }: PreviewModalProps) {
+export function PreviewModal({
+  creative: initialCreative,
+  performance,
+  targetCountryCodes,
+  onClose,
+}: PreviewModalProps) {
   const { t } = useTranslation();
   const [creative, setCreative] = useState<Creative>(initialCreative);
   const [isLoadingFull, setIsLoadingFull] = useState(false);
@@ -410,6 +416,7 @@ export function PreviewModal({ creative: initialCreative, performance, onClose }
           <div className="p-4 border-b">
             <LanguageSection
               creative={creative}
+              targetCountryCodes={targetCountryCodes}
               onLanguageUpdate={(language, languageCode) => {
                 setCreative((prev) => ({
                   ...prev,

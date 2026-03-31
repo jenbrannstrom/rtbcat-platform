@@ -2,21 +2,25 @@
 
 import { useState, useEffect } from "react";
 import { Globe, Loader2, RefreshCw, Edit2, AlertTriangle, ChevronDown, ChevronUp } from "lucide-react";
-import type { Creative, GeoMismatchResponse, CreativeCountryBreakdown } from "@/types/api";
-import { analyzeCreativeLanguage, updateCreativeLanguage, getCreativeGeoMismatch, getCreativeCountries } from "@/lib/api";
+import type { Creative, CreativeCountryBreakdown } from "@/types/api";
+import { analyzeCreativeLanguage, updateCreativeLanguage, getCreativeCountries } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { useTranslation } from "@/contexts/i18n-context";
+import { buildLanguageCountryComparison } from "./utils";
 
 interface LanguageSectionProps {
   creative: Creative;
+  targetCountryCodes?: string[];
   onLanguageUpdate?: (language: string, languageCode: string) => void;
 }
 
-export function LanguageSection({ creative, onLanguageUpdate }: LanguageSectionProps) {
+export function LanguageSection({
+  creative,
+  targetCountryCodes,
+  onLanguageUpdate,
+}: LanguageSectionProps) {
   const { t, language } = useTranslation();
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [geoMismatch, setGeoMismatch] = useState<GeoMismatchResponse | null>(null);
-  const [isLoadingMismatch, setIsLoadingMismatch] = useState(false);
   const [countryData, setCountryData] = useState<CreativeCountryBreakdown | null>(null);
   const [isLoadingCountries, setIsLoadingCountries] = useState(false);
   const [showAllCountries, setShowAllCountries] = useState(false);
@@ -24,16 +28,6 @@ export function LanguageSection({ creative, onLanguageUpdate }: LanguageSectionP
   const [editLanguage, setEditLanguage] = useState("");
   const [editLanguageCode, setEditLanguageCode] = useState("");
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (creative.detected_language_code) {
-      setIsLoadingMismatch(true);
-      getCreativeGeoMismatch(creative.id, 7)
-        .then((data) => setGeoMismatch(data))
-        .catch(() => setGeoMismatch(null))
-        .finally(() => setIsLoadingMismatch(false));
-    }
-  }, [creative.id, creative.detected_language_code]);
 
   useEffect(() => {
     setIsLoadingCountries(true);
@@ -128,6 +122,39 @@ export function LanguageSection({ creative, onLanguageUpdate }: LanguageSectionP
   const countries = countryData?.countries || [];
   const visibleCountries = showAllCountries ? countries : countries.slice(0, 4);
   const hasMoreCountries = countries.length > 4;
+  const servingCountryCodes = countries
+    .map((country) => country.country_code)
+    .filter((countryCode): countryCode is string => Boolean(countryCode));
+  const countryComparison = buildLanguageCountryComparison(
+    creative.detected_language_code,
+    targetCountryCodes,
+    servingCountryCodes,
+  );
+  const mismatchCountryCodes = countryComparison.match.mismatchedCountries;
+  const showMismatchAlert = mismatchCountryCodes.length > 0;
+  const showConfiguredTargetCountries = countryComparison.basis === "targeting";
+
+  const renderServingCountriesValue = () => {
+    if (isLoadingCountries) {
+      return (
+        <span className="inline-flex items-center gap-1 text-gray-400">
+          <Loader2 className="h-3 w-3 animate-spin" />
+          {t.common.loading}
+        </span>
+      );
+    }
+
+    if (countries.length === 0) {
+      return <span className="text-gray-400 italic">{t.previewModal.noCountryData}</span>;
+    }
+
+    return (
+      <span className="font-medium">
+        {visibleCountries.map((country) => country.country_iso3 || country.country_code).join(", ")}
+        {!showAllCountries && hasMoreCountries ? ` +${countries.length - 4}` : ""}
+      </span>
+    );
+  };
 
   return (
     <div className="bg-gray-50 rounded-lg p-3">
@@ -142,45 +169,51 @@ export function LanguageSection({ creative, onLanguageUpdate }: LanguageSectionP
         </div>
       )}
 
-      {geoMismatch?.has_mismatch && geoMismatch.alert && (
+      {showMismatchAlert && (
         <div className="mb-3 p-2 bg-amber-50 border border-amber-200 rounded">
           <div className="flex items-start gap-1.5">
             <AlertTriangle className="h-3.5 w-3.5 text-amber-600 mt-0.5 flex-shrink-0" />
             <div className="text-xs text-amber-800">
               <div className="font-medium">{t.previewModal.geoMismatch}</div>
-              <div className="mt-0.5">{geoMismatch.alert.message}</div>
+              <div className="mt-0.5">
+                {(showConfiguredTargetCountries
+                  ? t.previewModal.geoMismatchTargetCountries
+                  : t.previewModal.geoMismatchServingCountries)
+                  .replace("{language}", creative.detected_language || creative.detected_language_code || "")
+                  .replace("{countries}", mismatchCountryCodes.slice(0, 3).join(", "))}
+                {mismatchCountryCodes.length > 3 && ` ${t.previewModal.moreItemsSuffix.replace("{count}", String(mismatchCountryCodes.length - 3))}`}
+              </div>
             </div>
           </div>
         </div>
       )}
 
-      <div className="text-sm text-gray-700 flex flex-wrap items-center gap-1.5">
-        <span className="text-gray-500">{t.previewModal.languageDetected}</span>
-        {creative.detected_language ? (
-          <span className="font-medium">
-            {creative.detected_language}
-            {creative.detected_language_code ? (
-              <span className="text-gray-400 font-mono ml-1">({creative.detected_language_code})</span>
-            ) : null}
-          </span>
-        ) : (
-          <span className="text-gray-400 italic">{t.previewModal.notAnalyzed}</span>
+      <div className="space-y-1 text-sm text-gray-700">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="text-gray-500">{t.previewModal.languageDetected}</span>
+          {creative.detected_language ? (
+            <span className="font-medium">
+              {creative.detected_language}
+              {creative.detected_language_code ? (
+                <span className="text-gray-400 font-mono ml-1">({creative.detected_language_code})</span>
+              ) : null}
+            </span>
+          ) : (
+            <span className="text-gray-400 italic">{t.previewModal.notAnalyzed}</span>
+          )}
+        </div>
+
+        {showConfiguredTargetCountries && (
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-gray-500">{t.previewModal.countryTargeted}</span>
+            <span className="font-medium">{countryComparison.countryCodes.join(", ")}</span>
+          </div>
         )}
-        <span className="text-gray-300">|</span>
-        <span className="text-gray-500">{t.previewModal.countryTargeted}</span>
-        {isLoadingCountries ? (
-          <span className="inline-flex items-center gap-1 text-gray-400">
-            <Loader2 className="h-3 w-3 animate-spin" />
-            {t.common.loading}
-          </span>
-        ) : countries.length > 0 ? (
-          <span className="font-medium">
-            {visibleCountries.map((c) => c.country_iso3 || c.country_code).join(", ")}
-            {!showAllCountries && hasMoreCountries ? ` +${countries.length - 4}` : ""}
-          </span>
-        ) : (
-          <span className="text-gray-400 italic">{t.previewModal.noCountryData}</span>
-        )}
+
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="text-gray-500">{t.previewModal.servingCountriesFromPerformanceCsvImports}</span>
+          {renderServingCountriesValue()}
+        </div>
       </div>
 
       {hasMoreCountries && (
@@ -257,13 +290,6 @@ export function LanguageSection({ creative, onLanguageUpdate }: LanguageSectionP
           {creative.language_analyzed_at && (
             <> · {new Date(creative.language_analyzed_at).toLocaleDateString(language)}</>
           )}
-        </div>
-      )}
-
-      {isLoadingMismatch && (
-        <div className="mt-2 flex items-center gap-1 text-xs text-gray-400">
-          <Loader2 className="h-3 w-3 animate-spin" />
-          {t.previewModal.checkingGeoCompatibility}
         </div>
       )}
     </div>

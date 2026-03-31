@@ -1994,6 +1994,7 @@ export interface Translations {
     mismatch: string;
     geoMismatchLabel: string;
     geoMismatchServingCountries: string;
+    geoMismatchTargetCountries: string;
     moreItemsSuffix: string;
     dismissThisAlert: string;
     languageMismatch: string;

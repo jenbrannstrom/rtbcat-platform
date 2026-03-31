@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Detached Gmail import worker.
 
-Runs Gmail import and refreshes home/config precompute after successful imports.
+Runs Gmail import and refreshes serving-side caches after successful imports.
 Designed to be launched from API and continue running independently.
 """
 
@@ -12,14 +12,38 @@ import asyncio
 import json
 from datetime import datetime
 
-from scripts.gmail_import import run_import
-from services.config_precompute import refresh_config_breakdowns
-from services.home_precompute import refresh_home_summaries
-
 
 def _print(msg: str) -> None:
     ts = datetime.now().isoformat(timespec="seconds")
     print(f"[{ts}] {msg}", flush=True)
+
+
+def _run_import(*, verbose: bool, job_id: str, import_trigger: str) -> dict:
+    from scripts.gmail_import import run_import
+
+    return run_import(
+        verbose=verbose,
+        job_id=job_id,
+        import_trigger=import_trigger,
+    )
+
+
+def _refresh_home_precompute(*, days: int) -> None:
+    from services.home_precompute import refresh_home_summaries
+
+    asyncio.run(refresh_home_summaries(days=days))
+
+
+def _refresh_config_precompute(*, days: int) -> None:
+    from services.config_precompute import refresh_config_breakdowns
+
+    asyncio.run(refresh_config_breakdowns(days=days))
+
+
+def _refresh_endpoint_snapshot() -> None:
+    from services.endpoints_service import EndpointsService
+
+    asyncio.run(EndpointsService().refresh_endpoints_current())
 
 
 def main() -> int:
@@ -36,7 +60,7 @@ def main() -> int:
     args = parser.parse_args()
 
     _print(f"Starting Gmail import job {args.job_id}")
-    result = run_import(
+    result = _run_import(
         verbose=not args.quiet,
         job_id=args.job_id,
         import_trigger=args.import_trigger,
@@ -52,9 +76,11 @@ def main() -> int:
 
     try:
         _print(f"Refreshing home precompute (days={args.refresh_days})")
-        asyncio.run(refresh_home_summaries(days=args.refresh_days))
+        _refresh_home_precompute(days=args.refresh_days)
         _print(f"Refreshing config precompute (days={args.refresh_days})")
-        asyncio.run(refresh_config_breakdowns(days=args.refresh_days))
+        _refresh_config_precompute(days=args.refresh_days)
+        _print("Refreshing endpoint observed QPS snapshot")
+        _refresh_endpoint_snapshot()
         _print("Worker finished successfully")
         return 0
     except Exception as exc:

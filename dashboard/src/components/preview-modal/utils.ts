@@ -165,3 +165,48 @@ export function checkLanguageCountryMatch(languageCode: string | null, countryCo
     mismatchedCountries: mismatched,
   };
 }
+
+export type LanguageCountryComparison = {
+  basis: "none" | "serving" | "targeting";
+  countryCodes: string[];
+  match: ReturnType<typeof checkLanguageCountryMatch>;
+};
+
+function normalizeCountryCodes(countryCodes: string[] | null | undefined): string[] {
+  const normalized = new Set<string>();
+  for (const code of countryCodes || []) {
+    const value = (code || "").trim().toUpperCase();
+    if (value) normalized.add(value);
+  }
+  return Array.from(normalized);
+}
+
+export function buildLanguageCountryComparison(
+  languageCode: string | null,
+  targetCountryCodes: string[] | null | undefined,
+  servingCountryCodes: string[] | null | undefined,
+): LanguageCountryComparison {
+  const normalizedTargetCountryCodes = normalizeCountryCodes(targetCountryCodes);
+  if (normalizedTargetCountryCodes.length > 0) {
+    return {
+      basis: "targeting",
+      countryCodes: normalizedTargetCountryCodes,
+      match: checkLanguageCountryMatch(languageCode, normalizedTargetCountryCodes),
+    };
+  }
+
+  const normalizedServingCountryCodes = normalizeCountryCodes(servingCountryCodes);
+  if (normalizedServingCountryCodes.length > 0) {
+    return {
+      basis: "serving",
+      countryCodes: normalizedServingCountryCodes,
+      match: checkLanguageCountryMatch(languageCode, normalizedServingCountryCodes),
+    };
+  }
+
+  return {
+    basis: "none",
+    countryCodes: [],
+    match: checkLanguageCountryMatch(languageCode, []),
+  };
+}
