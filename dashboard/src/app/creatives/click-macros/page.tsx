@@ -157,15 +157,11 @@ export default function ClickMacroCoveragePage() {
                     <span
                       className={cn(
                         "inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium",
-                        row.has_click_macro
-                          ? row.is_native_exempt
-                            ? "bg-blue-100 text-blue-700"
-                            : "bg-green-100 text-green-700"
-                          : "bg-red-100 text-red-700"
+                        row.has_click_macro ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
                       )}
                     >
                       {row.has_click_macro ? <CheckCircle2 className="h-3.5 w-3.5" /> : <AlertTriangle className="h-3.5 w-3.5" />}
-                      {row.has_click_macro ? (row.is_native_exempt ? "Exempt (Native)" : "Present") : "Missing"}
+                      {row.has_click_macro ? "Present" : "Missing"}
                     </span>
                   </td>
                   <td className="px-3 py-2 align-top">

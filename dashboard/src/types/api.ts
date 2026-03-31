@@ -110,7 +110,6 @@ export interface CreativeClickMacroCoverageRow {
   approval_status: string | null;
   has_any_macro: boolean;
   has_click_macro: boolean;
-  is_native_exempt: boolean;
   macro_tokens: string[];
   click_macro_tokens: string[];
   url_sources: string[];

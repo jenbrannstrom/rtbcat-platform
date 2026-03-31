@@ -338,7 +338,6 @@ async def get_creative_click_macro_coverage(
                 approval_status=creative.approval_status,
                 has_any_macro=bool(macro_summary["has_any_macro"]),
                 has_click_macro=has_click_macro,
-                is_native_exempt=bool(macro_summary.get("is_native_exempt")),
                 macro_tokens=macro_summary["macro_tokens"],
                 click_macro_tokens=macro_summary["click_macro_tokens"],
                 url_sources=macro_summary["url_sources"],

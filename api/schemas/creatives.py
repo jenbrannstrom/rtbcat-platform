@@ -149,7 +149,6 @@ class CreativeClickMacroCoverageRow(BaseModel):
     approval_status: Optional[str] = None
     has_any_macro: bool = False
     has_click_macro: bool = False
-    is_native_exempt: bool = False
     macro_tokens: list[str] = Field(default_factory=list)
     click_macro_tokens: list[str] = Field(default_factory=list)
     url_sources: list[str] = Field(default_factory=list)
