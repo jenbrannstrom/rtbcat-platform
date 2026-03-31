@@ -95,6 +95,46 @@ class _StubRepoNoObservedQps:
         return "2026-02-25", "2026-03-03"
 
 
+class _StubRepoZeroObservedQpsRows:
+    """Repo where endpoint rows exist but the latest snapshot is all zero-QPS."""
+
+    async def get_funnel_row(self, _days, _buyer_id):
+        return {
+            "total_reached": 1000,
+            "total_impressions": 250,
+            "total_bids": 800,
+            "total_successful_responses": 600,
+            "total_bid_requests": 1200,
+        }
+
+    async def get_bidstream_summary(self, _days, _buyer_id):
+        return {"total_bids": 500, "total_bids_in_auction": 400, "total_auctions_won": 300}
+
+    async def get_bidder_id_for_buyer(self, _buyer_id):
+        return "bidder-1"
+
+    async def get_home_seat_coverage(self, _days, _buyer_id):
+        return {"days_with_data": 7, "row_count": 7, "min_date": "2026-02-25", "max_date": "2026-03-03"}
+
+    async def get_bidstream_coverage(self, _days, _buyer_id):
+        return {"days_with_data": 7, "row_count": 7, "min_date": "2026-02-25", "max_date": "2026-03-03"}
+
+    async def get_endpoints_for_bidder(self, _bidder_id):
+        return [
+            {"endpoint_id": "ep-1", "url": "https://example.com/bid-1", "trading_location": "SG", "maximum_qps": 10000},
+            {"endpoint_id": "ep-2", "url": "https://example.com/bid-2", "trading_location": "US", "maximum_qps": 5000},
+        ]
+
+    async def get_observed_endpoint_rows(self, _bidder_id):
+        return [
+            {"endpoint_id": "ep-1", "url": "https://example.com/bid-1", "trading_location": "SG", "current_qps": 0.0, "observed_at": datetime.datetime(2026, 3, 3, 12, 0)},
+            {"endpoint_id": "ep-2", "url": "https://example.com/bid-2", "trading_location": "US", "current_qps": 0.0, "observed_at": datetime.datetime(2026, 3, 3, 12, 0)},
+        ]
+
+    def get_window_bounds(self, days):
+        return "2026-02-25", "2026-03-03"
+
+
 async def _stub_status(table_name, _days, filters=None, params=None):
     del filters, params
     return {"table": table_name, "exists": True, "has_rows": True, "row_count": 10}
@@ -163,6 +203,27 @@ async def test_no_delivery_missing_alert_when_feed_present(monkeypatch):
     payload = await service.get_endpoint_efficiency_payload(days=7, buyer_id="buyer-1")
 
     alert_codes = [a["code"] for a in payload["alerts"]]
+    assert "ENDPOINT_DELIVERY_MISSING" not in alert_codes
+
+
+@pytest.mark.asyncio
+async def test_zero_qps_rows_are_treated_as_available_snapshot(monkeypatch):
+    """Zero-QPS endpoint rows should not be classified as missing delivery rows."""
+    monkeypatch.setattr("services.home_analytics_service._get_precompute_status", _stub_status)
+    service = HomeAnalyticsService(repo=_StubRepoZeroObservedQpsRows())
+    payload = await service.get_endpoint_efficiency_payload(days=7, buyer_id="buyer-1")
+
+    summary = payload["summary"]
+    assert summary["observed_query_rate_qps"] == 0.0
+    assert summary["endpoint_delivery_state"] == "available"
+
+    counts = payload["endpoint_reconciliation"]["counts"]
+    assert counts["google_delivery_rows"] == 2
+    assert counts["mapped"] == 2
+    assert counts["missing_in_google"] == 0
+
+    alert_codes = [a["code"] for a in payload["alerts"]]
+    assert "ENDPOINT_MAPPING_MISSING" not in alert_codes
     assert "ENDPOINT_DELIVERY_MISSING" not in alert_codes
 
 

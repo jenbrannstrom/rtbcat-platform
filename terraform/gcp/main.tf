@@ -23,7 +23,8 @@ provider "google" {
 }
 
 locals {
-  gmail_import_url = (var.enable_https && var.domain_name != "") ? "https://${var.domain_name}/api/gmail/import/scheduled" : "http://${google_compute_address.catscan.address}/api/gmail/import/scheduled"
+  gmail_import_url       = (var.enable_https && var.domain_name != "") ? "https://${var.domain_name}/api/gmail/import/scheduled" : "http://${google_compute_address.catscan.address}/api/gmail/import/scheduled"
+  precompute_refresh_url = (var.enable_https && var.domain_name != "") ? "https://${var.domain_name}/api/precompute/refresh/scheduled" : "http://${google_compute_address.catscan.address}/api/precompute/refresh/scheduled"
 }
 
 # =============================================================================
@@ -159,30 +160,30 @@ resource "google_bigquery_table" "raw_facts" {
   deletion_protection = true
 
   schema = jsonencode([
-    { name = "metric_date",          type = "DATE",    mode = "NULLABLE" },
-    { name = "billing_id",           type = "STRING",  mode = "NULLABLE" },
-    { name = "creative_id",          type = "STRING",  mode = "NULLABLE" },
-    { name = "creative_size",        type = "STRING",  mode = "NULLABLE" },
-    { name = "creative_format",      type = "STRING",  mode = "NULLABLE" },
-    { name = "buyer_account_id",     type = "STRING",  mode = "NULLABLE" },
-    { name = "reached_queries",      type = "INTEGER", mode = "NULLABLE" },
-    { name = "impressions",          type = "INTEGER", mode = "NULLABLE" },
-    { name = "spend_buyer_currency", type = "FLOAT",   mode = "NULLABLE" },
-    { name = "active_view_viewable",    type = "INTEGER", mode = "NULLABLE" },
-    { name = "active_view_measurable",  type = "INTEGER", mode = "NULLABLE" },
-    { name = "report_type",          type = "STRING",  mode = "NULLABLE" },
-    { name = "country",              type = "STRING",  mode = "NULLABLE" },
-    { name = "bid_filtering_reason", type = "STRING",  mode = "NULLABLE" },
-    { name = "bids",                 type = "INTEGER", mode = "NULLABLE" },
-    { name = "hour",                 type = "INTEGER", mode = "NULLABLE" },
-    { name = "publisher_id",         type = "STRING",  mode = "NULLABLE" },
-    { name = "publisher_name",       type = "STRING",  mode = "NULLABLE" },
-    { name = "bid_requests",         type = "INTEGER", mode = "NULLABLE" },
-    { name = "inventory_matches",    type = "INTEGER", mode = "NULLABLE" },
+    { name = "metric_date", type = "DATE", mode = "NULLABLE" },
+    { name = "billing_id", type = "STRING", mode = "NULLABLE" },
+    { name = "creative_id", type = "STRING", mode = "NULLABLE" },
+    { name = "creative_size", type = "STRING", mode = "NULLABLE" },
+    { name = "creative_format", type = "STRING", mode = "NULLABLE" },
+    { name = "buyer_account_id", type = "STRING", mode = "NULLABLE" },
+    { name = "reached_queries", type = "INTEGER", mode = "NULLABLE" },
+    { name = "impressions", type = "INTEGER", mode = "NULLABLE" },
+    { name = "spend_buyer_currency", type = "FLOAT", mode = "NULLABLE" },
+    { name = "active_view_viewable", type = "INTEGER", mode = "NULLABLE" },
+    { name = "active_view_measurable", type = "INTEGER", mode = "NULLABLE" },
+    { name = "report_type", type = "STRING", mode = "NULLABLE" },
+    { name = "country", type = "STRING", mode = "NULLABLE" },
+    { name = "bid_filtering_reason", type = "STRING", mode = "NULLABLE" },
+    { name = "bids", type = "INTEGER", mode = "NULLABLE" },
+    { name = "hour", type = "INTEGER", mode = "NULLABLE" },
+    { name = "publisher_id", type = "STRING", mode = "NULLABLE" },
+    { name = "publisher_name", type = "STRING", mode = "NULLABLE" },
+    { name = "bid_requests", type = "INTEGER", mode = "NULLABLE" },
+    { name = "inventory_matches", type = "INTEGER", mode = "NULLABLE" },
     { name = "successful_responses", type = "INTEGER", mode = "NULLABLE" },
-    { name = "bids_in_auction",      type = "INTEGER", mode = "NULLABLE" },
-    { name = "auctions_won",         type = "INTEGER", mode = "NULLABLE" },
-    { name = "clicks",               type = "INTEGER", mode = "NULLABLE" },
+    { name = "bids_in_auction", type = "INTEGER", mode = "NULLABLE" },
+    { name = "auctions_won", type = "INTEGER", mode = "NULLABLE" },
+    { name = "clicks", type = "INTEGER", mode = "NULLABLE" },
   ])
 
   time_partitioning {
@@ -321,19 +322,19 @@ resource "google_compute_instance" "catscan" {
   }
 
   metadata_startup_script = templatefile("${path.module}/startup.sh", {
-    app_name                  = var.app_name
-    environment               = var.environment
-    domain_name               = var.domain_name
-    enable_https              = var.enable_https
-    github_repo               = var.github_repo
-    github_branch             = var.github_branch
-    gcp_region                = var.gcp_region
-    gcs_bucket                = var.raw_parquet_bucket_name
-    google_oauth_client_id    = var.google_oauth_client_id
-    allowed_email_domains     = var.allowed_email_domains
-    allow_any_google_accounts = var.allow_any_google_accounts
-    oauth_client_secret_id    = "${var.app_name}-oauth-client-secret"
-    precompute_refresh_days   = var.precompute_refresh_days
+    app_name                   = var.app_name
+    environment                = var.environment
+    domain_name                = var.domain_name
+    enable_https               = var.enable_https
+    github_repo                = var.github_repo
+    github_branch              = var.github_branch
+    gcp_region                 = var.gcp_region
+    gcs_bucket                 = var.raw_parquet_bucket_name
+    google_oauth_client_id     = var.google_oauth_client_id
+    allowed_email_domains      = var.allowed_email_domains
+    allow_any_google_accounts  = var.allow_any_google_accounts
+    oauth_client_secret_id     = "${var.app_name}-oauth-client-secret"
+    precompute_refresh_days    = var.precompute_refresh_days
     precompute_refresh_max_age = var.precompute_refresh_max_age_hours
   })
 
@@ -577,6 +578,38 @@ resource "google_secret_manager_secret_iam_member" "oauth_client_secret_access" 
   secret_id = google_secret_manager_secret.oauth_client_secret.id
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${google_service_account.catscan.email}"
+}
+
+# =============================================================================
+# CLOUD SCHEDULER - Precompute Refresh
+# =============================================================================
+
+resource "google_cloud_scheduler_job" "precompute_refresh" {
+  name        = "precompute-refresh"
+  description = "Daily precompute refresh after Gmail import catch-up completes"
+  schedule    = "30 13 * * *"
+  time_zone   = "Etc/UTC"
+  region      = var.gcp_region
+
+  http_target {
+    http_method = "POST"
+    uri         = local.precompute_refresh_url
+  }
+
+  retry_config {
+    retry_count          = 3
+    min_backoff_duration = "60s"
+    max_backoff_duration = "600s"
+  }
+
+  depends_on = [google_project_service.cloudscheduler]
+
+  lifecycle {
+    ignore_changes = [
+      http_target[0].headers,
+      http_target[0].uri,
+    ]
+  }
 }
 
 # =============================================================================

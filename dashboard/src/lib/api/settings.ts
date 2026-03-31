@@ -80,6 +80,7 @@ export interface ConfigDetail {
   pending_changes_count: number;
   effective_sizes: string[];
   effective_geos: string[];
+  effective_geo_country_codes: string[];
   effective_formats: string[];
   effective_maximum_qps?: number | null;
   effective_publisher_targeting_mode?: string | null;
