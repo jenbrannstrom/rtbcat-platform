@@ -110,6 +110,49 @@ def test_click_macro_summary_detects_url_encoded_appsflyer_and_clickid() -> None
     assert summary["appsflyer_clickid_url_count"] == 1
 
 
+def test_click_macro_summary_detects_macro_in_html_snippet() -> None:
+    """Macros embedded in HTML hrefs must be detected even though URL extraction strips them."""
+    creative = SimpleNamespace(
+        final_url=None,
+        display_url=None,
+        raw_data={
+            "html": {
+                "snippet": (
+                    "<a href='%%CLICK_URL_UNESC%%https://example.com/deal?id=1'>"
+                    "<img src='https://cdn.example.com/banner.png' /></a>"
+                )
+            }
+        },
+    )
+
+    summary = build_creative_click_macro_summary(creative)
+
+    assert summary["has_click_macro"] is True
+    assert "%%CLICK_URL_UNESC%%" in summary["click_macro_tokens"]
+    assert "html_snippet" in summary["url_sources"]
+
+
+def test_click_macro_summary_detects_macro_in_html_js_clickthrough() -> None:
+    """Click macros in JS click handlers (window.open, location.href) must be detected."""
+    creative = SimpleNamespace(
+        final_url=None,
+        display_url=None,
+        raw_data={
+            "html": {
+                "snippet": (
+                    '<div onclick="window.open(\'%%CLICK_URL%%\')">'
+                    '<img src="https://cdn.example.com/ad.jpg" /></div>'
+                )
+            }
+        },
+    )
+
+    summary = build_creative_click_macro_summary(creative)
+
+    assert summary["has_click_macro"] is True
+    assert "%%CLICK_URL%%" in summary["click_macro_tokens"]
+
+
 def test_click_macro_summary_detects_appsflyer_without_clickid() -> None:
     creative = SimpleNamespace(
         final_url=(

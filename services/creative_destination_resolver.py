@@ -168,6 +168,30 @@ def build_creative_click_macro_summary(creative: Any) -> dict[str, Any]:
             if _is_click_url_macro(token):
                 click_macro_tokens.add(token)
 
+    # Also scan raw HTML snippet and native clickLinkUrl directly — the URL
+    # extraction pipeline strips macro prefixes, so click macros embedded in
+    # HTML hrefs (e.g. href="%%CLICK_URL_UNESC%%https://...") are lost by
+    # the time we inspect candidate URLs above.
+    raw_data = getattr(creative, "raw_data", {}) or {}
+    raw_text_sources: list[tuple[str, str]] = []
+    html_payload = raw_data.get("html")
+    if isinstance(html_payload, dict):
+        snippet = html_payload.get("snippet") or ""
+        if snippet:
+            raw_text_sources.append(("html_snippet", str(snippet)))
+    native_payload = raw_data.get("native")
+    if isinstance(native_payload, dict):
+        click_link = native_payload.get("clickLinkUrl") or ""
+        if click_link:
+            raw_text_sources.append(("native_click_link_url", str(click_link)))
+    for source, text in raw_text_sources:
+        tokens = extract_macro_tokens(text)
+        for token in tokens:
+            macro_tokens.add(token)
+            if _is_click_url_macro(token):
+                click_macro_tokens.add(token)
+                source_hints.add(source)
+
     return {
         "has_any_macro": bool(macro_tokens),
         "has_click_macro": bool(click_macro_tokens),
