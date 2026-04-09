@@ -30,6 +30,7 @@ from services.thumbnails_service import ThumbnailsService
 from services.system_service import SystemService
 from services.secrets_health_service import get_secrets_health
 from services.data_health_service import DataHealthService
+from services.bigquery_schema_health_service import get_bigquery_raw_schema_health
 
 logger = logging.getLogger(__name__)
 
@@ -213,6 +214,37 @@ class SecretsHealthResponse(BaseModel):
     summary: SecretsHealthSummary
     missing_required_keys: list[str]
     features: list[SecretFeatureStatus]
+
+
+class BigQueryRawSchemaHealthSummary(BaseModel):
+    tables_checked: int
+    healthy_tables: int
+    degraded_tables: int
+    unavailable_tables: int
+    missing_columns: int
+
+
+class BigQueryRawSchemaTableState(BaseModel):
+    table_name: str
+    table_id: str
+    exists: bool
+    status: Literal["healthy", "degraded", "unavailable"]
+    expected_columns: list[str]
+    actual_columns: list[str]
+    missing_columns: list[str]
+    error: Optional[str] = None
+
+
+class BigQueryRawSchemaHealthResponse(BaseModel):
+    checked_at: str
+    enabled: bool
+    project: Optional[str] = None
+    dataset: Optional[str] = None
+    bucket: Optional[str] = None
+    healthy: bool
+    status: Literal["healthy", "degraded", "unavailable", "disabled"]
+    summary: BigQueryRawSchemaHealthSummary
+    tables: list[BigQueryRawSchemaTableState]
 
 
 class DataHealthTableState(BaseModel):
@@ -524,6 +556,14 @@ async def get_system_secrets_health(
 ) -> SecretsHealthResponse:
     """Get non-sensitive status of required secrets per enabled feature."""
     return SecretsHealthResponse(**get_secrets_health())
+
+
+@router.get("/system/bigquery-raw-schema-health", response_model=BigQueryRawSchemaHealthResponse)
+async def get_system_bigquery_raw_schema_health(
+    _user: User = Depends(require_admin),
+) -> BigQueryRawSchemaHealthResponse:
+    """Get schema compatibility for raw parquet BigQuery loads."""
+    return BigQueryRawSchemaHealthResponse(**get_bigquery_raw_schema_health())
 
 
 @router.get("/system/data-health", response_model=DataHealthResponse)
