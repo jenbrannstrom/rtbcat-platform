@@ -39,6 +39,40 @@ GCS_UPLOAD_TIMEOUT = int(os.getenv("CATSCAN_GCS_UPLOAD_TIMEOUT", "300"))  # 5 mi
 BQ_LOAD_TIMEOUT = int(os.getenv("CATSCAN_BQ_LOAD_TIMEOUT", "600"))  # 10 minutes
 
 
+def _env_truthy(name: str, default: bool = False) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in ("1", "true", "yes", "on")
+
+
+def _gcs_bucket() -> str:
+    return os.getenv("CATSCAN_GCS_BUCKET", GCS_BUCKET).strip()
+
+
+def _gcs_prefix() -> str:
+    return os.getenv("CATSCAN_GCS_PREFIX", GCS_PREFIX).strip("/")
+
+
+def _bq_dataset() -> str:
+    return os.getenv("CATSCAN_BQ_DATASET", BQ_DATASET).strip()
+
+
+def _bq_project() -> str:
+    return os.getenv("CATSCAN_BQ_PROJECT", BQ_PROJECT).strip()
+
+
+def _bq_load_mode() -> str:
+    return os.getenv("CATSCAN_BQ_LOAD_MODE", BQ_LOAD_MODE).lower().strip()
+
+
+def _raw_export_enabled() -> bool:
+    explicit = os.getenv("CATSCAN_RAW_EXPORT_ENABLED")
+    if explicit is None:
+        return bool(_gcs_bucket())
+    return _env_truthy("CATSCAN_RAW_EXPORT_ENABLED")
+
+
 def _parquet_schema_for_table(table_name: str) -> "pa.Schema":
     if table_name == "rtb_daily":
         return pa.schema(
@@ -294,11 +328,15 @@ class ParquetExportManager:
 
     @classmethod
     def from_env(cls, table_name: str, batch_id: str, result_errors: list[str]) -> "ParquetExportManager":
-        enabled = bool(GCS_BUCKET)
+        bucket_name = _gcs_bucket()
+        raw_export_enabled = _raw_export_enabled()
+        enabled = raw_export_enabled and bool(bucket_name)
         if not _HAS_PYARROW:
             enabled = False
             logger.warning("pyarrow not installed; Parquet export disabled.")
-        if not GCS_BUCKET:
+        if not raw_export_enabled:
+            logger.info("CATSCAN_RAW_EXPORT_ENABLED is false; skipping Parquet export.")
+        elif not bucket_name:
             logger.info("CATSCAN_GCS_BUCKET not set; skipping Parquet export.")
         return cls(table_name=table_name, batch_id=batch_id, result_errors=result_errors, enabled=enabled)
 
@@ -360,10 +398,10 @@ class ParquetExportManager:
             writer.close()
         logger.info("Parquet export: uploading %d files to GCS...", len(self._paths))
         uploaded = self._upload_files()
-        if uploaded and _HAS_BQ and BQ_DATASET:
+        if uploaded and _HAS_BQ and _bq_dataset():
             logger.info("Parquet export: loading %d files to BigQuery...", len(uploaded))
             self._register_bigquery(uploaded)
-        elif uploaded and not _HAS_BQ and BQ_DATASET:
+        elif uploaded and not _HAS_BQ and _bq_dataset():
             self._append_error("BigQuery dependencies missing; skipping BigQuery registration.")
         logger.info("Parquet export: finalize complete")
         return uploaded
@@ -372,21 +410,23 @@ class ParquetExportManager:
         if not _HAS_GCS:
             self._append_error("google-cloud-storage not installed; skipping GCS upload.")
             return []
-        if not GCS_BUCKET:
+        bucket_name = _gcs_bucket()
+        if not bucket_name:
             return []
         try:
             client = storage.Client()
         except Exception as exc:
             self._append_error(f"GCS client creation failed: {exc}")
             return []
-        bucket = client.bucket(GCS_BUCKET)
+        bucket = client.bucket(bucket_name)
+        gcs_prefix = _gcs_prefix()
         uploaded = []
         for day, path in self._paths.items():
-            gcs_key = f"{GCS_PREFIX}/{self.table_name}/day={day}/{path.name}"
+            gcs_key = f"{gcs_prefix}/{self.table_name}/day={day}/{path.name}"
             try:
                 blob = bucket.blob(gcs_key)
                 blob.upload_from_filename(str(path), timeout=GCS_UPLOAD_TIMEOUT)
-                gcs_uri = f"gs://{GCS_BUCKET}/{gcs_key}"
+                gcs_uri = f"gs://{bucket_name}/{gcs_key}"
                 uploaded.append(gcs_uri)
                 logger.info("Uploaded Parquet to %s", gcs_uri)
             except Exception as exc:
@@ -394,16 +434,17 @@ class ParquetExportManager:
         return uploaded
 
     def _register_bigquery(self, gcs_uris: Iterable[str]) -> None:
-        if not BQ_DATASET:
+        dataset = _bq_dataset()
+        if not dataset:
             return
         try:
-            client = bigquery.Client(project=BQ_PROJECT or None)
+            client = bigquery.Client(project=_bq_project() or None)
         except Exception as exc:
             self._append_error(f"BigQuery client creation failed: {exc}")
             return
-        table_id = f"{client.project}.{BQ_DATASET}.{self.table_name}"
+        table_id = f"{client.project}.{dataset}.{self.table_name}"
         schema = _bq_schema_for_table(self.table_name)
-        if BQ_LOAD_MODE == "external":
+        if _bq_load_mode() == "external":
             self._register_external_table(client, table_id, schema)
             return
         for gcs_uri in gcs_uris:
@@ -413,6 +454,9 @@ class ParquetExportManager:
                     source_format=bigquery.SourceFormat.PARQUET,
                     write_disposition=bigquery.WriteDisposition.WRITE_APPEND,
                 )
+                config.schema_update_options = [
+                    bigquery.SchemaUpdateOption.ALLOW_FIELD_ADDITION,
+                ]
                 config.time_partitioning = bigquery.TimePartitioning(field="metric_date")
                 job = client.load_table_from_uri(gcs_uri, table_id, job_config=config)
                 job.result(timeout=BQ_LOAD_TIMEOUT)
@@ -430,8 +474,10 @@ class ParquetExportManager:
             table = bigquery.Table(table_id)
             external_config = bigquery.ExternalConfig("PARQUET")
             external_config.schema = schema
+            bucket_name = _gcs_bucket()
+            gcs_prefix = _gcs_prefix()
             external_config.source_uris = [
-                f"gs://{GCS_BUCKET}/{GCS_PREFIX}/{self.table_name}/day=*/*.parquet"
+                f"gs://{bucket_name}/{gcs_prefix}/{self.table_name}/day=*/*.parquet"
             ]
             table.external_data_configuration = external_config
             client.create_table(table, exists_ok=True)

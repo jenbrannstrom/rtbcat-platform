@@ -78,6 +78,7 @@ SEAT_ID_ALLOWLIST = {
 
 # Pipeline integration - run after successful CSV import
 PIPELINE_ENABLED = os.environ.get("CATSCAN_PIPELINE_ENABLED", "false").lower() == "true"
+OAUTH_ONLY_GCS_BUCKETS = {"buyside-scheduled-report-export"}
 
 def run_pipeline_for_file(filepath: Path, seat_id: Optional[str], verbose: bool = True) -> bool:
     """Run the data pipeline for an imported CSV file.
@@ -859,6 +860,13 @@ def parse_gcs_url(url: str) -> tuple[Optional[str], Optional[str]]:
     return path_parts[0], path_parts[1]
 
 
+def should_skip_gcs_client(bucket_name: Optional[str]) -> bool:
+    """Return True when Gmail OAuth is the correct first-party download path."""
+    if not bucket_name:
+        return False
+    return bucket_name in OAUTH_ONLY_GCS_BUCKETS
+
+
 def download_via_gcs_client(bucket_name: str, object_name: str, filepath: Path) -> bool:
     """Download a file from GCS using the google-cloud-storage client.
 
@@ -945,11 +953,17 @@ def download_from_url(
         for key in ("X-Goog-Signature", "GoogleAccessId", "X-Goog-Algorithm")
     )
 
-    # Try GCS client with service account first (for non-signed URLs)
+    # Try GCS client with service account first unless the bucket is known to
+    # require the Gmail OAuth identity used to fetch these export links.
     if not is_signed:
         bucket_name, object_name = parse_gcs_url(url)
         if bucket_name and object_name:
-            if download_via_gcs_client(bucket_name, object_name, filepath):
+            if should_skip_gcs_client(bucket_name):
+                print(
+                    f"  Skipping GCS client download for bucket '{bucket_name}' (OAuth download path)",
+                    flush=True,
+                )
+            elif download_via_gcs_client(bucket_name, object_name, filepath):
                 # GCS client download succeeded - verify and return
                 with open(filepath, 'r') as f:
                     first_line = f.readline()

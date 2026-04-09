@@ -79,6 +79,58 @@ def test_download_from_url_refreshes_token_on_401(monkeypatch, tmp_path):
     assert provider_calls == [True]
 
 
+def test_download_from_url_skips_service_account_for_google_export_bucket(monkeypatch, tmp_path):
+    _stub_google_modules()
+    from scripts import gmail_import
+
+    monkeypatch.setattr(gmail_import, "IMPORTS_DIR", tmp_path)
+
+    def _unexpected_gcs_download(*args, **kwargs):
+        raise AssertionError("service account download should be skipped for Google export bucket")
+
+    monkeypatch.setattr(gmail_import, "download_via_gcs_client", _unexpected_gcs_download)
+
+    provider_calls = []
+
+    def token_provider(force_refresh: bool = False):
+        provider_calls.append(force_refresh)
+        return "oauth-token"
+
+    class _Resp:
+        status_code = 200
+        text = ""
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def iter_content(self, chunk_size: int = 1024 * 1024):
+            del chunk_size
+            yield b"col1,col2\n1,2\n"
+
+    def fake_get(url, headers, stream, timeout):
+        del stream, timeout
+        assert url == "https://storage.googleapis.com/buyside-scheduled-report-export/path/report.csv"
+        assert headers == {"Authorization": "Bearer oauth-token"}
+        return _Resp()
+
+    monkeypatch.setattr("requests.get", fake_get)
+
+    files = gmail_import.download_from_url(
+        "https://storage.cloud.google.com/buyside-scheduled-report-export/path/report.csv",
+        "message-123",
+        seat_id="1111111111",
+        access_token_provider=token_provider,
+    )
+
+    assert len(files) == 1
+    assert files[0].exists()
+    assert files[0].read_text() == "col1,col2\n1,2\n"
+    assert provider_calls == [False]
+
+
 def test_access_token_provider_force_refresh_persists_token(monkeypatch, tmp_path):
     _stub_google_modules()
     from scripts import gmail_import

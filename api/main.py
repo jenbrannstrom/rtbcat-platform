@@ -99,6 +99,7 @@ from api.routers import (
 )
 from api.dependencies import set_store, set_config_manager, startup_event
 from services.secrets_health_service import get_secrets_health
+from services.bigquery_schema_health_service import get_bigquery_raw_schema_health
 
 logger = logging.getLogger(__name__)
 
@@ -161,6 +162,28 @@ async def lifespan(app: FastAPI):
             "Secrets health check failed (strict=false). Missing required keys: %s",
             missing,
         )
+
+    try:
+        bq_schema_health = get_bigquery_raw_schema_health()
+        if bq_schema_health["enabled"] and bq_schema_health["healthy"]:
+            logger.info(
+                "BigQuery raw schema health check passed (dataset=%s, tables=%s)",
+                bq_schema_health["dataset"],
+                bq_schema_health["summary"]["tables_checked"],
+            )
+        elif bq_schema_health["enabled"]:
+            problem_tables = [
+                f"{table['table_name']}:{table['status']}:{','.join(table['missing_columns']) or table.get('error', 'unknown')}"
+                for table in bq_schema_health["tables"]
+                if table["status"] != "healthy"
+            ]
+            logger.warning(
+                "BigQuery raw schema health check failed (status=%s). Problem tables: %s",
+                bq_schema_health["status"],
+                "; ".join(problem_tables[:4]),
+            )
+    except Exception as e:
+        logger.warning("BigQuery raw schema health check crashed: %s", e)
 
     # Auto-populate buyer_seats from existing creatives if needed
     try:
