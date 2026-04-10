@@ -14,7 +14,6 @@ RAW_EXPORT_TABLES = (
     "rtb_daily",
     "rtb_bidstream",
     "rtb_bid_filtering",
-    "rtb_quality",
 )
 
 

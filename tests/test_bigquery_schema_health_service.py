@@ -36,7 +36,6 @@ def test_bigquery_raw_schema_health_detects_missing_columns(
         "rtb_daily": ["metric_date", "report_type"],
         "rtb_bidstream": ["metric_date", "report_type"],
         "rtb_bid_filtering": ["metric_date", "report_type"],
-        "rtb_quality": ["metric_date", "report_type"],
     }
 
     class _FakeClient:
@@ -77,4 +76,3 @@ def test_bigquery_raw_schema_health_detects_missing_columns(
     )
     assert rtb_bid_filtering["missing_columns"] == ["report_type"]
     assert rtb_bid_filtering["status"] == "degraded"
-
