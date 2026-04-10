@@ -26,8 +26,8 @@ def test_bigquery_raw_schema_health_endpoint_returns_admin_payload(
         "healthy": False,
         "status": "degraded",
         "summary": {
-            "tables_checked": 4,
-            "healthy_tables": 3,
+            "tables_checked": 3,
+            "healthy_tables": 2,
             "degraded_tables": 1,
             "unavailable_tables": 0,
             "missing_columns": 1,
