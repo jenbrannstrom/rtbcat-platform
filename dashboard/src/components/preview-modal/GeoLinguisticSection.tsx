@@ -10,6 +10,8 @@ interface GeoLinguisticSectionProps {
   creativeId: string;
 }
 
+const NO_REPORT_MESSAGE = "No geo-linguistic analysis found for this creative";
+
 const DECISION_CONFIG: Record<string, { icon: typeof CheckCircle; bg: string; text: string; label: string }> = {
   match: { icon: CheckCircle, bg: "bg-green-50 border-green-200", text: "text-green-700", label: "Match" },
   mismatch: { icon: ShieldAlert, bg: "bg-red-50 border-red-200", text: "text-red-700", label: "Mismatch" },
@@ -27,12 +29,20 @@ export function GeoLinguisticSection({ creativeId }: GeoLinguisticSectionProps) 
   const [isLoading, setIsLoading] = useState(true);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     setIsLoading(true);
+    setLoadError(null);
     getGeoLinguisticReport(creativeId)
       .then((data) => setReport(data))
-      .catch(() => setReport(null))
+      .catch((err) => {
+        const message = err instanceof Error ? err.message : "Failed to load analysis";
+        setReport(null);
+        if (message !== NO_REPORT_MESSAGE) {
+          setLoadError(message);
+        }
+      })
       .finally(() => setIsLoading(false));
   }, [creativeId]);
 
@@ -54,7 +64,7 @@ export function GeoLinguisticSection({ creativeId }: GeoLinguisticSectionProps) 
       <div className="bg-gray-50 rounded-lg p-3">
         <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 flex items-center gap-1.5">
           <ShieldAlert className="h-3 w-3" />
-          Geo-Linguistic Analysis
+          AI Geo-Linguistic Analysis
         </h4>
         <div className="flex items-center gap-1 text-xs text-gray-400">
           <Loader2 className="h-3 w-3 animate-spin" />
@@ -71,11 +81,19 @@ export function GeoLinguisticSection({ creativeId }: GeoLinguisticSectionProps) 
     <div className="bg-gray-50 rounded-lg p-3">
       <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 flex items-center gap-1.5">
         <ShieldAlert className="h-3 w-3" />
-        Geo-Linguistic Analysis
+        AI Geo-Linguistic Analysis
       </h4>
+
+      <p className="mb-2 text-[11px] text-gray-500">
+        Separate from stored language detection. This runs an on-demand multimodal mismatch review.
+      </p>
 
       {error && (
         <div className="text-xs text-red-600 bg-red-50 px-2 py-1 rounded mb-2">{error}</div>
+      )}
+
+      {loadError && (
+        <div className="text-xs text-red-600 bg-red-50 px-2 py-1 rounded mb-2">{loadError}</div>
       )}
 
       {report && report.status === "completed" ? (
@@ -182,7 +200,7 @@ export function GeoLinguisticSection({ creativeId }: GeoLinguisticSectionProps) 
         </div>
       ) : (
         <div className="space-y-2">
-          <p className="text-xs text-gray-400 italic">No geo-linguistic analysis available.</p>
+          <p className="text-xs text-gray-400 italic">No AI geo-linguistic report has been run for this creative yet.</p>
           <button
             onClick={() => handleAnalyze(false)}
             disabled={isAnalyzing}

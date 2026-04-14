@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { X, ExternalLink, Loader2, FileCode, RefreshCw, AlertTriangle } from "lucide-react";
 import type {
   Creative,
@@ -17,6 +18,7 @@ import {
   extractBuyerIdFromName,
   type UrlLabelLocalizer,
 } from "@/lib/url-utils";
+import { toBuyerScopedPath } from "@/lib/buyer-routes";
 import { useTranslation } from "@/contexts/i18n-context";
 
 import { formatSpend, formatNumber, formatCTR, formatCostMetric, getDataNotes, extractTrackingParams } from "./utils";
@@ -135,6 +137,7 @@ export function PreviewModal({
   // Google Console URL
   const buyerId = creative.buyer_id || extractBuyerIdFromName(creative.name);
   const googleUrl = buyerId ? getGoogleAuthBuyersUrl(buyerId, creative.id) : null;
+  const creativesPageHref = `${toBuyerScopedPath("/creatives", buyerId)}?search=${encodeURIComponent(creative.id)}`;
 
   // Data notes
   const dataNotes = getDataNotes(creative, performance);
@@ -267,17 +270,31 @@ export function PreviewModal({
                 {effectiveSource === "live" ? t.previewModal.liveBadge : t.previewModal.cachedBadge}
               </span>
             </div>
-            {googleUrl && (
-              <a
-                href={googleUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-xs text-primary-600 hover:text-primary-700 mt-1"
+            <div className="mt-1 flex flex-wrap items-center gap-3">
+              {googleUrl && (
+                <a
+                  href={googleUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-xs text-primary-600 hover:text-primary-700"
+                >
+                  <ExternalLink className="h-3 w-3" />
+                  {t.previewModal.viewInGoogleConsole}
+                </a>
+              )}
+              <Link
+                href={creativesPageHref}
+                className="inline-flex items-center gap-1 text-xs text-gray-600 hover:text-gray-900"
               >
                 <ExternalLink className="h-3 w-3" />
-                {t.previewModal.viewInGoogleConsole}
-              </a>
-            )}
+                {t.creatives.viewCreative}
+              </Link>
+              {buyerId && (
+                <span className="text-xs text-gray-400">
+                  {t.previewModal.buyerId}: {buyerId}
+                </span>
+              )}
+            </div>
           </div>
           <button onClick={onClose} className="ml-4 p-2 hover:bg-gray-100 rounded-full flex-shrink-0">
             <X className="h-5 w-5" />
@@ -594,7 +611,7 @@ export function PreviewModal({
                       <div className="rounded border border-gray-200 bg-white px-2 py-2">
                         <div className="flex items-center justify-between gap-2">
                           <span className="text-[10px] font-medium text-gray-600">
-                            Google click macro compliance
+                            Click macro tokens detected
                           </span>
                           <span
                             className={cn(
@@ -604,12 +621,15 @@ export function PreviewModal({
                                 : "bg-red-100 text-red-700"
                             )}
                           >
-                            {destinationDiagnostics.has_click_macro ? "present" : "missing"}
+                            {destinationDiagnostics.has_click_macro ? "found" : "not found"}
                           </span>
+                        </div>
+                        <div className="mt-1 text-[10px] text-gray-500">
+                          Payload detection only. Click metrics depend on the imported performance source.
                         </div>
                         {destinationDiagnostics.click_macro_tokens.length > 0 && (
                           <div className="mt-1 text-[10px] text-gray-600 break-all">
-                            Click macros: {destinationDiagnostics.click_macro_tokens.join(", ")}
+                            Detected tokens: {destinationDiagnostics.click_macro_tokens.join(", ")}
                           </div>
                         )}
                       </div>

@@ -92,7 +92,7 @@ const value: Translations['previewModal'] = {
     failedToLoadCountryData: 'Failed to load country data',
     targetingGeo: 'Targeting / GEO',
     targetingGeoWithCount: 'Targeting / GEO ({count})',
-    servingCountriesFromPerformanceCsvImports: 'Serving countries from performance CSV imports',
+    servingCountriesFromPerformanceCsvImports: 'Observed serving countries from performance data',
     noCountryDataAvailable: 'No country data available',
     noPerformanceDataByCountry: 'No performance data by country',
     creativeLanguageLabel: 'Creative Language:',
