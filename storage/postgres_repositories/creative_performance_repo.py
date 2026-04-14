@@ -80,98 +80,97 @@ class CreativePerformanceRepository:
     ) -> dict[str, dict[str, Any]]:
         """Get performance summaries for multiple creatives.
 
-        Uses config_creative_daily (precomputed, fast) as the primary source.
-        Falls back to rtb_daily only when config_creative_daily has no data.
+        Uses rtb_daily as the primary source so click-capable summaries stay
+        accurate. Falls back to config_creative_daily only when RTB facts are
+        unavailable for a given creative.
         """
         if not creative_ids:
             return {}
 
-        # Fast path: config_creative_daily (precomputed, sub-second)
-        rows = await pg_query(
-            """
+        params: list[Any] = [creative_ids, days]
+        buyer_clause = ""
+        if buyer_id_filter:
+            buyer_clause = "AND buyer_account_id = %s"
+            params.append(buyer_id_filter)
+
+        rtb_rows = await pg_query(
+            f"""
             SELECT
                 creative_id,
                 COALESCE(SUM(impressions), 0) AS total_impressions,
+                COALESCE(SUM(clicks), 0) AS total_clicks,
                 COALESCE(SUM(spend_micros), 0) AS total_spend_micros,
                 COUNT(DISTINCT metric_date) AS days_with_data,
                 MIN(metric_date) AS earliest_date,
                 MAX(metric_date) AS latest_date
-            FROM config_creative_daily
+            FROM rtb_daily
             WHERE creative_id = ANY(%s)
               AND metric_date >= CURRENT_DATE - make_interval(days => %s)
+              {buyer_clause}
             GROUP BY creative_id
             """,
-            (creative_ids, days),
+            tuple(params),
         )
 
         result: dict[str, dict[str, Any]] = {}
-        for row in rows:
+        for row in rtb_rows:
             cid = row["creative_id"]
             imps = int(row["total_impressions"])
+            clicks = int(row["total_clicks"])
             spend = int(row["total_spend_micros"])
             avg_cpm = int((spend / imps) * 1000) if imps > 0 and spend > 0 else None
-
+            avg_cpc = int(spend / clicks) if clicks > 0 else None
+            ctr = round((clicks / imps) * 100, 4) if imps > 0 else None
             result[cid] = {
                 "total_impressions": imps,
-                "total_clicks": 0,
+                "total_clicks": clicks,
                 "total_spend_micros": spend,
                 "avg_cpm_micros": avg_cpm,
-                "avg_cpc_micros": None,
-                "ctr_percent": None,
+                "avg_cpc_micros": avg_cpc,
+                "ctr_percent": ctr,
                 "days_with_data": int(row["days_with_data"]),
                 "earliest_date": str(row["earliest_date"]) if row["earliest_date"] else None,
                 "latest_date": str(row["latest_date"]) if row["latest_date"] else None,
-                "metric_source": "config_creative_daily",
-                "clicks_available": False,
+                "metric_source": "rtb_daily",
+                "clicks_available": True,
             }
 
-        # Fallback: IDs not found in precomputed table → try rtb_daily
+        # Fallback: IDs not found in rtb_daily → try config_creative_daily.
         missing_ids = [cid for cid in creative_ids if cid not in result]
         if missing_ids:
-            params: list[Any] = [missing_ids, days]
-            buyer_clause = ""
-            if buyer_id_filter:
-                buyer_clause = "AND buyer_account_id = %s"
-                params.append(buyer_id_filter)
-
             fallback_rows = await pg_query(
-                f"""
+                """
                 SELECT
                     creative_id,
                     COALESCE(SUM(impressions), 0) AS total_impressions,
-                    COALESCE(SUM(clicks), 0) AS total_clicks,
                     COALESCE(SUM(spend_micros), 0) AS total_spend_micros,
                     COUNT(DISTINCT metric_date) AS days_with_data,
                     MIN(metric_date) AS earliest_date,
                     MAX(metric_date) AS latest_date
-                FROM rtb_daily
+                FROM config_creative_daily
                 WHERE creative_id = ANY(%s)
                   AND metric_date >= CURRENT_DATE - make_interval(days => %s)
-                  {buyer_clause}
                 GROUP BY creative_id
                 """,
-                tuple(params),
+                (missing_ids, days),
             )
             for row in fallback_rows:
                 cid = row["creative_id"]
                 imps = int(row["total_impressions"])
-                clicks = int(row["total_clicks"])
                 spend = int(row["total_spend_micros"])
                 avg_cpm = int((spend / imps) * 1000) if imps > 0 and spend > 0 else None
-                avg_cpc = int(spend / clicks) if clicks > 0 else None
-                ctr = round((clicks / imps) * 100, 4) if imps > 0 else None
                 result[cid] = {
                     "total_impressions": imps,
-                    "total_clicks": clicks,
+                    "total_clicks": 0,
                     "total_spend_micros": spend,
                     "avg_cpm_micros": avg_cpm,
-                    "avg_cpc_micros": avg_cpc,
-                    "ctr_percent": ctr,
+                    "avg_cpc_micros": None,
+                    "ctr_percent": None,
                     "days_with_data": int(row["days_with_data"]),
                     "earliest_date": str(row["earliest_date"]) if row["earliest_date"] else None,
                     "latest_date": str(row["latest_date"]) if row["latest_date"] else None,
-                    "metric_source": "rtb_daily",
-                    "clicks_available": True,
+                    "metric_source": "config_creative_daily",
+                    "clicks_available": False,
                 }
         return result
 
