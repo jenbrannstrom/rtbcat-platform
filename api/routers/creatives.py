@@ -494,7 +494,7 @@ async def get_creative_language_flag_coverage(
     limit: int = Query(200, ge=1, le=1000, description="Page size"),
     offset: int = Query(0, ge=0, description="Rows to skip"),
     scan_limit: int = Query(
-        3000,
+        1000,
         ge=100,
         le=10000,
         description="Maximum creatives to inspect before applying filters and pagination",
