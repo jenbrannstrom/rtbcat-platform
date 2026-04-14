@@ -86,6 +86,9 @@ async def list_creatives(
     if active_only and creatives:
         creatives = await creatives_service.filter_active_creatives(creatives, days, limit)
 
+    if slim and creatives:
+        creatives = await creatives_service.hydrate_native_preview_creatives(store, creatives)
+
     creative_ids = [c.id for c in creatives]
     if slim:
         thumbnail_statuses = await creatives_service.get_thumbnail_statuses(store, creative_ids)
@@ -185,6 +188,9 @@ async def list_creatives_paginated(
 
     if active_only and creatives:
         creatives = await creatives_service.filter_active_creatives(creatives, days, limit)
+
+    if slim and creatives:
+        creatives = await creatives_service.hydrate_native_preview_creatives(store, creatives)
 
     creative_ids = [c.id for c in creatives]
     if slim:
