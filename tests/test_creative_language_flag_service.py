@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+import pytest
+
+from services.creative_countries_service import CreativeCountriesService
 from services.creative_language_flag_service import build_creative_language_flag_row
 
 
@@ -70,3 +73,58 @@ def test_currency_mismatch_overrides_ai_match() -> None:
 
     assert row["geo_linguistic_status"] == "red"
     assert row["geo_linguistic_reason"] == "Currency AED conflicts with PHL (overrides AI match)"
+
+
+def test_build_creative_language_flag_row_normalizes_country_names() -> None:
+    creative = SimpleNamespace(
+        id="2014265280192819202",
+        name="Hindi India creative",
+        buyer_id="1487810529",
+        format="HTML",
+        approval_status="APPROVED",
+        advertiser_name=None,
+        detected_language="Hindi",
+        detected_language_code="hi",
+        raw_data={"html": {"snippet": "<div>हिंदी ऑफर</div>"}},
+    )
+
+    row = build_creative_language_flag_row(
+        creative=creative,
+        serving_countries=["INDIA"],
+        latest_geo_run=None,
+    )
+
+    assert row["serving_countries"] == ["IN"]
+    assert row["language_flag_status"] == "green"
+    assert row["language_flag_reason"] == "HI matches IND"
+    assert row["currency_flag_status"] == "orange"
+    assert row["currency_flag_reason"] == "No obvious market currency detected"
+
+
+class _PerfService:
+    async def get_country_breakdown(self, creative_id: str, days: int):
+        del creative_id, days
+        return [
+            {"country_code": "INDIA", "spend_micros": 5_000_000, "impressions": 1000, "clicks": 20},
+            {"country_code": "IN", "spend_micros": 3_000_000, "impressions": 500, "clicks": 10},
+        ]
+
+
+@pytest.mark.asyncio
+async def test_build_country_metrics_normalizes_and_aggregates_country_names() -> None:
+    service = CreativeCountriesService(perf_service=_PerfService())
+
+    payload = await service.build_country_metrics("2014265280192819202", 7)
+
+    assert payload["total_countries"] == 1
+    assert payload["countries"] == [
+        {
+            "country_code": "IN",
+            "country_name": "India",
+            "country_iso3": "IND",
+            "spend_micros": 8_000_000,
+            "impressions": 1500,
+            "clicks": 30,
+            "spend_percent": 100.0,
+        }
+    ]

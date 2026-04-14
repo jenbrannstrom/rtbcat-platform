@@ -6,6 +6,8 @@ where the language is an official or widely spoken language.
 
 from typing import Optional
 
+from utils.country_codes import normalize_country_code
+
 # Map of ISO 639-1 language codes to countries where language is official/common
 # Using ISO 3166-1 alpha-2 country codes
 LANGUAGE_TO_COUNTRIES: dict[str, list[str]] = {
@@ -171,9 +173,10 @@ def get_languages_for_country(country_code: str) -> list[str]:
     Returns:
         List of ISO 639-1 language codes
     """
-    if not country_code:
+    normalized = normalize_country_code(country_code)
+    if not normalized:
         return []
-    return COUNTRY_TO_LANGUAGES.get(country_code.upper(), [])
+    return COUNTRY_TO_LANGUAGES.get(normalized, [])
 
 
 def check_language_country_match(
@@ -202,7 +205,11 @@ def check_language_country_match(
         }
 
     expected_countries = set(get_countries_for_language(language_code))
-    serving_countries = set(c.upper() for c in country_codes)
+    serving_countries = {
+        normalized
+        for code in country_codes
+        if (normalized := normalize_country_code(code))
+    }
 
     matching = expected_countries & serving_countries
     mismatched = serving_countries - expected_countries

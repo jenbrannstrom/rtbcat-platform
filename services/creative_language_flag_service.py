@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from typing import Any, Optional
 
-from utils.country_codes import get_country_alpha3
+from utils.country_codes import get_country_alpha3, normalize_country_code
 from utils.language_country_map import check_language_country_match
 
 _CURRENCY_PATTERNS = re.compile(
@@ -158,8 +158,20 @@ def infer_language_code(text: str) -> Optional[str]:
 
 
 def _format_country_list(country_codes: list[str]) -> str:
-    values = [get_country_alpha3(code) or code for code in country_codes[:3]]
+    values = [get_country_alpha3(code) or code for code in _normalize_country_list(country_codes)[:3]]
     return ", ".join(values)
+
+
+def _normalize_country_list(country_codes: list[str]) -> list[str]:
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for code in country_codes:
+        canonical = normalize_country_code(code)
+        if not canonical or canonical in seen:
+            continue
+        normalized.append(canonical)
+        seen.add(canonical)
+    return normalized
 
 
 def assess_language_market_flag(
@@ -167,6 +179,7 @@ def assess_language_market_flag(
     serving_countries: list[str],
     heuristic_language_code: Optional[str] = None,
 ) -> dict[str, Any]:
+    serving_countries = _normalize_country_list(serving_countries)
     effective_language_code = (detected_language_code or heuristic_language_code or "").lower() or None
     source = "stored" if detected_language_code else ("heuristic" if heuristic_language_code else "missing")
 
@@ -228,6 +241,7 @@ def assess_currency_market_flag(
     detected_currencies: list[str],
     serving_countries: list[str],
 ) -> dict[str, Any]:
+    serving_countries = _normalize_country_list(serving_countries)
     if not detected_currencies:
         return {
             "status": "orange",
@@ -327,6 +341,7 @@ def build_creative_language_flag_row(
     serving_countries: list[str],
     latest_geo_run: Optional[dict[str, Any]],
 ) -> dict[str, Any]:
+    serving_countries = _normalize_country_list(serving_countries)
     text = extract_creative_market_text(creative)
     heuristic_language_code = infer_language_code(text) if not getattr(creative, "detected_language_code", None) else None
     detected_currencies = detect_currencies(text)

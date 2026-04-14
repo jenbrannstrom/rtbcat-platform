@@ -147,6 +147,7 @@ class CreativeLanguageService:
             serving_countries=serving_countries,
             latest_geo_run=latest_geo_run,
         )
+        normalized_serving_countries = flag_row["serving_countries"]
 
         alert_data = None
         if flag_row["currency_flag_status"] == "red":
@@ -155,7 +156,7 @@ class CreativeLanguageService:
                 "category": "currency",
                 "language": flag_row.get("detected_language"),
                 "language_code": flag_row.get("effective_language_code"),
-                "mismatched_countries": serving_countries,
+                "mismatched_countries": normalized_serving_countries,
                 "expected_countries": [],
                 "message": flag_row["currency_flag_reason"],
             }
@@ -165,7 +166,7 @@ class CreativeLanguageService:
                 "category": "language",
                 "language": creative.detected_language or flag_row.get("effective_language_code"),
                 "language_code": flag_row.get("effective_language_code"),
-                "mismatched_countries": serving_countries,
+                "mismatched_countries": normalized_serving_countries,
                 "expected_countries": [],
                 "message": flag_row["language_flag_reason"],
             }
@@ -177,7 +178,7 @@ class CreativeLanguageService:
                 or flag_row["geo_linguistic_status"] == "red"
             ),
             "alert": alert_data,
-            "serving_countries": serving_countries,
+            "serving_countries": normalized_serving_countries,
             "detected_currencies": flag_row["detected_currencies"],
             "language_flag_status": flag_row["language_flag_status"],
             "language_flag_reason": flag_row["language_flag_reason"],
