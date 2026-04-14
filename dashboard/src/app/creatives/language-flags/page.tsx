@@ -2,10 +2,10 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { CheckCircle2, HelpCircle, Search, ShieldAlert } from "lucide-react";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { CheckCircle2, HelpCircle, RefreshCw, Search, ShieldAlert } from "lucide-react";
 import { useParams, usePathname } from "next/navigation";
-import { getCreativeLanguageFlagCoverage } from "@/lib/api";
+import { getCreativeLanguageFlagCoverage, refreshCreativeLanguageFlagCoverage } from "@/lib/api";
 import { LoadingPage } from "@/components/loading";
 import { ErrorPage } from "@/components/error";
 import { useAccount } from "@/contexts/account-context";
@@ -14,6 +14,8 @@ import { cn } from "@/lib/utils";
 
 const PAGE_SIZE = 100;
 const INITIAL_SCAN_LIMIT = 200;
+const BULK_REFRESH_LIMIT = 500;
+const AUTO_REFRESH_WINDOW_MS = 60_000;
 
 const STATUS_CONFIG = {
   green: {
@@ -65,10 +67,24 @@ export default function LanguageFlagCoveragePage() {
   const [languageState, setLanguageState] = useState<"all" | "green" | "orange" | "red">("all");
   const [geoState, setGeoState] = useState<"all" | "green" | "orange" | "red">("all");
   const [pageIndex, setPageIndex] = useState(0);
+  const [notice, setNotice] = useState<{ tone: "success" | "error"; message: string } | null>(null);
+  const [isAutoRefreshing, setIsAutoRefreshing] = useState(false);
 
   useEffect(() => {
     setPageIndex(0);
   }, [effectiveBuyerId]);
+
+  useEffect(() => {
+    if (!isAutoRefreshing) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setIsAutoRefreshing(false);
+    }, AUTO_REFRESH_WINDOW_MS);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [isAutoRefreshing]);
 
   const offset = pageIndex * PAGE_SIZE;
 
@@ -83,6 +99,7 @@ export default function LanguageFlagCoveragePage() {
     ],
     enabled: Boolean(effectiveBuyerId),
     retry: false,
+    refetchInterval: isAutoRefreshing ? 5_000 : false,
     queryFn: () =>
       getCreativeLanguageFlagCoverage({
         buyer_id: effectiveBuyerId ?? undefined,
@@ -94,6 +111,36 @@ export default function LanguageFlagCoveragePage() {
         scan_limit: INITIAL_SCAN_LIMIT,
       }),
     staleTime: 30_000,
+  });
+
+  const refreshAllMutation = useMutation({
+    mutationFn: () =>
+      refreshCreativeLanguageFlagCoverage({
+        buyer_id: effectiveBuyerId ?? undefined,
+        search: search.trim() || undefined,
+        refresh_limit: BULK_REFRESH_LIMIT,
+        force: true,
+      }),
+    onSuccess: async (result) => {
+      setNotice({
+        tone: "success",
+        message:
+          result.queued_creatives > 0
+            ? `${result.message} Auto-refreshing this table for about a minute.`
+            : result.message,
+      });
+      setIsAutoRefreshing(result.queued_creatives > 0);
+      await refetch();
+    },
+    onError: (mutationError) => {
+      setNotice({
+        tone: "error",
+        message:
+          mutationError instanceof Error
+            ? mutationError.message
+            : "Failed to queue language-flag refresh",
+      });
+    },
   });
 
   const rows = data?.rows ?? [];
@@ -167,47 +214,94 @@ export default function LanguageFlagCoveragePage() {
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="relative w-full max-w-md">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-          <input
-            value={search}
+      {notice && (
+        <div
+          className={cn(
+            "rounded-lg border px-3 py-2 text-sm",
+            notice.tone === "success"
+              ? "border-green-200 bg-green-50 text-green-800"
+              : "border-red-200 bg-red-50 text-red-800"
+          )}
+        >
+          {notice.message}
+        </div>
+      )}
+
+      <div className="flex flex-wrap items-end gap-3">
+        <label className="block w-full max-w-md">
+          <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500">
+            Creative Search
+          </span>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+            <input
+              value={search}
+              onChange={(event) => {
+                setPageIndex(0);
+                setSearch(event.target.value);
+              }}
+              placeholder="Search by creative ID or name"
+              className="input w-full py-1.5 pl-9 pr-3 text-sm"
+            />
+          </div>
+        </label>
+
+        <label className="block">
+          <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500">
+            Language Status
+          </span>
+          <select
+            value={languageState}
             onChange={(event) => {
               setPageIndex(0);
-              setSearch(event.target.value);
+              setLanguageState(event.target.value as "all" | "green" | "orange" | "red");
             }}
-            placeholder="Search by creative ID or name"
-            className="input w-full py-1.5 pl-9 pr-3 text-sm"
-          />
+            className="input py-1.5 pr-8 text-sm"
+          >
+            <option value="all">All language results</option>
+            <option value="red">Language: Red</option>
+            <option value="orange">Language: Orange</option>
+            <option value="green">Language: Green</option>
+          </select>
+        </label>
+
+        <label className="block">
+          <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500">
+            Geo-Linguistic Status
+          </span>
+          <select
+            value={geoState}
+            onChange={(event) => {
+              setPageIndex(0);
+              setGeoState(event.target.value as "all" | "green" | "orange" | "red");
+            }}
+            className="input py-1.5 pr-8 text-sm"
+          >
+            <option value="all">All geo results</option>
+            <option value="red">Geo: Red</option>
+            <option value="orange">Geo: Orange</option>
+            <option value="green">Geo: Green</option>
+          </select>
+        </label>
+
+        <div className="flex flex-col gap-1">
+          <span className="text-xs font-medium uppercase tracking-wide text-gray-500">
+            Refresh
+          </span>
+          <button
+            type="button"
+            onClick={() => refreshAllMutation.mutate()}
+            disabled={refreshAllMutation.isPending}
+            className="inline-flex items-center gap-2 rounded border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <RefreshCw className={cn("h-4 w-4", refreshAllMutation.isPending && "animate-spin")} />
+            Refresh All Analyses
+          </button>
         </div>
+      </div>
 
-        <select
-          value={languageState}
-          onChange={(event) => {
-            setPageIndex(0);
-            setLanguageState(event.target.value as "all" | "green" | "orange" | "red");
-          }}
-          className="input py-1.5 pr-8 text-sm"
-        >
-          <option value="all">All Lang States</option>
-          <option value="red">Lang Red</option>
-          <option value="orange">Lang Orange</option>
-          <option value="green">Lang Green</option>
-        </select>
-
-        <select
-          value={geoState}
-          onChange={(event) => {
-            setPageIndex(0);
-            setGeoState(event.target.value as "all" | "green" | "orange" | "red");
-          }}
-          className="input py-1.5 pr-8 text-sm"
-        >
-          <option value="all">All Geo States</option>
-          <option value="red">Geo Red</option>
-          <option value="orange">Geo Orange</option>
-          <option value="green">Geo Green</option>
-        </select>
+      <div className="text-xs text-gray-500">
+        Refresh re-runs language and geo-linguistic analysis for up to {BULK_REFRESH_LIMIT.toLocaleString()} recent creatives in this buyer scope.
       </div>
 
       <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
@@ -249,6 +343,11 @@ export default function LanguageFlagCoveragePage() {
                         Currency: {row.detected_currencies.join(", ")}
                       </div>
                     )}
+                    <div className="mt-1 text-[11px] text-gray-400">
+                      {row.geo_linguistic_completed_at
+                        ? `Updated ${new Date(row.geo_linguistic_completed_at).toLocaleDateString()}`
+                        : "No AI refresh yet"}
+                    </div>
                   </td>
                   <td className="px-3 py-2 align-top text-xs text-gray-700">
                     {row.serving_countries.length > 0 ? row.serving_countries.join(", ") : "-"}

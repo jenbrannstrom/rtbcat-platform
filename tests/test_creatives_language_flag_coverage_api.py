@@ -171,3 +171,79 @@ def test_language_flag_coverage_endpoint_tolerates_bad_raw_data_and_aux_failures
     assert row["language_flag_reason"] == "No serving-country data available"
     assert row["detected_currencies"] == []
     assert row["spend_30d_micros"] == 0
+
+
+def test_language_flag_refresh_endpoint_queues_batch_refresh(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = object()
+    captured: list[dict[str, object]] = []
+
+    async def _resolve_buyer_id(buyer_id, store=None, user=None):
+        _ = (store, user)
+        return buyer_id
+
+    async def _fake_list_creatives_for_language_flag_coverage(
+        buyer_id: str | None,
+        search: str | None,
+        scan_limit: int,
+    ):
+        assert buyer_id == "1487810529"
+        assert search == "2013919535262576642"
+        assert scan_limit == 500
+        return [
+            SimpleNamespace(id="2013919535262576642"),
+            SimpleNamespace(id="1987702299778854923"),
+        ]
+
+    async def _fake_refresh_language_flag_coverage_batch(
+        creative_ids,
+        store,
+        triggered_by,
+        force,
+        days,
+    ):
+        captured.append(
+            {
+                "creative_ids": creative_ids,
+                "store": store,
+                "triggered_by": triggered_by,
+                "force": force,
+                "days": days,
+            }
+        )
+
+    monkeypatch.setattr(creatives_router, "resolve_buyer_id", _resolve_buyer_id)
+    monkeypatch.setattr(
+        creatives_router,
+        "_list_creatives_for_language_flag_coverage",
+        _fake_list_creatives_for_language_flag_coverage,
+    )
+    monkeypatch.setattr(
+        creatives_router,
+        "_refresh_language_flag_coverage_batch",
+        _fake_refresh_language_flag_coverage_batch,
+    )
+
+    client = _build_client(store)
+    response = client.post(
+        "/api/creatives/language-flag-coverage/refresh"
+        "?buyer_id=1487810529&search=2013919535262576642&refresh_limit=500"
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["buyer_id"] == "1487810529"
+    assert payload["queued_creatives"] == 2
+    assert payload["refresh_limit"] == 500
+    assert payload["force"] is True
+    assert payload["message"] == "Queued refresh for 2 creatives."
+    assert captured == [
+        {
+            "creative_ids": ["2013919535262576642", "1987702299778854923"],
+            "store": store,
+            "triggered_by": "admin@example.com",
+            "force": True,
+            "days": 7,
+        }
+    ]

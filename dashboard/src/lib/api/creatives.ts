@@ -8,6 +8,7 @@ import type {
   Creative,
   CreativeClickMacroCoverageResponse,
   CreativeLanguageFlagCoverageResponse,
+  CreativeLanguageFlagRefreshResponse,
   CreativeDestinationDiagnostics,
   CreativeLiveResponse,
   CreativeCountryBreakdown,
@@ -151,6 +152,29 @@ export async function getCreativeLanguageFlagCoverage(params?: {
   const query = searchParams.toString();
   return fetchApi<CreativeLanguageFlagCoverageResponse>(
     `/creatives/language-flag-coverage${query ? `?${query}` : ""}`
+  );
+}
+
+export async function refreshCreativeLanguageFlagCoverage(params?: {
+  buyer_id?: string;
+  search?: string;
+  refresh_limit?: number;
+  force?: boolean;
+  days?: number;
+}): Promise<CreativeLanguageFlagRefreshResponse> {
+  const searchParams = new URLSearchParams();
+  if (params?.buyer_id) searchParams.set("buyer_id", params.buyer_id);
+  if (params?.search) searchParams.set("search", params.search);
+  if (params?.refresh_limit !== undefined) {
+    searchParams.set("refresh_limit", String(params.refresh_limit));
+  }
+  if (params?.force !== undefined) searchParams.set("force", String(params.force));
+  if (params?.days !== undefined) searchParams.set("days", String(params.days));
+
+  const query = searchParams.toString();
+  return fetchApi<CreativeLanguageFlagRefreshResponse>(
+    `/creatives/language-flag-coverage/refresh${query ? `?${query}` : ""}`,
+    { method: "POST" }
   );
 }
 

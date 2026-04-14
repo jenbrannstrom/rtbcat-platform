@@ -193,6 +193,14 @@ export interface CreativeLanguageFlagCoverageResponse {
   summary: CreativeLanguageFlagCoverageSummary;
 }
 
+export interface CreativeLanguageFlagRefreshResponse {
+  buyer_id: string | null;
+  queued_creatives: number;
+  refresh_limit: number;
+  force: boolean;
+  message: string;
+}
+
 export interface Campaign {
   id: string;
   name: string;
