@@ -55,6 +55,13 @@ def _get_creative_perf_repo() -> CreativePerformanceRepository:
     if _creative_perf_repo is None:
         _creative_perf_repo = CreativePerformanceRepository()
     return _creative_perf_repo
+
+
+def _round_ctr(value: Optional[float]) -> Optional[float]:
+    """Round CTR values while preserving legitimate 0.0 readings."""
+    return round(value, 2) if value is not None else None
+
+
 from storage.postgres_repositories.uploads_repo import UploadsRepository
 from services.precompute_validation import run_precompute_validation
 from services.config_precompute import refresh_config_breakdowns
@@ -237,8 +244,8 @@ async def get_creative_performance(
 ) -> PerformanceSummaryResponse:
     """Get aggregated performance summary for a creative.
 
-    Uses rtb_daily as primary source (click-capable) with buyer scoping.
-    Falls back to pretarg_creative_daily when rtb_daily has no data.
+    Uses click-capable RTB summaries when available and preserves the
+    underlying source metadata for UI consumers.
     """
     try:
         creative = await store.get_creative(creative_id)
@@ -265,12 +272,12 @@ async def get_creative_performance(
                 total_spend_micros=s["total_spend_micros"],
                 avg_cpm_micros=s["avg_cpm_micros"],
                 avg_cpc_micros=s["avg_cpc_micros"],
-                ctr_percent=round(s["ctr_percent"], 2) if s.get("ctr_percent") else None,
+                ctr_percent=_round_ctr(s.get("ctr_percent")),
                 days_with_data=s["days_with_data"],
                 earliest_date=s.get("earliest_date"),
                 latest_date=s.get("latest_date"),
-                metric_source="rtb_daily",
-                clicks_available=True,
+                metric_source=s.get("metric_source"),
+                clicks_available=bool(s.get("clicks_available", True)),
             )
 
         # Fallback: legacy pretarg_creative_daily (no clicks)
@@ -281,7 +288,7 @@ async def get_creative_performance(
             total_spend_micros=summary.get("total_spend_micros"),
             avg_cpm_micros=summary.get("avg_cpm_micros"),
             avg_cpc_micros=summary.get("avg_cpc_micros"),
-            ctr_percent=round(summary.get("ctr_percent"), 2) if summary.get("ctr_percent") else None,
+            ctr_percent=_round_ctr(summary.get("ctr_percent")),
             days_with_data=summary.get("days_with_data"),
             earliest_date=summary.get("earliest_date"),
             latest_date=summary.get("latest_date"),
@@ -735,8 +742,9 @@ async def get_batch_performance(
 ) -> BatchPerformanceResponse:
     """Get performance summaries for multiple creatives in a single request.
 
-    Uses rtb_daily (click-capable) in a single batch query, with buyer-scoped
-    fallback to pretarg_creative_daily for creatives not found in rtb_daily.
+    Uses click-capable creative summaries in a single batch query and preserves
+    source metadata so the UI can distinguish real zero clicks from sources
+    that never provided click metrics.
     """
     try:
         period_days = {
@@ -781,11 +789,11 @@ async def get_batch_performance(
                 total_spend_micros=s["total_spend_micros"],
                 avg_cpm_micros=s["avg_cpm_micros"],
                 avg_cpc_micros=s["avg_cpc_micros"],
-                ctr_percent=round(s["ctr_percent"], 2) if s.get("ctr_percent") else None,
+                ctr_percent=_round_ctr(s.get("ctr_percent")),
                 days_with_data=s["days_with_data"],
                 has_data=has_data,
-                metric_source="rtb_daily",
-                clicks_available=True,
+                metric_source=s.get("metric_source"),
+                clicks_available=bool(s.get("clicks_available", True)),
             )
 
         # Fallback for creatives not in rtb_daily
@@ -802,7 +810,7 @@ async def get_batch_performance(
                     total_spend_micros=summary.get("total_spend_micros") or 0,
                     avg_cpm_micros=summary.get("avg_cpm_micros"),
                     avg_cpc_micros=summary.get("avg_cpc_micros"),
-                    ctr_percent=round(summary.get("ctr_percent"), 2) if summary.get("ctr_percent") else None,
+                    ctr_percent=_round_ctr(summary.get("ctr_percent")),
                     days_with_data=summary.get("days_with_data") or 0,
                     has_data=has_data,
                     metric_source="pretarg_creative_daily",

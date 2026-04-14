@@ -102,7 +102,7 @@ async def test_summaries_buyer_scoping(repo):
         )
 
     # Verify the query was called with buyer filter in params
-    call_args = mock_query.call_args
+    call_args = mock_query.call_args_list[0]
     sql = call_args[0][0]
     params = call_args[0][1]
     assert "buyer_account_id" in sql
@@ -150,7 +150,7 @@ async def test_batch_multiple_creatives(repo):
     with patch(
         "storage.postgres_repositories.creative_performance_repo.pg_query",
         new_callable=AsyncMock,
-        return_value=mock_rows,
+        side_effect=[mock_rows, []],
     ):
         result = await repo.get_creative_summaries(["aaa", "bbb", "ccc"], days=7)
 
@@ -158,3 +158,32 @@ async def test_batch_multiple_creatives(repo):
     assert result["aaa"]["total_clicks"] == 10
     assert result["bbb"]["total_clicks"] == 0
     assert "ccc" not in result
+
+
+@pytest.mark.asyncio
+async def test_summaries_fall_back_to_config_without_clicks(repo):
+    """Creatives missing from rtb_daily fall back to config data without fake clicks."""
+    with patch(
+        "storage.postgres_repositories.creative_performance_repo.pg_query",
+        new_callable=AsyncMock,
+        side_effect=[
+            [],
+            [
+                {
+                    "creative_id": "cfg-only",
+                    "total_impressions": 2145062,
+                    "total_spend_micros": 42000000,
+                    "days_with_data": 7,
+                    "earliest_date": "2026-04-07",
+                    "latest_date": "2026-04-13",
+                }
+            ],
+        ],
+    ):
+        result = await repo.get_creative_summaries(["cfg-only"], days=7)
+
+    summary = result["cfg-only"]
+    assert summary["metric_source"] == "config_creative_daily"
+    assert summary["clicks_available"] is False
+    assert summary["total_clicks"] == 0
+    assert summary["ctr_percent"] is None
