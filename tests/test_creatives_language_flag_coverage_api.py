@@ -13,27 +13,6 @@ from api.routers import creatives as creatives_router
 from tests.support.asgi_client import SyncASGIClient
 
 
-class _Store:
-    async def list_creatives(self, **_kwargs):
-        return [
-            SimpleNamespace(
-                id="1987702299778854923",
-                name="AED free shipping creative",
-                buyer_id="1487810529",
-                format="HTML",
-                approval_status="APPROVED",
-                advertiser_name=None,
-                detected_language=None,
-                detected_language_code=None,
-                raw_data={
-                    "html": {
-                        "snippet": "Only for new app users AED 0 FREE SHIPPING",
-                    }
-                },
-            )
-        ]
-
-
 def _build_client(store: object) -> SyncASGIClient:
     app = FastAPI()
     app.include_router(creatives_router.router, prefix="/api")
@@ -49,7 +28,7 @@ def _build_client(store: object) -> SyncASGIClient:
 def test_language_flag_coverage_endpoint_returns_expected_statuses(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    store = _Store()
+    store = object()
 
     async def _resolve_buyer_id(buyer_id, store=None, user=None):
         _ = (store, user)
@@ -78,9 +57,40 @@ def test_language_flag_coverage_endpoint_returns_expected_statuses(
     async def _fake_get_latest_runs(_creative_ids):
         return {}
 
+    async def _fake_list_creatives_for_language_flag_coverage(
+        buyer_id: str | None,
+        search: str | None,
+        scan_limit: int,
+    ):
+        assert buyer_id == "1487810529"
+        assert search is None
+        assert scan_limit == 250
+        return [
+            SimpleNamespace(
+                id="1987702299778854923",
+                name="AED free shipping creative",
+                buyer_id="1487810529",
+                format="HTML",
+                approval_status="APPROVED",
+                advertiser_name=None,
+                detected_language=None,
+                detected_language_code=None,
+                raw_data={
+                    "html": {
+                        "snippet": "Only for new app users AED 0 FREE SHIPPING",
+                    }
+                },
+            )
+        ]
+
     monkeypatch.setattr(creatives_router, "resolve_buyer_id", _resolve_buyer_id)
     monkeypatch.setattr(creatives_router, "pg_query", _fake_pg_query)
     monkeypatch.setattr(creatives_router.analysis_repo, "get_latest_runs", _fake_get_latest_runs)
+    monkeypatch.setattr(
+        creatives_router,
+        "_list_creatives_for_language_flag_coverage",
+        _fake_list_creatives_for_language_flag_coverage,
+    )
 
     client = _build_client(store)
     response = client.get("/api/creatives/language-flag-coverage?buyer_id=1487810529")
