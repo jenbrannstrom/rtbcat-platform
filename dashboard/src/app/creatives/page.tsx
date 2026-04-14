@@ -2,6 +2,7 @@
 
 import { useState, Suspense, useRef, useMemo, useEffect } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { Search, X, TrendingUp, Loader2, Play, Square, AlertTriangle } from "lucide-react";
@@ -356,13 +357,15 @@ function VirtualizedGrid({
 function CreativesContent() {
   const { t } = useTranslation();
   const { selectedBuyerId } = useAccount();
+  const searchParams = useSearchParams();
 
   // Get buyer_id from context (persistent across pages)
   const selectedSeatId = selectedBuyerId;
+  const urlSearch = (searchParams.get("search") || "").trim();
 
   const [selectedFormats, setSelectedFormats] = useState<Set<string>>(new Set());
   const [selectedSizes, setSelectedSizes] = useState<Set<string>>(new Set());
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(urlSearch);
   const [previewCreative, setPreviewCreative] = useState<Creative | null>(null);
   const [days, setDays] = useState(7);
   const [sortBySpend, setSortBySpend] = useState(true);
@@ -456,6 +459,12 @@ function CreativesContent() {
     setTierFilter("all");
     setApprovalFilter("all");
   };
+
+  // Allow deep links like /<buyer>/creatives?search=<creative_id>
+  // so a modal can jump to the exact creative on the main page.
+  useEffect(() => {
+    setSearch(urlSearch);
+  }, [urlSearch]);
 
   // Keep pagination deterministic when scope or local filters change.
   useEffect(() => {
@@ -582,6 +591,11 @@ function CreativesContent() {
           >
             Click Macro Audit
           </Link>
+          {selectedSeatId && (
+            <span className="rounded border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700">
+              {t.admin.buyerIdLabel.replace("{buyerId}", selectedSeatId)}
+            </span>
+          )}
         </div>
 
         {/* Search - 35% width */}
