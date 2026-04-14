@@ -227,6 +227,17 @@ class PostgresStore:
             return Creative(**row)
         return None
 
+    async def get_creatives_by_ids(self, creative_ids: list[str]) -> list[Creative]:
+        """Get full creative rows by ID."""
+        if not creative_ids:
+            return []
+
+        rows = await pg_query(
+            "SELECT * FROM creatives WHERE id = ANY(%s)",
+            (creative_ids,),
+        )
+        return [Creative(**row) for row in rows]
+
     async def update_language_detection(
         self,
         creative_id: str,

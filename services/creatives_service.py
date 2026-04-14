@@ -182,6 +182,52 @@ class CreativesService:
         merged.update(refreshed)
         return merged
 
+    async def hydrate_native_preview_creatives(
+        self,
+        store: Any,
+        creatives: list[Any],
+    ) -> list[Any]:
+        """Hydrate native creatives with raw_data so slim cards can render previews."""
+        native_ids = [
+            creative.id
+            for creative in creatives
+            if getattr(creative, "format", None) == "NATIVE"
+            and not (
+                isinstance(getattr(creative, "raw_data", None), dict)
+                and getattr(creative, "raw_data", {}).get("native")
+            )
+        ]
+        if not native_ids:
+            return creatives
+
+        try:
+            if hasattr(store, "get_creatives_by_ids"):
+                hydrated_creatives = await store.get_creatives_by_ids(native_ids)
+            else:
+                hydrated_creatives = []
+                for creative_id in native_ids:
+                    creative = await store.get_creative(creative_id)
+                    if creative is not None:
+                        hydrated_creatives.append(creative)
+        except Exception:
+            logger.warning(
+                "Hydrating native preview creatives failed",
+                extra={"creative_ids": native_ids},
+                exc_info=True,
+            )
+            return creatives
+
+        hydrated_map = {
+            creative.id: creative
+            for creative in hydrated_creatives
+            if isinstance(getattr(creative, "raw_data", None), dict)
+            and getattr(creative, "raw_data", {}).get("native")
+        }
+        if not hydrated_map:
+            return creatives
+
+        return [hydrated_map.get(creative.id, creative) for creative in creatives]
+
     async def get_waste_flags(
         self,
         creative_ids: list[str],
