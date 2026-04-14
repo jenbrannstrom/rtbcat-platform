@@ -13,7 +13,7 @@ import { splitBuyerPath, toBuyerScopedPath } from "@/lib/buyer-routes";
 import { cn } from "@/lib/utils";
 
 const PAGE_SIZE = 100;
-const INITIAL_SCAN_LIMIT = 1000;
+const INITIAL_SCAN_LIMIT = 200;
 
 const STATUS_CONFIG = {
   green: {
