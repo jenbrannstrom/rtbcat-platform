@@ -139,6 +139,9 @@ class CreativeDestinationDiagnosticsResponse(BaseModel):
     has_click_macro: bool = False
     macro_tokens: list[str] = Field(default_factory=list)
     click_macro_tokens: list[str] = Field(default_factory=list)
+    has_payload_click_macro: bool = False
+    has_payload_only_click_macro: bool = False
+    payload_click_macro_tokens: list[str] = Field(default_factory=list)
 
 
 class CreativeClickMacroCoverageRow(BaseModel):
@@ -151,6 +154,9 @@ class CreativeClickMacroCoverageRow(BaseModel):
     has_click_macro: bool = False
     macro_tokens: list[str] = Field(default_factory=list)
     click_macro_tokens: list[str] = Field(default_factory=list)
+    has_payload_click_macro: bool = False
+    has_payload_only_click_macro: bool = False
+    payload_click_macro_tokens: list[str] = Field(default_factory=list)
     url_sources: list[str] = Field(default_factory=list)
     url_count: int = 0
     sample_url: Optional[str] = None
@@ -166,6 +172,7 @@ class CreativeClickMacroCoverageRow(BaseModel):
 class CreativeClickMacroCoverageSummary(BaseModel):
     creatives_with_click_macro: int
     creatives_without_click_macro: int
+    creatives_with_payload_only_click_macro: int = 0
     creatives_with_any_macro: int
     creatives_with_appsflyer_url: int = 0
     creatives_with_appsflyer_clickid: int = 0

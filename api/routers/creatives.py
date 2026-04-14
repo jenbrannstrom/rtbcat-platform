@@ -356,6 +356,9 @@ async def get_creative_click_macro_coverage(
                 has_click_macro=has_click_macro,
                 macro_tokens=macro_summary["macro_tokens"],
                 click_macro_tokens=macro_summary["click_macro_tokens"],
+                has_payload_click_macro=bool(macro_summary.get("has_payload_click_macro")),
+                has_payload_only_click_macro=bool(macro_summary.get("has_payload_only_click_macro")),
+                payload_click_macro_tokens=macro_summary.get("payload_click_macro_tokens", []),
                 url_sources=macro_summary["url_sources"],
                 url_count=macro_summary["url_count"],
                 sample_url=macro_summary["sample_url"],
@@ -383,6 +386,9 @@ async def get_creative_click_macro_coverage(
     summary = CreativeClickMacroCoverageSummary(
         creatives_with_click_macro=sum(1 for item in rows if item.has_click_macro),
         creatives_without_click_macro=sum(1 for item in rows if not item.has_click_macro),
+        creatives_with_payload_only_click_macro=sum(
+            1 for item in rows if item.has_payload_only_click_macro
+        ),
         creatives_with_any_macro=sum(1 for item in rows if item.has_any_macro),
         creatives_with_appsflyer_url=sum(1 for item in rows if item.has_appsflyer_url),
         creatives_with_appsflyer_clickid=sum(1 for item in rows if item.has_appsflyer_clickid),
