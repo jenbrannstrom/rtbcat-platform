@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { CheckCircle2, HelpCircle, Search, ShieldAlert } from "lucide-react";
-import { usePathname } from "next/navigation";
+import { useParams, usePathname } from "next/navigation";
 import { getCreativeLanguageFlagCoverage } from "@/lib/api";
 import { LoadingPage } from "@/components/loading";
 import { ErrorPage } from "@/components/error";
@@ -13,6 +13,7 @@ import { splitBuyerPath, toBuyerScopedPath } from "@/lib/buyer-routes";
 import { cn } from "@/lib/utils";
 
 const PAGE_SIZE = 100;
+const INITIAL_SCAN_LIMIT = 1000;
 
 const STATUS_CONFIG = {
   green: {
@@ -54,10 +55,12 @@ function StatusBadge({
 }
 
 export default function LanguageFlagCoveragePage() {
+  const params = useParams<{ buyerId?: string }>();
   const pathname = usePathname();
   const { selectedBuyerId } = useAccount();
   const { buyerIdInPath } = splitBuyerPath(pathname || "/");
-  const effectiveBuyerId = buyerIdInPath ?? selectedBuyerId ?? null;
+  const buyerIdFromParams = typeof params?.buyerId === "string" ? params.buyerId : null;
+  const effectiveBuyerId = buyerIdFromParams ?? buyerIdInPath ?? selectedBuyerId ?? null;
   const [search, setSearch] = useState("");
   const [languageState, setLanguageState] = useState<"all" | "green" | "orange" | "red">("all");
   const [geoState, setGeoState] = useState<"all" | "green" | "orange" | "red">("all");
@@ -78,6 +81,8 @@ export default function LanguageFlagCoveragePage() {
       geoState,
       offset,
     ],
+    enabled: Boolean(effectiveBuyerId),
+    retry: false,
     queryFn: () =>
       getCreativeLanguageFlagCoverage({
         buyer_id: effectiveBuyerId ?? undefined,
@@ -86,6 +91,7 @@ export default function LanguageFlagCoveragePage() {
         geo_state: geoState,
         limit: PAGE_SIZE,
         offset,
+        scan_limit: INITIAL_SCAN_LIMIT,
       }),
     staleTime: 30_000,
   });
@@ -103,6 +109,14 @@ export default function LanguageFlagCoveragePage() {
     if (denominator === 0) return 0;
     return ((summary.geo_orange + summary.geo_red) / denominator) * 100;
   }, [summary]);
+
+  if (!effectiveBuyerId) {
+    return (
+      <ErrorPage
+        message="Select a buyer to load language flags."
+      />
+    );
+  }
 
   if (isLoading) {
     return <LoadingPage />;
