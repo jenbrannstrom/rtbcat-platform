@@ -41,10 +41,7 @@ export async function fetchApi<T>(
     if (err instanceof DOMException && err.name === "AbortError") {
       throw new Error(`Request timed out after ${timeoutMs}ms`);
     }
-    // Network error - API server likely not running
-    throw new Error(
-      "Cannot connect to API server. Please ensure the backend is running on port 8000."
-    );
+    throw new Error("Cannot reach the API server. Check your connection and try again.");
   } finally {
     if (timeoutId) clearTimeout(timeoutId);
   }
@@ -58,11 +55,10 @@ export async function fetchApi<T>(
       const errorData = JSON.parse(text);
       errorMessage = errorData.detail || `API error: ${response.status}`;
     } catch {
-      // Not JSON - check for common proxy errors
       if (response.status === 500 && text.includes("Internal Server Error")) {
-        errorMessage = "Cannot connect to API server. Please ensure the backend is running on port 8000.";
+        errorMessage = "The API returned an internal error while handling this request.";
       } else if (response.status === 502 || response.status === 503) {
-        errorMessage = "API server is unavailable. Please check if the backend is running.";
+        errorMessage = "The API is temporarily unavailable. Please try again.";
       } else {
         errorMessage = `API error: ${response.status}`;
       }

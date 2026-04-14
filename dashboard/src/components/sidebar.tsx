@@ -27,6 +27,7 @@ import {
   Wrench,
   Map,
   BarChart3,
+  Globe,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getSeats, syncAllData } from "@/lib/api";
@@ -605,6 +606,31 @@ export function Sidebar() {
               )}
             />
             {!collapsed && "Click Macro Audit"}
+          </Link>
+        )}
+
+        {!restricted && (
+          <Link
+            href={getSeatScopedHref("/creatives/language-flags")}
+            className={cn(
+              "flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors",
+              pathWithoutBuyer.startsWith("/creatives/language-flags")
+                ? "bg-primary-50 text-primary-700"
+                : "text-gray-600 hover:bg-gray-50 hover:text-gray-900",
+              collapsed && "justify-center px-2"
+            )}
+            title={collapsed ? "Language Flags" : undefined}
+          >
+            <Globe
+              className={cn(
+                "h-5 w-5 flex-shrink-0",
+                pathWithoutBuyer.startsWith("/creatives/language-flags")
+                  ? "text-primary-600"
+                  : "text-gray-400",
+                !collapsed && "mr-3"
+              )}
+            />
+            {!collapsed && "Language Flags"}
           </Link>
         )}
 

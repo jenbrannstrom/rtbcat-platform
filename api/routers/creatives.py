@@ -21,10 +21,14 @@ from api.schemas.creatives import (
     CreativeClickMacroCoverageSummary,
     CreativeCountryBreakdownResponse,
     CreativeDestinationDiagnosticsResponse,
+    CreativeLanguageFlagCoverageResponse,
+    CreativeLanguageFlagCoverageRow,
+    CreativeLanguageFlagCoverageSummary,
     CreativeResponse,
     NewlyUploadedCreativesResponse,
     PaginatedCreativesResponse,
 )
+from services.creative_language_flag_service import build_creative_language_flag_row
 from services.creative_destination_resolver import (
     build_creative_click_macro_summary,
     build_creative_destination_diagnostics,
@@ -33,12 +37,77 @@ from services.auth_service import User
 from services.creative_countries_service import CreativeCountriesService
 from services.creative_response_builder import build_creative_response
 from services.creatives_service import CreativesService, CreativeListContext
+from storage.postgres_database import pg_query
+from storage.postgres_repositories.creative_analysis_repo import (
+    CreativeAnalysisRepository,
+)
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["Creatives"])
 countries_service = CreativeCountriesService()
 creatives_service = CreativesService()
+analysis_repo = CreativeAnalysisRepository()
+
+
+def _status_rank(status: str) -> int:
+    return {"red": 0, "orange": 1, "green": 2}.get(status, 3)
+
+
+async def _get_spend_snapshot(creative_ids: list[str]) -> dict[str, dict[str, int | str | None]]:
+    if not creative_ids:
+        return {}
+
+    spend_rows = await pg_query(
+        """
+        SELECT creative_id,
+               COALESCE(SUM(spend_micros), 0) AS spend,
+               COALESCE(SUM(impressions), 0) AS imps,
+               MAX(metric_date)::text AS last_active
+        FROM config_creative_daily
+        WHERE creative_id = ANY(%s)
+          AND metric_date >= CURRENT_DATE - 30
+        GROUP BY creative_id
+        """,
+        (creative_ids,),
+    )
+    return {
+        row["creative_id"]: {
+            "spend": int(row["spend"]),
+            "imps": int(row["imps"]),
+            "last_active": row["last_active"],
+        }
+        for row in spend_rows
+    }
+
+
+async def _get_serving_country_map(
+    creative_ids: list[str],
+    days: int,
+) -> dict[str, list[str]]:
+    if not creative_ids:
+        return {}
+
+    rows = await pg_query(
+        """
+        SELECT creative_id,
+               country AS country_code,
+               COALESCE(SUM(spend_micros), 0) AS spend_micros
+        FROM rtb_daily
+        WHERE creative_id = ANY(%s)
+          AND country IS NOT NULL
+          AND country != ''
+          AND metric_date >= CURRENT_DATE - make_interval(days => %s)
+        GROUP BY creative_id, country
+        ORDER BY creative_id, spend_micros DESC, country
+        """,
+        (creative_ids, days),
+    )
+
+    result: dict[str, list[str]] = {}
+    for row in rows:
+        result.setdefault(row["creative_id"], []).append(row["country_code"])
+    return result
 
 
 @router.get("/creatives", response_model=list[CreativeResponse])
@@ -305,7 +374,6 @@ async def get_creative_click_macro_coverage(
     creative_ids = [c.id for c in creatives]
     spend_data: dict[str, dict] = {}
     if creative_ids:
-        from storage.postgres_database import pg_query
         spend_rows = await pg_query(
             """
             SELECT creative_id,
@@ -395,6 +463,114 @@ async def get_creative_click_macro_coverage(
     )
 
     return CreativeClickMacroCoverageResponse(
+        rows=paged_rows,
+        total=total,
+        returned=len(paged_rows),
+        limit=limit,
+        offset=offset,
+        summary=summary,
+    )
+
+
+@router.get(
+    "/creatives/language-flag-coverage",
+    response_model=CreativeLanguageFlagCoverageResponse,
+)
+async def get_creative_language_flag_coverage(
+    buyer_id: Optional[str] = Query(None, description="Filter by buyer seat ID"),
+    search: Optional[str] = Query(
+        None, description="Filter by creative ID or creative name (case-insensitive)"
+    ),
+    language_state: str = Query(
+        "all",
+        pattern="^(all|green|orange|red)$",
+        description="Filter rows by deterministic language mismatch state",
+    ),
+    geo_state: str = Query(
+        "all",
+        pattern="^(all|green|orange|red)$",
+        description="Filter rows by geo-linguistic state",
+    ),
+    limit: int = Query(200, ge=1, le=1000, description="Page size"),
+    offset: int = Query(0, ge=0, description="Rows to skip"),
+    scan_limit: int = Query(
+        3000,
+        ge=100,
+        le=10000,
+        description="Maximum creatives to inspect before applying filters and pagination",
+    ),
+    days: int = Query(7, ge=1, le=90, description="Serving-country lookback window"),
+    store=Depends(get_store),
+    user: User = Depends(get_current_user),
+) -> CreativeLanguageFlagCoverageResponse:
+    """Return creative-level language and geo-linguistic flags for auditing."""
+    buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
+
+    creatives = await store.list_creatives(
+        buyer_id=buyer_id,
+        search=search,
+        limit=scan_limit,
+        offset=0,
+        include_raw_data=True,
+    )
+
+    creative_ids = [c.id for c in creatives]
+    spend_data = await _get_spend_snapshot(creative_ids)
+    serving_country_map = await _get_serving_country_map(creative_ids, days)
+    try:
+        latest_geo_runs = await analysis_repo.get_latest_runs(creative_ids)
+    except Exception:
+        latest_geo_runs = {}
+
+    rows: list[CreativeLanguageFlagCoverageRow] = []
+    for creative in creatives:
+        row_data = build_creative_language_flag_row(
+            creative=creative,
+            serving_countries=serving_country_map.get(creative.id, []),
+            latest_geo_run=latest_geo_runs.get(creative.id),
+        )
+        if language_state != "all" and row_data["language_flag_status"] != language_state:
+            continue
+        if geo_state != "all" and row_data["geo_linguistic_status"] != geo_state:
+            continue
+
+        perf = spend_data.get(creative.id, {})
+        spend_micros = int(perf.get("spend", 0) or 0)
+        impressions = int(perf.get("imps", 0) or 0)
+        last_active = perf.get("last_active")
+
+        rows.append(
+            CreativeLanguageFlagCoverageRow(
+                **row_data,
+                spend_30d_micros=spend_micros,
+                impressions_30d=impressions,
+                last_active_date=str(last_active) if last_active else None,
+                is_active=spend_micros > 0,
+            )
+        )
+
+    rows.sort(
+        key=lambda item: (
+            _status_rank(item.geo_linguistic_status),
+            _status_rank(item.language_flag_status),
+            -item.spend_30d_micros,
+            item.creative_name.lower(),
+            item.creative_id,
+        )
+    )
+
+    total = len(rows)
+    paged_rows = rows[offset : offset + limit]
+    summary = CreativeLanguageFlagCoverageSummary(
+        language_green=sum(1 for item in rows if item.language_flag_status == "green"),
+        language_orange=sum(1 for item in rows if item.language_flag_status == "orange"),
+        language_red=sum(1 for item in rows if item.language_flag_status == "red"),
+        geo_green=sum(1 for item in rows if item.geo_linguistic_status == "green"),
+        geo_orange=sum(1 for item in rows if item.geo_linguistic_status == "orange"),
+        geo_red=sum(1 for item in rows if item.geo_linguistic_status == "red"),
+    )
+
+    return CreativeLanguageFlagCoverageResponse(
         rows=paged_rows,
         total=total,
         returned=len(paged_rows),

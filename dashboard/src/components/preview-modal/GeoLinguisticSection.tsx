@@ -30,6 +30,7 @@ export function GeoLinguisticSection({ creativeId }: GeoLinguisticSectionProps) 
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [reloadNonce, setReloadNonce] = useState(0);
 
   useEffect(() => {
     setIsLoading(true);
@@ -44,7 +45,7 @@ export function GeoLinguisticSection({ creativeId }: GeoLinguisticSectionProps) 
         }
       })
       .finally(() => setIsLoading(false));
-  }, [creativeId]);
+  }, [creativeId, reloadNonce]);
 
   const handleAnalyze = async (force: boolean = false) => {
     setIsAnalyzing(true);
@@ -90,10 +91,6 @@ export function GeoLinguisticSection({ creativeId }: GeoLinguisticSectionProps) 
 
       {error && (
         <div className="text-xs text-red-600 bg-red-50 px-2 py-1 rounded mb-2">{error}</div>
-      )}
-
-      {loadError && (
-        <div className="text-xs text-red-600 bg-red-50 px-2 py-1 rounded mb-2">{loadError}</div>
       )}
 
       {report && report.status === "completed" ? (
@@ -197,6 +194,31 @@ export function GeoLinguisticSection({ creativeId }: GeoLinguisticSectionProps) 
             {isAnalyzing ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
             Retry
           </button>
+        </div>
+      ) : loadError ? (
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 p-2 rounded border bg-red-50 border-red-200">
+            <AlertTriangle className="h-4 w-4 text-red-600" />
+            <span className="text-xs text-red-700">{loadError}</span>
+          </div>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setReloadNonce((value) => value + 1)}
+              disabled={isLoading}
+              className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800"
+            >
+              {isLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+              Retry load
+            </button>
+            <button
+              onClick={() => handleAnalyze(false)}
+              disabled={isAnalyzing}
+              className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800"
+            >
+              {isAnalyzing ? <Loader2 className="h-3 w-3 animate-spin" /> : <ShieldAlert className="h-3 w-3" />}
+              Run Analysis
+            </button>
+          </div>
         </div>
       ) : (
         <div className="space-y-2">

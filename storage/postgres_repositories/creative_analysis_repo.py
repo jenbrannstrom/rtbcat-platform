@@ -62,6 +62,30 @@ class CreativeAnalysisRepository:
             (creative_id, analysis_type),
         )
 
+    async def get_latest_runs(
+        self,
+        creative_ids: list[str],
+        analysis_type: str = "geo_linguistic",
+    ) -> dict[str, dict[str, Any]]:
+        """Get the most recent analysis run for each creative in a batch."""
+        if not creative_ids:
+            return {}
+
+        rows = await pg_query(
+            """
+            SELECT DISTINCT ON (creative_id)
+                   id, creative_id, analysis_type, status, result,
+                   error_message, triggered_by, force_rerun,
+                   started_at, completed_at, created_at,
+                   retry_count, next_retry_at
+            FROM creative_analysis_runs
+            WHERE creative_id = ANY(%s) AND analysis_type = %s
+            ORDER BY creative_id, created_at DESC
+            """,
+            (creative_ids, analysis_type),
+        )
+        return {row["creative_id"]: row for row in rows}
+
     async def update_run_status(
         self,
         run_id: str,

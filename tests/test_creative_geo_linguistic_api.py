@@ -1,14 +1,19 @@
 """Integration tests for the geo-linguistic API endpoints."""
 
-import json
-from unittest.mock import AsyncMock, MagicMock, patch
+from types import SimpleNamespace
 
 import pytest
 
+pytest.importorskip("fastapi")
+from fastapi import FastAPI
+
 from api.routers.creative_geo_linguistic import (
     GeoLinguisticReportResponse,
+    get_current_user,
+    get_store,
     router,
 )
+from tests.support.asgi_client import SyncASGIClient
 
 
 class TestResponseModel:
@@ -101,3 +106,45 @@ class TestRouterRegistered:
             if r.path == "/creatives/{creative_id}/geo-linguistic-report":
                 assert "GET" in r.methods
                 break
+
+
+class _StoreWithCreative:
+    async def get_creative(self, creative_id: str):
+        return SimpleNamespace(id=creative_id, buyer_id="1487810529")
+
+
+def _build_client() -> SyncASGIClient:
+    app = FastAPI()
+    app.include_router(router, prefix="/api")
+    app.dependency_overrides[get_store] = lambda: _StoreWithCreative()
+    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(
+        id="u1",
+        role="sudo",
+        email="admin@example.com",
+    )
+    return SyncASGIClient(app)
+
+
+def test_get_report_returns_failed_payload_when_service_raises(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def _require_buyer_access(buyer_id: str, store=None, user=None):
+        _ = (buyer_id, store, user)
+        return None
+
+    async def _raise(_creative_id: str):
+        raise RuntimeError("analysis storage unavailable")
+
+    from api.routers import creative_geo_linguistic as geo_router
+
+    monkeypatch.setattr(geo_router, "require_buyer_access", _require_buyer_access)
+    monkeypatch.setattr(geo_router.geo_linguistic_service, "get_report", _raise)
+
+    client = _build_client()
+    response = client.get("/api/creatives/creative-1/geo-linguistic-report")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "failed"
+    assert payload["creative_id"] == "creative-1"
+    assert "analysis storage unavailable" in payload["error_message"]
