@@ -15,6 +15,7 @@ from services.creative_evidence_service import CreativeEvidenceService
 from services.config_service import ConfigService
 from services.language_ai_config import get_selected_language_ai_provider
 from storage.postgres_repositories.creative_analysis_repo import CreativeAnalysisRepository
+from utils.country_codes import normalize_country_code
 
 logger = logging.getLogger(__name__)
 
@@ -82,11 +83,15 @@ class GeoLinguisticService:
             country_breakdown = await self.countries_service.get_country_breakdown(
                 creative_id, days
             )
-            serving_countries = [
-                c["country_code"]
-                for c in country_breakdown
-                if c.get("country_code")
-            ]
+            serving_countries: list[str] = []
+            seen_countries: set[str] = set()
+            for country in country_breakdown:
+                raw_code = country.get("country_code")
+                normalized_code = normalize_country_code(raw_code)
+                if not normalized_code or normalized_code in seen_countries:
+                    continue
+                serving_countries.append(normalized_code)
+                seen_countries.add(normalized_code)
 
             provider = await get_selected_language_ai_provider(store)
             api_key = await ConfigService().get_ai_provider_api_key(store, provider)

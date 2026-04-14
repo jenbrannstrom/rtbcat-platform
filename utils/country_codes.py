@@ -383,35 +383,64 @@ ALPHA2_TO_ALPHA3 = {
     "ZA": "ZAF",
 }
 
+
+def _normalize_lookup_key(value: str) -> str:
+    return " ".join(str(value or "").strip().upper().split())
+
+
+ALPHA3_TO_ALPHA2 = {alpha3: alpha2 for alpha2, alpha3 in ALPHA2_TO_ALPHA3.items()}
 NAME_TO_ALPHA2 = {name.upper(): code for code, name in COUNTRY_NAMES.items()}
+NORMALIZED_NAME_TO_ALPHA2 = {
+    _normalize_lookup_key(name): code for code, name in COUNTRY_NAMES.items()
+}
+
+
+def normalize_country_code(code_or_name: str) -> str:
+    """Normalize a country alpha-2/alpha-3/name value to ISO alpha-2."""
+    if not code_or_name:
+        return code_or_name
+
+    normalized = _normalize_lookup_key(code_or_name)
+    if not normalized:
+        return normalized
+
+    if normalized in COUNTRY_NAMES:
+        return normalized
+
+    alpha2 = ALPHA3_TO_ALPHA2.get(normalized)
+    if alpha2:
+        return alpha2
+
+    alpha2 = NORMALIZED_NAME_TO_ALPHA2.get(normalized)
+    if alpha2:
+        return alpha2
+
+    return normalized
 
 
 def get_country_alpha3(code: str) -> str:
-    """Get ISO 3166-1 alpha-3 code from alpha-2 code."""
-    if not code:
-        return code
-    return ALPHA2_TO_ALPHA3.get(code.upper(), code.upper())
+    """Get ISO 3166-1 alpha-3 code from alpha-2/alpha-3/name input."""
+    normalized = normalize_country_code(code)
+    if not normalized:
+        return normalized
+    return ALPHA2_TO_ALPHA3.get(normalized, normalized)
 
 
 def get_country_alpha3_from_name(name: str) -> str:
     """Get ISO 3166-1 alpha-3 code from country name."""
-    if not name:
-        return name
-    alpha2 = NAME_TO_ALPHA2.get(name.upper())
-    if not alpha2:
-        return name
-    return get_country_alpha3(alpha2)
+    return get_country_alpha3(name)
 
 
 def get_country_name(code: str) -> str:
-    """Get country name from ISO alpha-2 code.
+    """Get country name from ISO alpha-2/alpha-3/name input.
 
     Args:
-        code: ISO 3166-1 alpha-2 country code (e.g., "US", "GB")
+        code: ISO 3166-1 alpha-2/alpha-3 code or country name
 
     Returns:
         Human-readable country name, or the code itself if not found
     """
-    if not code:
+    normalized = normalize_country_code(code)
+    if not normalized:
         return "Unknown"
-    return COUNTRY_NAMES.get(code.upper(), code)
+    return COUNTRY_NAMES.get(normalized, normalized)
