@@ -603,38 +603,62 @@ async def get_creative_language_flag_coverage(
     )
 
     creative_ids = [c.id for c in creatives]
-    spend_data = await _get_spend_snapshot(creative_ids)
-    serving_country_map = await _get_serving_country_map(creative_ids, days)
+    try:
+        spend_data = await _get_spend_snapshot(creative_ids)
+    except Exception:
+        logger.exception("Failed to load spend snapshot for language-flag coverage")
+        spend_data = {}
+
+    try:
+        serving_country_map = await _get_serving_country_map(creative_ids, days)
+    except Exception:
+        logger.exception("Failed to load serving countries for language-flag coverage")
+        serving_country_map = {}
+
     try:
         latest_geo_runs = await analysis_repo.get_latest_runs(creative_ids)
     except Exception:
         latest_geo_runs = {}
 
     rows: list[CreativeLanguageFlagCoverageRow] = []
+    skipped_creatives = 0
     for creative in creatives:
-        row_data = build_creative_language_flag_row(
-            creative=creative,
-            serving_countries=serving_country_map.get(creative.id, []),
-            latest_geo_run=latest_geo_runs.get(creative.id),
-        )
-        if language_state != "all" and row_data["language_flag_status"] != language_state:
-            continue
-        if geo_state != "all" and row_data["geo_linguistic_status"] != geo_state:
-            continue
-
-        perf = spend_data.get(creative.id, {})
-        spend_micros = int(perf.get("spend", 0) or 0)
-        impressions = int(perf.get("imps", 0) or 0)
-        last_active = perf.get("last_active")
-
-        rows.append(
-            CreativeLanguageFlagCoverageRow(
-                **row_data,
-                spend_30d_micros=spend_micros,
-                impressions_30d=impressions,
-                last_active_date=str(last_active) if last_active else None,
-                is_active=spend_micros > 0,
+        try:
+            row_data = build_creative_language_flag_row(
+                creative=creative,
+                serving_countries=serving_country_map.get(creative.id, []),
+                latest_geo_run=latest_geo_runs.get(creative.id),
             )
+            if language_state != "all" and row_data["language_flag_status"] != language_state:
+                continue
+            if geo_state != "all" and row_data["geo_linguistic_status"] != geo_state:
+                continue
+
+            perf = spend_data.get(creative.id, {})
+            spend_micros = int(perf.get("spend", 0) or 0)
+            impressions = int(perf.get("imps", 0) or 0)
+            last_active = perf.get("last_active")
+
+            rows.append(
+                CreativeLanguageFlagCoverageRow(
+                    **row_data,
+                    spend_30d_micros=spend_micros,
+                    impressions_30d=impressions,
+                    last_active_date=str(last_active) if last_active else None,
+                    is_active=spend_micros > 0,
+                )
+            )
+        except Exception:
+            skipped_creatives += 1
+            logger.exception(
+                "Failed to build language-flag coverage row for creative %s",
+                getattr(creative, "id", "unknown"),
+            )
+
+    if skipped_creatives:
+        logger.warning(
+            "Skipped %s creatives while building language-flag coverage",
+            skipped_creatives,
         )
 
     rows.sort(
@@ -642,7 +666,7 @@ async def get_creative_language_flag_coverage(
             _status_rank(item.geo_linguistic_status),
             _status_rank(item.language_flag_status),
             -item.spend_30d_micros,
-            item.creative_name.lower(),
+            (item.creative_name or "").lower(),
             item.creative_id,
         )
     )
