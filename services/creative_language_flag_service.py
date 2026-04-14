@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 from typing import Any, Optional
 
@@ -100,8 +101,20 @@ def _extract_text_from_vast(vast_xml: str) -> str:
     return " ".join(text_parts)
 
 
+def _coerce_raw_data(raw_value: Any) -> dict[str, Any]:
+    if isinstance(raw_value, dict):
+        return raw_value
+    if isinstance(raw_value, str) and raw_value.strip():
+        try:
+            parsed = json.loads(raw_value)
+        except Exception:
+            return {}
+        return parsed if isinstance(parsed, dict) else {}
+    return {}
+
+
 def extract_creative_market_text(creative: Any) -> str:
-    raw_data = getattr(creative, "raw_data", {}) or {}
+    raw_data = _coerce_raw_data(getattr(creative, "raw_data", None))
     parts: list[str] = []
 
     for value in (
