@@ -6,7 +6,7 @@ import logging
 from types import SimpleNamespace
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 
 from api.dependencies import (
     get_current_user,
@@ -25,17 +25,20 @@ from api.schemas.creatives import (
     CreativeLanguageFlagCoverageResponse,
     CreativeLanguageFlagCoverageRow,
     CreativeLanguageFlagCoverageSummary,
+    CreativeLanguageFlagRefreshResponse,
     CreativeResponse,
     NewlyUploadedCreativesResponse,
     PaginatedCreativesResponse,
 )
 from services.creative_language_flag_service import build_creative_language_flag_row
+from services.creative_language_service import CreativeLanguageService
 from services.creative_destination_resolver import (
     build_creative_click_macro_summary,
     build_creative_destination_diagnostics,
 )
 from services.auth_service import User
 from services.creative_countries_service import CreativeCountriesService
+from services.geo_linguistic_service import GeoLinguisticService
 from services.creative_response_builder import build_creative_response
 from services.creatives_service import CreativesService, CreativeListContext
 from storage.postgres_database import pg_query
@@ -49,6 +52,8 @@ router = APIRouter(tags=["Creatives"])
 countries_service = CreativeCountriesService()
 creatives_service = CreativesService()
 analysis_repo = CreativeAnalysisRepository()
+language_service = CreativeLanguageService()
+geo_linguistic_service = GeoLinguisticService()
 
 
 def _status_rank(status: str) -> int:
@@ -198,6 +203,59 @@ async def _list_creatives_for_language_flag_coverage(
 
     rows = await pg_query(sql, tuple(params))
     return [SimpleNamespace(**row) for row in rows]
+
+
+async def _refresh_language_flag_coverage_batch(
+    creative_ids: list[str],
+    store,
+    triggered_by: str,
+    force: bool,
+    days: int,
+) -> None:
+    """Refresh stored language and geo-linguistic analyses for a creative batch."""
+    refreshed = 0
+    for creative_id in creative_ids:
+        creative = await store.get_creative(creative_id)
+        if not creative:
+            continue
+
+        try:
+            language_force = force and getattr(creative, "language_source", None) != "manual"
+            await language_service.analyze_language(
+                creative=creative,
+                store=store,
+                force=language_force,
+            )
+        except Exception as exc:
+            logger.debug(
+                "Language refresh skipped for %s: %s",
+                creative_id,
+                exc,
+                exc_info=True,
+            )
+
+        try:
+            await geo_linguistic_service.analyze_creative(
+                creative_id=creative_id,
+                store=store,
+                force=force,
+                triggered_by=triggered_by,
+                days=days,
+            )
+        except Exception as exc:
+            logger.debug(
+                "Geo-linguistic refresh skipped for %s: %s",
+                creative_id,
+                exc,
+                exc_info=True,
+            )
+
+        refreshed += 1
+
+    logger.info(
+        "Queued language-flag refresh finished for %s creatives",
+        refreshed,
+    )
 
 
 @router.get("/creatives", response_model=list[CreativeResponse])
@@ -689,6 +747,63 @@ async def get_creative_language_flag_coverage(
         limit=limit,
         offset=offset,
         summary=summary,
+    )
+
+
+@router.post(
+    "/creatives/language-flag-coverage/refresh",
+    response_model=CreativeLanguageFlagRefreshResponse,
+)
+async def refresh_creative_language_flag_coverage(
+    background_tasks: BackgroundTasks,
+    buyer_id: Optional[str] = Query(None, description="Filter by buyer seat ID"),
+    search: Optional[str] = Query(
+        None, description="Filter by creative ID or creative name (case-insensitive)"
+    ),
+    refresh_limit: int = Query(
+        500,
+        ge=1,
+        le=2000,
+        description="Maximum creatives to queue for refresh",
+    ),
+    force: bool = Query(
+        True,
+        description="Force-refresh existing language and geo-linguistic analyses",
+    ),
+    days: int = Query(7, ge=1, le=90, description="Serving-country lookback window"),
+    store=Depends(get_store),
+    user: User = Depends(get_current_user),
+) -> CreativeLanguageFlagRefreshResponse:
+    """Queue a batch refresh of language and geo-linguistic analyses."""
+    buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
+
+    creatives = await _list_creatives_for_language_flag_coverage(
+        buyer_id=buyer_id,
+        search=search,
+        scan_limit=refresh_limit,
+    )
+    creative_ids = [creative.id for creative in creatives if getattr(creative, "id", None)]
+
+    if creative_ids:
+        background_tasks.add_task(
+            _refresh_language_flag_coverage_batch,
+            creative_ids,
+            store,
+            user.email,
+            force,
+            days,
+        )
+
+    return CreativeLanguageFlagRefreshResponse(
+        buyer_id=buyer_id,
+        queued_creatives=len(creative_ids),
+        refresh_limit=refresh_limit,
+        force=force,
+        message=(
+            f"Queued refresh for {len(creative_ids)} creatives."
+            if creative_ids
+            else "No creatives matched the refresh request."
+        ),
     )
 
 

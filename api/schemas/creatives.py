@@ -230,3 +230,11 @@ class CreativeLanguageFlagCoverageResponse(BaseModel):
     limit: int
     offset: int
     summary: CreativeLanguageFlagCoverageSummary
+
+
+class CreativeLanguageFlagRefreshResponse(BaseModel):
+    buyer_id: Optional[str] = None
+    queued_creatives: int
+    refresh_limit: int
+    force: bool = True
+    message: str
