@@ -75,7 +75,7 @@ export default function ClickMacroCoveragePage() {
         <div>
           <h1 className="text-xl font-bold text-gray-900">Click Macro Coverage</h1>
           <p className="text-sm text-gray-600">
-            Google requires click macro support. This table shows which creatives include or miss it.
+            Compliance uses click-path detection. Payload-only tokens are shown separately so they do not count as valid coverage.
           </p>
         </div>
         <Link
@@ -86,17 +86,23 @@ export default function ClickMacroCoveragePage() {
         </Link>
       </div>
 
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
         <div className="rounded-lg border border-gray-200 bg-white p-3">
-          <div className="text-xs uppercase tracking-wide text-gray-500">With Click Macro</div>
+          <div className="text-xs uppercase tracking-wide text-gray-500">With Click-Path Macro</div>
           <div className="mt-1 text-2xl font-semibold text-green-700">
             {summary?.creatives_with_click_macro ?? 0}
           </div>
         </div>
         <div className="rounded-lg border border-gray-200 bg-white p-3">
-          <div className="text-xs uppercase tracking-wide text-gray-500">Missing Click Macro</div>
+          <div className="text-xs uppercase tracking-wide text-gray-500">Missing Click-Path Macro</div>
           <div className="mt-1 text-2xl font-semibold text-red-700">
             {summary?.creatives_without_click_macro ?? 0}
+          </div>
+        </div>
+        <div className="rounded-lg border border-gray-200 bg-white p-3">
+          <div className="text-xs uppercase tracking-wide text-gray-500">Payload-Only Tokens</div>
+          <div className="mt-1 text-2xl font-semibold text-amber-700">
+            {summary?.creatives_with_payload_only_click_macro ?? 0}
           </div>
         </div>
         <div className="rounded-lg border border-gray-200 bg-white p-3">
@@ -128,8 +134,8 @@ export default function ClickMacroCoveragePage() {
           className="input py-1.5 pr-8 text-sm"
         >
           <option value="all">All</option>
-          <option value="has_click_macro">Has click macro</option>
-          <option value="missing_click_macro">Missing click macro</option>
+          <option value="has_click_macro">Has click-path macro</option>
+          <option value="missing_click_macro">Missing click-path macro</option>
         </select>
       </div>
 
@@ -138,14 +144,14 @@ export default function ClickMacroCoveragePage() {
           <table className="min-w-full divide-y divide-gray-200 text-sm">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-3 py-2 text-left font-medium text-gray-600">Status</th>
+                <th className="px-3 py-2 text-left font-medium text-gray-600">Compliance</th>
                 <th className="px-3 py-2 text-left font-medium text-gray-600">Creative</th>
                 <th className="px-3 py-2 text-left font-medium text-gray-600">Format</th>
                 <th className="px-3 py-2 text-left font-medium text-gray-600">Approval</th>
                 <th className="px-3 py-2 text-right font-medium text-gray-600">Spend (30d)</th>
                 <th className="px-3 py-2 text-right font-medium text-gray-600">Imps (30d)</th>
                 <th className="px-3 py-2 text-left font-medium text-gray-600">Last Active</th>
-                <th className="px-3 py-2 text-left font-medium text-gray-600">Click Macro Tokens</th>
+                <th className="px-3 py-2 text-left font-medium text-gray-600">Macro Tokens</th>
                 <th className="px-3 py-2 text-left font-medium text-gray-600">Sources</th>
                 <th className="px-3 py-2 text-left font-medium text-gray-600">Sample URL</th>
               </tr>
@@ -154,15 +160,22 @@ export default function ClickMacroCoveragePage() {
               {rows.map((row) => (
                 <tr key={row.creative_id}>
                   <td className="px-3 py-2 align-top">
-                    <span
-                      className={cn(
-                        "inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium",
-                        row.has_click_macro ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
+                    <div className="space-y-1">
+                      <span
+                        className={cn(
+                          "inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium",
+                          row.has_click_macro ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
+                        )}
+                      >
+                        {row.has_click_macro ? <CheckCircle2 className="h-3.5 w-3.5" /> : <AlertTriangle className="h-3.5 w-3.5" />}
+                        {row.has_click_macro ? "Present" : "Missing"}
+                      </span>
+                      {row.has_payload_only_click_macro && (
+                        <div className="text-[11px] text-amber-700">
+                          Payload-only token
+                        </div>
                       )}
-                    >
-                      {row.has_click_macro ? <CheckCircle2 className="h-3.5 w-3.5" /> : <AlertTriangle className="h-3.5 w-3.5" />}
-                      {row.has_click_macro ? "Present" : "Missing"}
-                    </span>
+                    </div>
                   </td>
                   <td className="px-3 py-2 align-top">
                     <div className="font-mono text-xs text-gray-900">{row.creative_id}</div>
@@ -194,7 +207,20 @@ export default function ClickMacroCoveragePage() {
                     )}
                   </td>
                   <td className="px-3 py-2 align-top text-xs text-gray-700">
-                    {row.click_macro_tokens.length > 0 ? row.click_macro_tokens.join(", ") : "-"}
+                    <div className="space-y-1">
+                      <div>
+                        <span className="text-gray-500">Path: </span>
+                        {row.click_macro_tokens.length > 0 ? row.click_macro_tokens.join(", ") : "-"}
+                      </div>
+                      {row.has_payload_click_macro && (
+                        <div className="text-amber-700">
+                          <span className="text-amber-800">Payload: </span>
+                          {row.payload_click_macro_tokens.length > 0
+                            ? row.payload_click_macro_tokens.join(", ")
+                            : "present"}
+                        </div>
+                      )}
+                    </div>
                   </td>
                   <td className="px-3 py-2 align-top text-xs text-gray-700">
                     {row.url_sources.length > 0 ? row.url_sources.join(", ") : "-"}

@@ -611,7 +611,7 @@ export function PreviewModal({
                       <div className="rounded border border-gray-200 bg-white px-2 py-2">
                         <div className="flex items-center justify-between gap-2">
                           <span className="text-[10px] font-medium text-gray-600">
-                            Click macro tokens detected
+                            Click-path macro compliance
                           </span>
                           <span
                             className={cn(
@@ -625,13 +625,30 @@ export function PreviewModal({
                           </span>
                         </div>
                         <div className="mt-1 text-[10px] text-gray-500">
-                          Payload detection only. Click metrics depend on the imported performance source.
+                          Based on known clickthrough fields and markup containers. Separate from payload-wide token detection.
                         </div>
                         {destinationDiagnostics.click_macro_tokens.length > 0 && (
                           <div className="mt-1 text-[10px] text-gray-600 break-all">
-                            Detected tokens: {destinationDiagnostics.click_macro_tokens.join(", ")}
+                            Click-path tokens: {destinationDiagnostics.click_macro_tokens.join(", ")}
                           </div>
                         )}
+                        {destinationDiagnostics.has_payload_only_click_macro && (
+                          <div className="mt-2 rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-[10px] text-amber-800">
+                            Raw payload tokens were found outside the detected click path.
+                            {destinationDiagnostics.payload_click_macro_tokens.length > 0 && (
+                              <span className="block break-all">
+                                Payload tokens: {destinationDiagnostics.payload_click_macro_tokens.join(", ")}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                        {!destinationDiagnostics.has_payload_only_click_macro &&
+                          destinationDiagnostics.has_payload_click_macro &&
+                          destinationDiagnostics.payload_click_macro_tokens.length > 0 && (
+                            <div className="mt-1 text-[10px] text-gray-500 break-all">
+                              Raw payload tokens: {destinationDiagnostics.payload_click_macro_tokens.join(", ")}
+                            </div>
+                          )}
                       </div>
 
                       <div className="text-[11px] text-gray-700 break-all">

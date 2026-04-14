@@ -139,6 +139,44 @@ def extract_macro_tokens(value: Optional[str]) -> list[str]:
     return sorted(set(_MACRO_TOKEN_PATTERN.findall(str(value))))
 
 
+def _extract_click_macro_scan_sources(creative: Any) -> list[dict[str, str]]:
+    raw_data = getattr(creative, "raw_data", {}) or {}
+    declared_urls_raw = raw_data.get("declaredClickThroughUrls", [])
+    declared_urls = declared_urls_raw if isinstance(declared_urls_raw, list) else []
+    html_payload = raw_data.get("html")
+    native_payload = raw_data.get("native")
+    video_payload = raw_data.get("video")
+
+    rows: list[dict[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+
+    def add(source: str, value: Optional[str]) -> None:
+        if value is None:
+            return
+        text = str(value).strip()
+        if not text:
+            return
+        key = (source, text)
+        if key in seen:
+            return
+        seen.add(key)
+        rows.append({"source": source, "value": text})
+
+    add("final_url", getattr(creative, "final_url", None))
+    for url in declared_urls:
+        add("declared_click_through_url", url)
+    if isinstance(native_payload, dict):
+        add("native_click_link_url", native_payload.get("clickLinkUrl"))
+        add("native_snippet", native_payload.get("snippet"))
+    if isinstance(html_payload, dict):
+        add("html_snippet", html_payload.get("snippet"))
+    if isinstance(video_payload, dict):
+        add("video_vast_xml", video_payload.get("videoVastXml") or video_payload.get("vastXml"))
+    add("video_vast_xml", raw_data.get("videoVastXml"))
+
+    return rows
+
+
 def build_creative_click_macro_summary(creative: Any) -> dict[str, Any]:
     candidates = extract_creative_destination_candidates(creative)
     macro_tokens: set[str] = set()
@@ -148,41 +186,43 @@ def build_creative_click_macro_summary(creative: Any) -> dict[str, Any]:
     appsflyer_url_count = 0
     appsflyer_clickid_url_count = 0
     sample_appsflyer_url: Optional[str] = None
+    payload_macro_tokens: set[str] = set()
+    payload_click_macro_tokens: set[str] = set()
 
     for row in candidates:
         url = row.get("url", "")
-        source = row.get("source", "")
         if _is_appsflyer_url(url):
             appsflyer_url_count += 1
             if sample_appsflyer_url is None:
                 sample_appsflyer_url = url
             if _url_has_clickid(url):
                 appsflyer_clickid_url_count += 1
-        tokens = extract_macro_tokens(url)
+
+    for row in _extract_click_macro_scan_sources(creative):
+        value = row.get("value", "")
+        source = row.get("source", "")
+        tokens = extract_macro_tokens(value)
         if not tokens:
             continue
-        if sample_url is None:
-            sample_url = url
         source_hints.add(source)
         macro_tokens.update(tokens)
+        if source != "html_snippet" and source != "native_snippet" and source != "video_vast_xml" and sample_url is None:
+            sample_url = value
         for token in tokens:
             if _is_click_url_macro(token):
                 click_macro_tokens.add(token)
 
     # Scan the entire raw_data JSON blob as text for %%CLICK_URL%% tokens.
-    # The URL extraction pipeline strips macro prefixes, and format-specific
-    # field scanning misses macros in unexpected locations (e.g. JS object
-    # literals in native creatives that contain full HTML, VAST XML click
-    # trackers, etc.). Scanning the full blob catches everything.
+    # This is broader than click-path compliance and is used only as context.
     raw_data = getattr(creative, "raw_data", {}) or {}
     if raw_data:
         raw_text = json.dumps(raw_data)
         raw_tokens = extract_macro_tokens(raw_text)
         for token in raw_tokens:
+            payload_macro_tokens.add(token)
             macro_tokens.add(token)
             if _is_click_url_macro(token):
-                click_macro_tokens.add(token)
-                source_hints.add("raw_data")
+                payload_click_macro_tokens.add(token)
 
     return {
         "has_any_macro": bool(macro_tokens),
@@ -192,6 +232,10 @@ def build_creative_click_macro_summary(creative: Any) -> dict[str, Any]:
         "url_sources": sorted(source_hints),
         "url_count": len(candidates),
         "sample_url": sample_url,
+        "has_payload_click_macro": bool(payload_click_macro_tokens),
+        "has_payload_only_click_macro": bool(payload_click_macro_tokens) and not bool(click_macro_tokens),
+        "payload_macro_tokens": sorted(payload_macro_tokens),
+        "payload_click_macro_tokens": sorted(payload_click_macro_tokens),
         "has_appsflyer_url": appsflyer_url_count > 0,
         "has_appsflyer_clickid": appsflyer_clickid_url_count > 0,
         "appsflyer_url_count": appsflyer_url_count,
@@ -332,6 +376,9 @@ def build_creative_destination_diagnostics(creative: Any) -> dict[str, Any]:
         "has_click_macro": macro_summary["has_click_macro"],
         "macro_tokens": macro_summary["macro_tokens"],
         "click_macro_tokens": macro_summary["click_macro_tokens"],
+        "has_payload_click_macro": macro_summary["has_payload_click_macro"],
+        "has_payload_only_click_macro": macro_summary["has_payload_only_click_macro"],
+        "payload_click_macro_tokens": macro_summary["payload_click_macro_tokens"],
     }
 
 

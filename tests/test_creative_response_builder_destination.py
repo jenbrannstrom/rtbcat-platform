@@ -111,7 +111,7 @@ def test_click_macro_summary_detects_url_encoded_appsflyer_and_clickid() -> None
 
 
 def test_click_macro_summary_detects_macro_in_html_snippet() -> None:
-    """Macros embedded in HTML hrefs must be detected even though URL extraction strips them."""
+    """Macros embedded in HTML hrefs must count as click-path macros."""
     creative = SimpleNamespace(
         final_url=None,
         display_url=None,
@@ -129,7 +129,8 @@ def test_click_macro_summary_detects_macro_in_html_snippet() -> None:
 
     assert summary["has_click_macro"] is True
     assert "%%CLICK_URL_UNESC%%" in summary["click_macro_tokens"]
-    assert "raw_data" in summary["url_sources"]
+    assert "html_snippet" in summary["url_sources"]
+    assert summary["has_payload_only_click_macro"] is False
 
 
 def test_click_macro_summary_detects_macro_in_html_js_clickthrough() -> None:
@@ -151,10 +152,11 @@ def test_click_macro_summary_detects_macro_in_html_js_clickthrough() -> None:
 
     assert summary["has_click_macro"] is True
     assert "%%CLICK_URL%%" in summary["click_macro_tokens"]
+    assert "html_snippet" in summary["url_sources"]
 
 
 def test_click_macro_summary_native_with_macro_in_js() -> None:
-    """Native creatives with click macros embedded in JS must be detected via raw_data scan."""
+    """Native creatives with click macros embedded in markup must count as click-path macros."""
     creative = SimpleNamespace(
         final_url=None,
         display_url=None,
@@ -174,6 +176,7 @@ def test_click_macro_summary_native_with_macro_in_js() -> None:
 
     assert summary["has_click_macro"] is True
     assert "%%CLICK_URL_UNESC%%" in summary["click_macro_tokens"]
+    assert "native_snippet" in summary["url_sources"]
 
 
 def test_click_macro_summary_native_without_macro() -> None:
@@ -214,7 +217,7 @@ def test_click_macro_summary_video_vast_xml() -> None:
 
     assert summary["has_click_macro"] is True
     assert "%%CLICK_URL_ESC%%" in summary["click_macro_tokens"]
-    assert "raw_data" in summary["url_sources"]
+    assert "video_vast_xml" in summary["url_sources"]
 
 
 def test_click_macro_summary_detects_appsflyer_without_clickid() -> None:
@@ -231,3 +234,36 @@ def test_click_macro_summary_detects_appsflyer_without_clickid() -> None:
 
     assert summary["has_appsflyer_url"] is True
     assert summary["has_appsflyer_clickid"] is False
+
+
+def test_click_macro_summary_separates_payload_only_tokens_from_click_path() -> None:
+    creative = SimpleNamespace(
+        final_url="https://example.com/landing",
+        display_url="https://example.com/display",
+        raw_data={
+            "notes": {
+                "debug_html": "<div data-token='%%CLICK_URL_UNESC%%'></div>",
+            }
+        },
+    )
+
+    summary = build_creative_click_macro_summary(creative)
+
+    assert summary["has_click_macro"] is False
+    assert summary["has_payload_click_macro"] is True
+    assert summary["has_payload_only_click_macro"] is True
+    assert summary["click_macro_tokens"] == []
+    assert "%%CLICK_URL_UNESC%%" in summary["payload_click_macro_tokens"]
+
+
+def test_click_macro_summary_does_not_treat_display_url_as_click_path() -> None:
+    creative = SimpleNamespace(
+        final_url="https://example.com/landing",
+        display_url="%%CLICK_URL_UNESC%%https://example.com/display",
+        raw_data={},
+    )
+
+    summary = build_creative_click_macro_summary(creative)
+
+    assert summary["has_click_macro"] is False
+    assert summary["has_payload_click_macro"] is False

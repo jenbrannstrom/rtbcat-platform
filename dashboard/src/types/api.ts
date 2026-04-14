@@ -100,6 +100,9 @@ export interface CreativeDestinationDiagnostics {
   has_click_macro: boolean;
   macro_tokens: string[];
   click_macro_tokens: string[];
+  has_payload_click_macro: boolean;
+  has_payload_only_click_macro: boolean;
+  payload_click_macro_tokens: string[];
 }
 
 export interface CreativeClickMacroCoverageRow {
@@ -112,6 +115,9 @@ export interface CreativeClickMacroCoverageRow {
   has_click_macro: boolean;
   macro_tokens: string[];
   click_macro_tokens: string[];
+  has_payload_click_macro: boolean;
+  has_payload_only_click_macro: boolean;
+  payload_click_macro_tokens: string[];
   url_sources: string[];
   url_count: number;
   sample_url: string | null;
@@ -127,6 +133,7 @@ export interface CreativeClickMacroCoverageRow {
 export interface CreativeClickMacroCoverageSummary {
   creatives_with_click_macro: number;
   creatives_without_click_macro: number;
+  creatives_with_payload_only_click_macro?: number;
   creatives_with_any_macro: number;
   creatives_with_appsflyer_url?: number;
   creatives_with_appsflyer_clickid?: number;
