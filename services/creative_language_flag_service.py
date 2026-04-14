@@ -300,6 +300,7 @@ def assess_geo_linguistic_flag(
     latest_geo_run: Optional[dict[str, Any]],
     currency_flag: dict[str, Any],
 ) -> dict[str, Any]:
+    summarized_reason = _summarize_geo_linguistic_reason(latest_geo_run) if latest_geo_run else None
     if currency_flag["status"] == "red":
         if latest_geo_run:
             status = str(latest_geo_run.get("status") or "")
@@ -329,11 +330,23 @@ def assess_geo_linguistic_flag(
         decision = str(result.get("decision") or "unknown")
         if status == "completed":
             if decision == "mismatch":
-                return {"status": "red", "reason": "AI report flagged mismatch", "decision": decision}
+                return {
+                    "status": "red",
+                    "reason": summarized_reason or "AI report flagged mismatch",
+                    "decision": decision,
+                }
             if decision == "needs_review":
-                return {"status": "orange", "reason": "AI report needs review", "decision": decision}
+                return {
+                    "status": "orange",
+                    "reason": summarized_reason or "AI report needs review",
+                    "decision": decision,
+                }
             if decision == "match":
-                return {"status": "green", "reason": "AI report matched market", "decision": decision}
+                return {
+                    "status": "green",
+                    "reason": summarized_reason or "AI report matched market",
+                    "decision": decision,
+                }
         if status == "failed":
             return {
                 "status": "orange",
@@ -347,6 +360,41 @@ def assess_geo_linguistic_flag(
         "reason": "No AI geo-linguistic report yet",
         "decision": "not_run",
     }
+
+
+def _summarize_geo_linguistic_reason(latest_geo_run: dict[str, Any]) -> Optional[str]:
+    result = latest_geo_run.get("result") or {}
+    findings = result.get("findings") or []
+    if isinstance(findings, list):
+        for preferred_category in ("language_mismatch", "incomplete_localization", "currency_mismatch"):
+            for finding in findings:
+                if not isinstance(finding, dict):
+                    continue
+                if finding.get("category") != preferred_category:
+                    continue
+                description = str(finding.get("description") or "").strip()
+                evidence = str(finding.get("evidence") or "").strip()
+                if description:
+                    return description
+                if evidence:
+                    return evidence
+        for finding in findings:
+            if not isinstance(finding, dict):
+                continue
+            description = str(finding.get("description") or "").strip()
+            evidence = str(finding.get("evidence") or "").strip()
+            if description:
+                return description
+            if evidence:
+                return evidence
+
+    primary_languages = [str(value) for value in (result.get("primary_languages") or []) if value]
+    secondary_languages = [str(value) for value in (result.get("secondary_languages") or []) if value]
+    if primary_languages and secondary_languages:
+        return f"AI found mixed languages: {', '.join(primary_languages)} + {', '.join(secondary_languages)}"
+    if primary_languages:
+        return f"AI identified primary language: {', '.join(primary_languages)}"
+    return None
 
 
 def build_creative_language_flag_row(

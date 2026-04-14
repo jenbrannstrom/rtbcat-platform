@@ -101,6 +101,50 @@ def test_build_creative_language_flag_row_normalizes_country_names() -> None:
     assert row["currency_flag_reason"] == "No obvious market currency detected"
 
 
+def test_build_creative_language_flag_row_surfaces_geo_secondary_language_finding() -> None:
+    creative = SimpleNamespace(
+        id="2028723258945941508",
+        name="Mixed CTA creative",
+        buyer_id="1487810529",
+        format="NATIVE",
+        approval_status="APPROVED",
+        advertiser_name=None,
+        detected_language="English",
+        detected_language_code="en",
+        raw_data={
+            "native": {
+                "headline": "Earn rewards",
+                "body": "Best rewards app",
+                "callToAction": "instalar",
+            }
+        },
+    )
+
+    row = build_creative_language_flag_row(
+        creative=creative,
+        serving_countries=["PH"],
+        latest_geo_run={
+            "status": "completed",
+            "result": {
+                "decision": "needs_review",
+                "primary_languages": ["English"],
+                "secondary_languages": ["Spanish"],
+                "findings": [
+                    {
+                        "category": "language_mismatch",
+                        "description": "Spanish word 'instalar' (install) mixed into English-dominant creative served to Philippines",
+                    }
+                ],
+            },
+        },
+    )
+
+    assert row["geo_linguistic_status"] == "orange"
+    assert row["geo_linguistic_reason"] == (
+        "Spanish word 'instalar' (install) mixed into English-dominant creative served to Philippines"
+    )
+
+
 class _PerfService:
     async def get_country_breakdown(self, creative_id: str, days: int):
         del creative_id, days
