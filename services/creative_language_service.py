@@ -7,13 +7,21 @@ from typing import Any
 
 from fastapi import HTTPException
 
+from services.creative_language_flag_service import build_creative_language_flag_row
 from services.config_service import ConfigService
 from services.creative_countries_service import CreativeCountriesService
 from services.language_ai_config import get_selected_language_ai_provider
+from storage.postgres_repositories.creative_analysis_repo import CreativeAnalysisRepository
 
 
 class CreativeLanguageService:
     """Language detection + geo-mismatch logic for creatives."""
+
+    def __init__(
+        self,
+        analysis_repo: CreativeAnalysisRepository | None = None,
+    ) -> None:
+        self._analysis_repo = analysis_repo or CreativeAnalysisRepository()
 
     def _build_language_response(self, creative: Any, success: bool) -> dict[str, Any]:
         return {
@@ -125,44 +133,61 @@ class CreativeLanguageService:
 
     async def get_geo_mismatch(self, creative: Any, days: int) -> dict[str, Any]:
         """Check for language/country mismatch for a creative."""
-        if not creative.detected_language_code:
-            return {
-                "has_mismatch": False,
-                "alert": None,
-                "serving_countries": [],
-            }
-
         countries_service = CreativeCountriesService()
         country_breakdown = await countries_service.get_country_breakdown(creative.id, days)
-        if not country_breakdown:
-            return {
-                "has_mismatch": False,
-                "alert": None,
-                "serving_countries": [],
-            }
-
         serving_countries = [
             c["country_code"] for c in country_breakdown if c.get("country_code")
         ]
-
-        from utils.language_country_map import get_mismatch_alert
-
-        alert_data = get_mismatch_alert(
-            language_code=creative.detected_language_code,
-            language_name=creative.detected_language
-            or creative.detected_language_code,
+        try:
+            latest_geo_run = await self._analysis_repo.get_latest_run(creative.id)
+        except Exception:
+            latest_geo_run = None
+        flag_row = build_creative_language_flag_row(
+            creative=creative,
             serving_countries=serving_countries,
+            latest_geo_run=latest_geo_run,
         )
 
-        if alert_data:
-            return {
-                "has_mismatch": True,
-                "alert": alert_data,
-                "serving_countries": serving_countries,
+        alert_data = None
+        if flag_row["currency_flag_status"] == "red":
+            alert_data = {
+                "severity": "error",
+                "category": "currency",
+                "language": flag_row.get("detected_language"),
+                "language_code": flag_row.get("effective_language_code"),
+                "mismatched_countries": serving_countries,
+                "expected_countries": [],
+                "message": flag_row["currency_flag_reason"],
+            }
+        elif flag_row["language_flag_status"] in {"orange", "red"}:
+            alert_data = {
+                "severity": "warning" if flag_row["language_flag_status"] == "orange" else "error",
+                "category": "language",
+                "language": creative.detected_language or flag_row.get("effective_language_code"),
+                "language_code": flag_row.get("effective_language_code"),
+                "mismatched_countries": serving_countries,
+                "expected_countries": [],
+                "message": flag_row["language_flag_reason"],
             }
 
         return {
-            "has_mismatch": False,
-            "alert": None,
+            "has_mismatch": (
+                flag_row["language_flag_status"] == "red"
+                or flag_row["currency_flag_status"] == "red"
+                or flag_row["geo_linguistic_status"] == "red"
+            ),
+            "alert": alert_data,
             "serving_countries": serving_countries,
+            "detected_currencies": flag_row["detected_currencies"],
+            "language_flag_status": flag_row["language_flag_status"],
+            "language_flag_reason": flag_row["language_flag_reason"],
+            "language_flag_source": flag_row["language_flag_source"],
+            "effective_language_code": flag_row.get("effective_language_code"),
+            "heuristic_language_code": flag_row.get("heuristic_language_code"),
+            "currency_flag_status": flag_row["currency_flag_status"],
+            "currency_flag_reason": flag_row["currency_flag_reason"],
+            "geo_linguistic_status": flag_row["geo_linguistic_status"],
+            "geo_linguistic_reason": flag_row["geo_linguistic_reason"],
+            "geo_linguistic_decision": flag_row.get("geo_linguistic_decision"),
+            "geo_linguistic_completed_at": flag_row.get("geo_linguistic_completed_at"),
         }

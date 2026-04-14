@@ -7,6 +7,7 @@ import { fetchApi } from "./core";
 import type {
   Creative,
   CreativeClickMacroCoverageResponse,
+  CreativeLanguageFlagCoverageResponse,
   CreativeDestinationDiagnostics,
   CreativeLiveResponse,
   CreativeCountryBreakdown,
@@ -124,6 +125,32 @@ export async function getCreativeClickMacroCoverage(params?: {
   const query = searchParams.toString();
   return fetchApi<CreativeClickMacroCoverageResponse>(
     `/creatives/click-macro-coverage${query ? `?${query}` : ""}`
+  );
+}
+
+export async function getCreativeLanguageFlagCoverage(params?: {
+  buyer_id?: string;
+  search?: string;
+  language_state?: "all" | "green" | "orange" | "red";
+  geo_state?: "all" | "green" | "orange" | "red";
+  limit?: number;
+  offset?: number;
+  scan_limit?: number;
+  days?: number;
+}): Promise<CreativeLanguageFlagCoverageResponse> {
+  const searchParams = new URLSearchParams();
+  if (params?.buyer_id) searchParams.set("buyer_id", params.buyer_id);
+  if (params?.search) searchParams.set("search", params.search);
+  if (params?.language_state) searchParams.set("language_state", params.language_state);
+  if (params?.geo_state) searchParams.set("geo_state", params.geo_state);
+  if (params?.limit !== undefined) searchParams.set("limit", String(params.limit));
+  if (params?.offset !== undefined) searchParams.set("offset", String(params.offset));
+  if (params?.scan_limit !== undefined) searchParams.set("scan_limit", String(params.scan_limit));
+  if (params?.days !== undefined) searchParams.set("days", String(params.days));
+
+  const query = searchParams.toString();
+  return fetchApi<CreativeLanguageFlagCoverageResponse>(
+    `/creatives/language-flag-coverage${query ? `?${query}` : ""}`
   );
 }
 

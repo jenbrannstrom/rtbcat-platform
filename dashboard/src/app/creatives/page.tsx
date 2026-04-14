@@ -591,6 +591,12 @@ function CreativesContent() {
           >
             Click Macro Audit
           </Link>
+          <Link
+            href={toBuyerScopedPath("/creatives/language-flags", selectedSeatId)}
+            className="rounded border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
+          >
+            Language Flags
+          </Link>
           {selectedSeatId && (
             <span className="rounded border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700">
               {t.admin.buyerIdLabel.replace("{buyerId}", selectedSeatId)}

@@ -1,0 +1,99 @@
+"""API tests for creative language flag coverage endpoint."""
+
+from __future__ import annotations
+
+from types import SimpleNamespace
+
+import pytest
+
+pytest.importorskip("fastapi")
+from fastapi import FastAPI
+
+from api.routers import creatives as creatives_router
+from tests.support.asgi_client import SyncASGIClient
+
+
+class _Store:
+    async def list_creatives(self, **_kwargs):
+        return [
+            SimpleNamespace(
+                id="1987702299778854923",
+                name="AED free shipping creative",
+                buyer_id="1487810529",
+                format="HTML",
+                approval_status="APPROVED",
+                advertiser_name=None,
+                detected_language=None,
+                detected_language_code=None,
+                raw_data={
+                    "html": {
+                        "snippet": "Only for new app users AED 0 FREE SHIPPING",
+                    }
+                },
+            )
+        ]
+
+
+def _build_client(store: object) -> SyncASGIClient:
+    app = FastAPI()
+    app.include_router(creatives_router.router, prefix="/api")
+    app.dependency_overrides[creatives_router.get_store] = lambda: store
+    app.dependency_overrides[creatives_router.get_current_user] = lambda: SimpleNamespace(
+        id="u1",
+        role="sudo",
+        email="admin@example.com",
+    )
+    return SyncASGIClient(app)
+
+
+def test_language_flag_coverage_endpoint_returns_expected_statuses(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = _Store()
+
+    async def _resolve_buyer_id(buyer_id, store=None, user=None):
+        _ = (store, user)
+        return buyer_id
+
+    async def _fake_pg_query(sql: str, params: tuple):
+        if "FROM config_creative_daily" in sql:
+            return [
+                {
+                    "creative_id": "1987702299778854923",
+                    "spend": 53420000,
+                    "imps": 174230,
+                    "last_active": "2026-04-13",
+                }
+            ]
+        if "GROUP BY creative_id, country" in sql:
+            return [
+                {
+                    "creative_id": "1987702299778854923",
+                    "country_code": "PH",
+                    "spend_micros": 53420000,
+                }
+            ]
+        raise AssertionError(f"Unexpected SQL: {sql}")
+
+    async def _fake_get_latest_runs(_creative_ids):
+        return {}
+
+    monkeypatch.setattr(creatives_router, "resolve_buyer_id", _resolve_buyer_id)
+    monkeypatch.setattr(creatives_router, "pg_query", _fake_pg_query)
+    monkeypatch.setattr(creatives_router.analysis_repo, "get_latest_runs", _fake_get_latest_runs)
+
+    client = _build_client(store)
+    response = client.get("/api/creatives/language-flag-coverage?buyer_id=1487810529")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["total"] == 1
+    row = payload["rows"][0]
+    assert row["creative_id"] == "1987702299778854923"
+    assert row["language_flag_status"] == "orange"
+    assert row["currency_flag_status"] == "red"
+    assert row["geo_linguistic_status"] == "red"
+    assert row["serving_countries"] == ["PH"]
+    assert row["detected_currencies"] == ["AED"]
+    assert payload["summary"]["language_orange"] == 1
+    assert payload["summary"]["geo_red"] == 1

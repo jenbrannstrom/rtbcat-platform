@@ -2,17 +2,28 @@
 
 import { useState, useEffect } from "react";
 import { Globe, Loader2, RefreshCw, Edit2, AlertTriangle, ChevronDown, ChevronUp } from "lucide-react";
-import type { Creative, CreativeCountryBreakdown } from "@/types/api";
-import { analyzeCreativeLanguage, updateCreativeLanguage, getCreativeCountries } from "@/lib/api";
+import type { Creative, CreativeCountryBreakdown, GeoMismatchResponse } from "@/types/api";
+import { analyzeCreativeLanguage, updateCreativeLanguage, getCreativeCountries, getCreativeGeoMismatch } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { useTranslation } from "@/contexts/i18n-context";
-import { buildLanguageCountryComparison } from "./utils";
 
 interface LanguageSectionProps {
   creative: Creative;
   targetCountryCodes?: string[];
   onLanguageUpdate?: (language: string, languageCode: string) => void;
 }
+
+const STATUS_LABELS: Record<string, string> = {
+  green: "Match",
+  orange: "Needs Review",
+  red: "Mismatch",
+};
+
+const STATUS_STYLES: Record<string, string> = {
+  green: "bg-green-100 text-green-700",
+  orange: "bg-amber-100 text-amber-700",
+  red: "bg-red-100 text-red-700",
+};
 
 export function LanguageSection({
   creative,
@@ -28,13 +39,36 @@ export function LanguageSection({
   const [editLanguage, setEditLanguage] = useState("");
   const [editLanguageCode, setEditLanguageCode] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [geoMismatch, setGeoMismatch] = useState<GeoMismatchResponse | null>(null);
+  const [isLoadingSignals, setIsLoadingSignals] = useState(false);
+
+  const refreshSignals = async () => {
+    setIsLoadingCountries(true);
+    setIsLoadingSignals(true);
+
+    const [countriesResult, geoMismatchResult] = await Promise.allSettled([
+      getCreativeCountries(creative.id, 7),
+      getCreativeGeoMismatch(creative.id, 7),
+    ]);
+
+    if (countriesResult.status === "fulfilled") {
+      setCountryData(countriesResult.value);
+    } else {
+      setCountryData(null);
+    }
+
+    if (geoMismatchResult.status === "fulfilled") {
+      setGeoMismatch(geoMismatchResult.value);
+    } else {
+      setGeoMismatch(null);
+    }
+
+    setIsLoadingCountries(false);
+    setIsLoadingSignals(false);
+  };
 
   useEffect(() => {
-    setIsLoadingCountries(true);
-    getCreativeCountries(creative.id, 7)
-      .then((data) => setCountryData(data))
-      .catch(() => setCountryData(null))
-      .finally(() => setIsLoadingCountries(false));
+    void refreshSignals();
   }, [creative.id]);
 
   const handleRescan = async () => {
@@ -44,6 +78,7 @@ export function LanguageSection({
       const result = await analyzeCreativeLanguage(creative.id, true);
       if (result.success && result.detected_language && result.detected_language_code) {
         onLanguageUpdate?.(result.detected_language, result.detected_language_code);
+        await refreshSignals();
       } else if (result.language_analysis_error) {
         setError(result.language_analysis_error);
       }
@@ -67,6 +102,7 @@ export function LanguageSection({
       if (result.success) {
         onLanguageUpdate?.(result.detected_language!, result.detected_language_code!);
         setIsEditing(false);
+        await refreshSignals();
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : t.previewModal.failedToUpdateLanguage);
@@ -122,17 +158,15 @@ export function LanguageSection({
   const countries = countryData?.countries || [];
   const visibleCountries = showAllCountries ? countries : countries.slice(0, 4);
   const hasMoreCountries = countries.length > 4;
-  const servingCountryCodes = countries
-    .map((country) => country.country_code)
-    .filter((countryCode): countryCode is string => Boolean(countryCode));
-  const countryComparison = buildLanguageCountryComparison(
-    creative.detected_language_code,
-    targetCountryCodes,
-    servingCountryCodes,
+  const showConfiguredTargetCountries = Boolean(targetCountryCodes && targetCountryCodes.length > 0);
+  const heuristicLanguageCode = geoMismatch?.heuristic_language_code || null;
+  const effectiveLanguageCode = geoMismatch?.effective_language_code || null;
+  const showLanguageSignal = Boolean(
+    geoMismatch && geoMismatch.language_flag_reason && geoMismatch.language_flag_status !== "green"
   );
-  const mismatchCountryCodes = countryComparison.match.mismatchedCountries;
-  const showMismatchAlert = mismatchCountryCodes.length > 0;
-  const showConfiguredTargetCountries = countryComparison.basis === "targeting";
+  const showCurrencySignal = Boolean(
+    geoMismatch && geoMismatch.currency_flag_reason && geoMismatch.currency_flag_status !== "green"
+  );
 
   const renderServingCountriesValue = () => {
     if (isLoadingCountries) {
@@ -169,20 +203,73 @@ export function LanguageSection({
         </div>
       )}
 
-      {showMismatchAlert && (
-        <div className="mb-3 p-2 bg-amber-50 border border-amber-200 rounded">
+      {showLanguageSignal && (
+        <div className={cn(
+          "mb-2 rounded border p-2",
+          geoMismatch?.language_flag_status === "red"
+            ? "border-red-200 bg-red-50"
+            : "border-amber-200 bg-amber-50"
+        )}>
           <div className="flex items-start gap-1.5">
-            <AlertTriangle className="h-3.5 w-3.5 text-amber-600 mt-0.5 flex-shrink-0" />
-            <div className="text-xs text-amber-800">
-              <div className="font-medium">{t.previewModal.geoMismatch}</div>
-              <div className="mt-0.5">
-                {(showConfiguredTargetCountries
-                  ? t.previewModal.geoMismatchTargetCountries
-                  : t.previewModal.geoMismatchServingCountries)
-                  .replace("{language}", creative.detected_language || creative.detected_language_code || "")
-                  .replace("{countries}", mismatchCountryCodes.slice(0, 3).join(", "))}
-                {mismatchCountryCodes.length > 3 && ` ${t.previewModal.moreItemsSuffix.replace("{count}", String(mismatchCountryCodes.length - 3))}`}
+            <AlertTriangle className={cn(
+              "mt-0.5 h-3.5 w-3.5 flex-shrink-0",
+              geoMismatch?.language_flag_status === "red" ? "text-red-600" : "text-amber-600"
+            )} />
+            <div className={cn(
+              "text-xs",
+              geoMismatch?.language_flag_status === "red" ? "text-red-800" : "text-amber-800"
+            )}>
+              <div className="flex items-center gap-2">
+                <span className="font-medium">Lang mismatch</span>
+                <span className={cn(
+                  "rounded px-1.5 py-0.5 text-[11px] font-medium",
+                  STATUS_STYLES[geoMismatch?.language_flag_status || "orange"] || STATUS_STYLES.orange
+                )}>
+                  {STATUS_LABELS[geoMismatch?.language_flag_status || "orange"] || STATUS_LABELS.orange}
+                </span>
               </div>
+              <div className="mt-0.5">{geoMismatch?.language_flag_reason}</div>
+              {geoMismatch?.language_flag_source === "heuristic" && effectiveLanguageCode && (
+                <div className="mt-1 text-[11px] opacity-80">
+                  Heuristic cue: {effectiveLanguageCode.toUpperCase()}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showCurrencySignal && (
+        <div className={cn(
+          "mb-3 rounded border p-2",
+          geoMismatch?.currency_flag_status === "red"
+            ? "border-red-200 bg-red-50"
+            : "border-amber-200 bg-amber-50"
+        )}>
+          <div className="flex items-start gap-1.5">
+            <AlertTriangle className={cn(
+              "mt-0.5 h-3.5 w-3.5 flex-shrink-0",
+              geoMismatch?.currency_flag_status === "red" ? "text-red-600" : "text-amber-600"
+            )} />
+            <div className={cn(
+              "text-xs",
+              geoMismatch?.currency_flag_status === "red" ? "text-red-800" : "text-amber-800"
+            )}>
+              <div className="flex items-center gap-2">
+                <span className="font-medium">Market currency</span>
+                <span className={cn(
+                  "rounded px-1.5 py-0.5 text-[11px] font-medium",
+                  STATUS_STYLES[geoMismatch?.currency_flag_status || "orange"] || STATUS_STYLES.orange
+                )}>
+                  {STATUS_LABELS[geoMismatch?.currency_flag_status || "orange"] || STATUS_LABELS.orange}
+                </span>
+              </div>
+              <div className="mt-0.5">{geoMismatch?.currency_flag_reason}</div>
+              {geoMismatch?.detected_currencies.length ? (
+                <div className="mt-1 text-[11px] opacity-80">
+                  Detected: {geoMismatch.detected_currencies.join(", ")}
+                </div>
+              ) : null}
             </div>
           </div>
         </div>
@@ -201,12 +288,17 @@ export function LanguageSection({
           ) : (
             <span className="text-gray-400 italic">{t.previewModal.notAnalyzed}</span>
           )}
+          {!creative.detected_language && heuristicLanguageCode && (
+            <span className="text-xs text-amber-700">
+              Heuristic: {heuristicLanguageCode.toUpperCase()}
+            </span>
+          )}
         </div>
 
         {showConfiguredTargetCountries && (
           <div className="flex flex-wrap items-center gap-1.5">
             <span className="text-gray-500">{t.previewModal.countryTargeted}</span>
-            <span className="font-medium">{countryComparison.countryCodes.join(", ")}</span>
+            <span className="font-medium">{targetCountryCodes?.join(", ")}</span>
           </div>
         )}
 
@@ -214,6 +306,39 @@ export function LanguageSection({
           <span className="text-gray-500">{t.previewModal.servingCountriesFromPerformanceCsvImports}</span>
           {renderServingCountriesValue()}
         </div>
+
+        {isLoadingSignals && (
+          <div className="flex items-center gap-1 text-xs text-gray-400">
+            <Loader2 className="h-3 w-3 animate-spin" />
+            Checking market signals...
+          </div>
+        )}
+
+        {geoMismatch && (
+          <>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-gray-500">Lang mismatch:</span>
+              <span className={cn(
+                "rounded px-1.5 py-0.5 text-xs font-medium",
+                STATUS_STYLES[geoMismatch.language_flag_status] || STATUS_STYLES.orange
+              )}>
+                {STATUS_LABELS[geoMismatch.language_flag_status] || STATUS_LABELS.orange}
+              </span>
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-gray-500">Geo-Linguistic:</span>
+              <span className={cn(
+                "rounded px-1.5 py-0.5 text-xs font-medium",
+                STATUS_STYLES[geoMismatch.geo_linguistic_status] || STATUS_STYLES.orange
+              )}>
+                {STATUS_LABELS[geoMismatch.geo_linguistic_status] || STATUS_LABELS.orange}
+              </span>
+              {geoMismatch.geo_linguistic_reason && (
+                <span className="text-xs text-gray-500">{geoMismatch.geo_linguistic_reason}</span>
+              )}
+            </div>
+          </>
+        )}
       </div>
 
       {hasMoreCountries && (

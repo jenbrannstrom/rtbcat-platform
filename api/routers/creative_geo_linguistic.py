@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -13,6 +14,7 @@ from services.geo_linguistic_service import GeoLinguisticService
 
 router = APIRouter(tags=["Creatives"])
 geo_linguistic_service = GeoLinguisticService()
+logger = logging.getLogger(__name__)
 
 
 class GeoLinguisticFinding(BaseModel):
@@ -97,7 +99,15 @@ async def get_geo_linguistic_report(
     if creative.buyer_id:
         await require_buyer_access(creative.buyer_id, store=store, user=user)
 
-    report = await geo_linguistic_service.get_report(creative_id)
+    try:
+        report = await geo_linguistic_service.get_report(creative_id)
+    except Exception as exc:
+        logger.exception("Failed to load geo-linguistic report for %s", creative_id)
+        return GeoLinguisticReportResponse(
+            status="failed",
+            creative_id=creative_id,
+            error_message=f"Failed to load geo-linguistic report: {exc}",
+        )
     if not report:
         raise HTTPException(
             status_code=404,

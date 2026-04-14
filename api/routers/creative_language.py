@@ -29,11 +29,12 @@ class LanguageDetectionResponse(BaseModel):
 
 class GeoMismatchAlert(BaseModel):
     """Response model for geo-language mismatch alert."""
-    severity: str  # "warning"
-    language: str
-    language_code: str
-    mismatched_countries: list[str]
-    expected_countries: list[str]
+    severity: str
+    category: str = "language"
+    language: Optional[str] = None
+    language_code: Optional[str] = None
+    mismatched_countries: list[str] = Field(default_factory=list)
+    expected_countries: list[str] = Field(default_factory=list)
     message: str
 
 
@@ -42,7 +43,19 @@ class GeoMismatchResponse(BaseModel):
     creative_id: str
     has_mismatch: bool
     alert: Optional[GeoMismatchAlert] = None
-    serving_countries: list[str] = []
+    serving_countries: list[str] = Field(default_factory=list)
+    detected_currencies: list[str] = Field(default_factory=list)
+    language_flag_status: str = "orange"
+    language_flag_reason: Optional[str] = None
+    language_flag_source: Optional[str] = None
+    effective_language_code: Optional[str] = None
+    heuristic_language_code: Optional[str] = None
+    currency_flag_status: str = "orange"
+    currency_flag_reason: Optional[str] = None
+    geo_linguistic_status: str = "orange"
+    geo_linguistic_reason: Optional[str] = None
+    geo_linguistic_decision: Optional[str] = None
+    geo_linguistic_completed_at: Optional[str] = None
 
 
 class ManualLanguageUpdate(BaseModel):
@@ -120,6 +133,18 @@ async def get_creative_geo_mismatch(
             has_mismatch=mismatch["has_mismatch"],
             alert=GeoMismatchAlert(**mismatch["alert"]),
             serving_countries=mismatch["serving_countries"],
+            detected_currencies=mismatch.get("detected_currencies", []),
+            language_flag_status=mismatch.get("language_flag_status", "orange"),
+            language_flag_reason=mismatch.get("language_flag_reason"),
+            language_flag_source=mismatch.get("language_flag_source"),
+            effective_language_code=mismatch.get("effective_language_code"),
+            heuristic_language_code=mismatch.get("heuristic_language_code"),
+            currency_flag_status=mismatch.get("currency_flag_status", "orange"),
+            currency_flag_reason=mismatch.get("currency_flag_reason"),
+            geo_linguistic_status=mismatch.get("geo_linguistic_status", "orange"),
+            geo_linguistic_reason=mismatch.get("geo_linguistic_reason"),
+            geo_linguistic_decision=mismatch.get("geo_linguistic_decision"),
+            geo_linguistic_completed_at=mismatch.get("geo_linguistic_completed_at"),
         )
 
     return GeoMismatchResponse(
@@ -127,4 +152,16 @@ async def get_creative_geo_mismatch(
         has_mismatch=mismatch["has_mismatch"],
         alert=None,
         serving_countries=mismatch["serving_countries"],
+        detected_currencies=mismatch.get("detected_currencies", []),
+        language_flag_status=mismatch.get("language_flag_status", "orange"),
+        language_flag_reason=mismatch.get("language_flag_reason"),
+        language_flag_source=mismatch.get("language_flag_source"),
+        effective_language_code=mismatch.get("effective_language_code"),
+        heuristic_language_code=mismatch.get("heuristic_language_code"),
+        currency_flag_status=mismatch.get("currency_flag_status", "orange"),
+        currency_flag_reason=mismatch.get("currency_flag_reason"),
+        geo_linguistic_status=mismatch.get("geo_linguistic_status", "orange"),
+        geo_linguistic_reason=mismatch.get("geo_linguistic_reason"),
+        geo_linguistic_decision=mismatch.get("geo_linguistic_decision"),
+        geo_linguistic_completed_at=mismatch.get("geo_linguistic_completed_at"),
     )

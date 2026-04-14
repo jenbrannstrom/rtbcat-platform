@@ -148,6 +148,51 @@ export interface CreativeClickMacroCoverageResponse {
   summary: CreativeClickMacroCoverageSummary;
 }
 
+export interface CreativeLanguageFlagCoverageRow {
+  creative_id: string;
+  creative_name: string;
+  buyer_id: string | null;
+  format: string | null;
+  approval_status: string | null;
+  detected_language: string | null;
+  detected_language_code: string | null;
+  heuristic_language_code: string | null;
+  effective_language_code: string | null;
+  serving_countries: string[];
+  detected_currencies: string[];
+  language_flag_status: string;
+  language_flag_reason: string;
+  language_flag_source: string | null;
+  currency_flag_status: string;
+  currency_flag_reason: string;
+  geo_linguistic_status: string;
+  geo_linguistic_reason: string;
+  geo_linguistic_decision: string | null;
+  geo_linguistic_completed_at: string | null;
+  spend_30d_micros: number;
+  impressions_30d: number;
+  last_active_date: string | null;
+  is_active: boolean;
+}
+
+export interface CreativeLanguageFlagCoverageSummary {
+  language_green: number;
+  language_orange: number;
+  language_red: number;
+  geo_green: number;
+  geo_orange: number;
+  geo_red: number;
+}
+
+export interface CreativeLanguageFlagCoverageResponse {
+  rows: CreativeLanguageFlagCoverageRow[];
+  total: number;
+  returned: number;
+  limit: number;
+  offset: number;
+  summary: CreativeLanguageFlagCoverageSummary;
+}
+
 export interface Campaign {
   id: string;
   name: string;
@@ -466,8 +511,9 @@ export interface LanguageDetectionResponse {
 
 export interface GeoMismatchAlert {
   severity: string;
-  language: string;
-  language_code: string;
+  category: string;
+  language: string | null;
+  language_code: string | null;
   mismatched_countries: string[];
   expected_countries: string[];
   message: string;
@@ -478,6 +524,18 @@ export interface GeoMismatchResponse {
   has_mismatch: boolean;
   alert: GeoMismatchAlert | null;
   serving_countries: string[];
+  detected_currencies: string[];
+  language_flag_status: string;
+  language_flag_reason: string | null;
+  language_flag_source: string | null;
+  effective_language_code: string | null;
+  heuristic_language_code: string | null;
+  currency_flag_status: string;
+  currency_flag_reason: string | null;
+  geo_linguistic_status: string;
+  geo_linguistic_reason: string | null;
+  geo_linguistic_decision: string | null;
+  geo_linguistic_completed_at: string | null;
 }
 
 export interface ManualLanguageUpdate {

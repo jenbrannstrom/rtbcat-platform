@@ -185,3 +185,48 @@ class CreativeClickMacroCoverageResponse(BaseModel):
     limit: int
     offset: int
     summary: CreativeClickMacroCoverageSummary
+
+
+class CreativeLanguageFlagCoverageRow(BaseModel):
+    creative_id: str
+    creative_name: str
+    buyer_id: Optional[str] = None
+    format: Optional[str] = None
+    approval_status: Optional[str] = None
+    detected_language: Optional[str] = None
+    detected_language_code: Optional[str] = None
+    heuristic_language_code: Optional[str] = None
+    effective_language_code: Optional[str] = None
+    serving_countries: list[str] = Field(default_factory=list)
+    detected_currencies: list[str] = Field(default_factory=list)
+    language_flag_status: str
+    language_flag_reason: str
+    language_flag_source: Optional[str] = None
+    currency_flag_status: str
+    currency_flag_reason: str
+    geo_linguistic_status: str
+    geo_linguistic_reason: str
+    geo_linguistic_decision: Optional[str] = None
+    geo_linguistic_completed_at: Optional[str] = None
+    spend_30d_micros: int = 0
+    impressions_30d: int = 0
+    last_active_date: Optional[str] = None
+    is_active: bool = False
+
+
+class CreativeLanguageFlagCoverageSummary(BaseModel):
+    language_green: int = 0
+    language_orange: int = 0
+    language_red: int = 0
+    geo_green: int = 0
+    geo_orange: int = 0
+    geo_red: int = 0
+
+
+class CreativeLanguageFlagCoverageResponse(BaseModel):
+    rows: list[CreativeLanguageFlagCoverageRow]
+    total: int
+    returned: int
+    limit: int
+    offset: int
+    summary: CreativeLanguageFlagCoverageSummary
