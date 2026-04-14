@@ -13,6 +13,7 @@ from api.routers.creative_geo_linguistic import (
     get_store,
     router,
 )
+from services.geo_linguistic_service import GeoLinguisticService
 from tests.support.asgi_client import SyncASGIClient
 
 
@@ -148,3 +149,40 @@ def test_get_report_returns_failed_payload_when_service_raises(
     assert payload["status"] == "failed"
     assert payload["creative_id"] == "creative-1"
     assert "analysis storage unavailable" in payload["error_message"]
+
+
+def test_service_format_run_normalizes_malformed_stored_payload() -> None:
+    service = GeoLinguisticService()
+    formatted = service._format_run(
+        {
+            "status": "completed",
+            "id": "run-1",
+            "creative_id": "creative-1",
+            "result": {
+                "decision": None,
+                "risk_score": "not-a-number",
+                "confidence": "0.82",
+                "primary_languages": "English",
+                "secondary_languages": None,
+                "detected_currencies": "USD",
+                "findings": "Spanish CTA mismatch",
+                "serving_countries": "IN",
+                "evidence_summary": "bad-shape",
+            },
+            "error_message": None,
+            "started_at": None,
+            "completed_at": None,
+            "created_at": None,
+        }
+    )
+
+    resp = GeoLinguisticReportResponse(**formatted)
+    assert resp.decision == "unknown"
+    assert resp.risk_score == 0.0
+    assert resp.confidence == 0.82
+    assert resp.primary_languages == ["English"]
+    assert resp.detected_currencies == ["USD"]
+    assert resp.serving_countries == ["IN"]
+    assert resp.evidence_summary is None
+    assert len(resp.findings) == 1
+    assert resp.findings[0].description == "Spanish CTA mismatch"

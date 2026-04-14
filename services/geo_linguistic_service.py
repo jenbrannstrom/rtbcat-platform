@@ -212,22 +212,104 @@ class GeoLinguisticService:
 
         return result
 
+    @staticmethod
+    def _coerce_float(value: Any, default: float = 0.0) -> float:
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return default
+
+    @staticmethod
+    def _coerce_int(value: Any, default: int = 0) -> int:
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return default
+
+    @staticmethod
+    def _coerce_bool(value: Any) -> bool:
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str):
+            return value.strip().lower() in {"1", "true", "yes", "y"}
+        return bool(value)
+
+    @staticmethod
+    def _coerce_str_list(value: Any) -> list[str]:
+        if isinstance(value, list):
+            return [str(item).strip() for item in value if str(item).strip()]
+        if isinstance(value, str):
+            stripped = value.strip()
+            return [stripped] if stripped else []
+        return []
+
+    @staticmethod
+    def _coerce_findings(value: Any) -> list[dict[str, str]]:
+        if not isinstance(value, list):
+            if isinstance(value, str) and value.strip():
+                return [
+                    {
+                        "category": "unknown",
+                        "severity": "low",
+                        "description": value.strip(),
+                        "evidence": "",
+                    }
+                ]
+            return []
+
+        findings: list[dict[str, str]] = []
+        for item in value:
+            if isinstance(item, dict):
+                findings.append(
+                    {
+                        "category": str(item.get("category") or "unknown"),
+                        "severity": str(item.get("severity") or "low"),
+                        "description": str(item.get("description") or ""),
+                        "evidence": str(item.get("evidence") or ""),
+                    }
+                )
+                continue
+            if isinstance(item, str) and item.strip():
+                findings.append(
+                    {
+                        "category": "unknown",
+                        "severity": "low",
+                        "description": item.strip(),
+                        "evidence": "",
+                    }
+                )
+        return findings
+
+    @classmethod
+    def _coerce_evidence_summary(cls, value: Any) -> Optional[dict[str, Any]]:
+        if not isinstance(value, dict):
+            return None
+        return {
+            "text_length": cls._coerce_int(value.get("text_length"), 0),
+            "image_count": cls._coerce_int(value.get("image_count"), 0),
+            "ocr_texts_count": cls._coerce_int(value.get("ocr_texts_count"), 0),
+            "video_frames_count": cls._coerce_int(value.get("video_frames_count"), 0),
+            "has_screenshot": cls._coerce_bool(value.get("has_screenshot")),
+            "currencies_detected": cls._coerce_str_list(value.get("currencies_detected")),
+            "cta_phrases": cls._coerce_str_list(value.get("cta_phrases")),
+        }
+
     def _format_run(self, run: dict[str, Any]) -> dict[str, Any]:
         """Format a run record into a response dict."""
-        result_data = run.get("result") or {}
+        result_data = run.get("result") if isinstance(run.get("result"), dict) else {}
         return {
             "status": run["status"],
             "run_id": run["id"],
             "creative_id": run["creative_id"],
-            "decision": result_data.get("decision", "unknown"),
-            "risk_score": result_data.get("risk_score", 0.0),
-            "confidence": result_data.get("confidence", 0.0),
-            "primary_languages": result_data.get("primary_languages", []),
-            "secondary_languages": result_data.get("secondary_languages", []),
-            "detected_currencies": result_data.get("detected_currencies", []),
-            "findings": result_data.get("findings", []),
-            "serving_countries": result_data.get("serving_countries", []),
-            "evidence_summary": result_data.get("evidence_summary"),
+            "decision": str(result_data.get("decision") or "unknown"),
+            "risk_score": self._coerce_float(result_data.get("risk_score"), 0.0),
+            "confidence": self._coerce_float(result_data.get("confidence"), 0.0),
+            "primary_languages": self._coerce_str_list(result_data.get("primary_languages")),
+            "secondary_languages": self._coerce_str_list(result_data.get("secondary_languages")),
+            "detected_currencies": self._coerce_str_list(result_data.get("detected_currencies")),
+            "findings": self._coerce_findings(result_data.get("findings")),
+            "serving_countries": self._coerce_str_list(result_data.get("serving_countries")),
+            "evidence_summary": self._coerce_evidence_summary(result_data.get("evidence_summary")),
             "error_message": run.get("error_message"),
             "started_at": run.get("started_at"),
             "completed_at": run.get("completed_at"),
