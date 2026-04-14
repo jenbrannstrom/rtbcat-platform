@@ -4,12 +4,16 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+import logging
 from pathlib import Path
 from typing import Any, Optional
 
 from services.creative_performance_service import CreativePerformanceService
 from services.creative_preview_service import CreativePreviewService
 from storage.postgres_repositories.creatives_repo import CreativesRepository
+
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -121,6 +125,62 @@ class CreativesService:
                 )
 
         return result
+
+    async def ensure_html_thumbnails(
+        self,
+        store: Any,
+        creatives: list[Any],
+        thumbnail_statuses: dict[str, ThumbnailStatus],
+    ) -> dict[str, ThumbnailStatus]:
+        """Lazily backfill missing HTML thumbnail rows for the current page.
+
+        Slim creative list responses intentionally omit raw HTML snippets, so the
+        grid can only show HTML previews when `creative_thumbnails` already has a
+        cached image URL. When that cache row is missing, populate it just-in-time
+        for the currently requested creatives and re-read the statuses.
+        """
+        missing_html_ids = [
+            creative.id
+            for creative in creatives
+            if getattr(creative, "format", None) == "HTML"
+            and (
+                creative.id not in thumbnail_statuses
+                or (
+                    thumbnail_statuses[creative.id].status is None
+                    and not thumbnail_statuses[creative.id].thumbnail_url
+                )
+            )
+        ]
+        if not missing_html_ids:
+            return thumbnail_statuses
+
+        try:
+            await store.process_html_thumbnails(
+                limit=len(missing_html_ids),
+                force_retry=False,
+                creative_ids=missing_html_ids,
+            )
+        except Exception:
+            logger.warning(
+                "Lazy HTML thumbnail extraction failed",
+                extra={"creative_ids": missing_html_ids},
+                exc_info=True,
+            )
+            return thumbnail_statuses
+
+        try:
+            refreshed = await self.get_thumbnail_statuses(store, missing_html_ids)
+        except Exception:
+            logger.warning(
+                "Reloading lazy HTML thumbnail statuses failed",
+                extra={"creative_ids": missing_html_ids},
+                exc_info=True,
+            )
+            return thumbnail_statuses
+
+        merged = dict(thumbnail_statuses)
+        merged.update(refreshed)
+        return merged
 
     async def get_waste_flags(
         self,

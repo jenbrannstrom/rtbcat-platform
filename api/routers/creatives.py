@@ -89,6 +89,11 @@ async def list_creatives(
     creative_ids = [c.id for c in creatives]
     if slim:
         thumbnail_statuses = await creatives_service.get_thumbnail_statuses(store, creative_ids)
+        thumbnail_statuses = await creatives_service.ensure_html_thumbnails(
+            store,
+            creatives,
+            thumbnail_statuses,
+        )
         ctx = CreativeListContext(
             thumbnail_statuses=thumbnail_statuses,
             waste_flags={},
@@ -184,6 +189,11 @@ async def list_creatives_paginated(
     creative_ids = [c.id for c in creatives]
     if slim:
         thumbnail_statuses = await creatives_service.get_thumbnail_statuses(store, creative_ids)
+        thumbnail_statuses = await creatives_service.ensure_html_thumbnails(
+            store,
+            creatives,
+            thumbnail_statuses,
+        )
         ctx = CreativeListContext(
             thumbnail_statuses=thumbnail_statuses,
             waste_flags={},
