@@ -6,6 +6,11 @@ import type { Creative, CreativeCountryBreakdown, GeoMismatchResponse } from "@/
 import { analyzeCreativeLanguage, updateCreativeLanguage, getCreativeCountries, getCreativeGeoMismatch } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { useTranslation } from "@/contexts/i18n-context";
+import {
+  localizeGeoLinguisticReason,
+  localizeLanguageFlagReason,
+  localizePlaintextLanguageSummary,
+} from "@/components/preview-modal/reason-localization";
 
 interface LanguageSectionProps {
   creative: Creative;
@@ -170,6 +175,15 @@ export function LanguageSection({
     (geoMismatch.currency_flag_status === "red" || geoMismatch.detected_currencies.length > 0)
   );
   const hasPlaintextLanguageMix = Boolean(geoMismatch?.plaintext_language_summary);
+  const localizedLanguageFlagReason = geoMismatch
+    ? localizeLanguageFlagReason(language, geoMismatch.language_flag_reason, geoMismatch)
+    : null;
+  const localizedPlaintextLanguageSummary = geoMismatch
+    ? localizePlaintextLanguageSummary(language, geoMismatch.plaintext_language_summary, geoMismatch)
+    : null;
+  const localizedGeoLinguisticReason = geoMismatch
+    ? localizeGeoLinguisticReason(language, geoMismatch.geo_linguistic_reason, geoMismatch)
+    : null;
 
   const renderServingCountriesValue = () => {
     if (isLoadingCountries) {
@@ -231,7 +245,7 @@ export function LanguageSection({
                   {statusLabels[geoMismatch?.language_flag_status || "orange"] || statusLabels.orange}
                 </span>
               </div>
-              <div className="mt-0.5">{geoMismatch?.language_flag_reason}</div>
+              <div className="mt-0.5">{localizedLanguageFlagReason}</div>
               {geoMismatch?.language_flag_source === "heuristic" && effectiveLanguageCode && (
                 <div className="mt-1 text-[11px] opacity-80">
                   {t.previewModal.heuristicCue.replace("{code}", effectiveLanguageCode.toUpperCase())}
@@ -303,7 +317,7 @@ export function LanguageSection({
             "text-xs",
             geoMismatch?.language_flag_status === "red" ? "text-red-700" : "text-amber-700"
           )}>
-            {geoMismatch?.plaintext_language_summary}
+            {localizedPlaintextLanguageSummary}
           </div>
         )}
 
@@ -345,8 +359,8 @@ export function LanguageSection({
               )}>
                 {statusLabels[geoMismatch.geo_linguistic_status] || statusLabels.orange}
               </span>
-              {geoMismatch.geo_linguistic_reason && (
-                <span className="text-xs text-gray-500">{geoMismatch.geo_linguistic_reason}</span>
+              {localizedGeoLinguisticReason && (
+                <span className="text-xs text-gray-500">{localizedGeoLinguisticReason}</span>
               )}
             </div>
           </>
