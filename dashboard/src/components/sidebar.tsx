@@ -619,7 +619,7 @@ export function Sidebar() {
                 : "text-gray-600 hover:bg-gray-50 hover:text-gray-900",
               collapsed && "justify-center px-2"
             )}
-            title={collapsed ? "Language Flags" : undefined}
+            title={collapsed ? t.creatives.languageFlagsNav : undefined}
           >
             <Globe
               className={cn(
@@ -630,7 +630,7 @@ export function Sidebar() {
                 !collapsed && "mr-3"
               )}
             />
-            {!collapsed && "Language Flags"}
+            {!collapsed && t.creatives.languageFlagsNav}
           </Link>
         )}
 
