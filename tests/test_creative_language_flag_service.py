@@ -145,6 +145,45 @@ def test_build_creative_language_flag_row_surfaces_geo_secondary_language_findin
     )
 
 
+def test_build_creative_language_flag_row_flags_spanish_cta_in_english_native_copy() -> None:
+    creative = SimpleNamespace(
+        id="2013919535262576642",
+        name="English body Spanish CTA",
+        buyer_id="1487810529",
+        format="NATIVE",
+        approval_status="APPROVED",
+        advertiser_name=None,
+        detected_language="English",
+        detected_language_code="en",
+        raw_data={
+            "native": {
+                "headline": "Benjamin - Earn Cash Rewards",
+                "body": "Benjamin: The Best Money Stacking App!",
+                "callToAction": "instalar",
+            }
+        },
+    )
+
+    row = build_creative_language_flag_row(
+        creative=creative,
+        serving_countries=["INDIA"],
+        latest_geo_run=None,
+    )
+
+    assert row["serving_countries"] == ["IN"]
+    assert row["language_flag_status"] == "red"
+    assert row["language_flag_source"] == "plaintext_fields"
+    assert row["language_flag_reason"] == (
+        "Spanish CTA 'instalar' mixed into English creative serving in IND"
+    )
+    assert row["plaintext_language_summary"] == (
+        "Primary plaintext: English · CTA: Spanish ('instalar')"
+    )
+    assert row["primary_text_language_code"] == "en"
+    assert row["secondary_text_language_code"] == "es"
+    assert row["secondary_text_sample"] == "instalar"
+
+
 class _PerfService:
     async def get_country_breakdown(self, creative_id: str, days: int):
         del creative_id, days
