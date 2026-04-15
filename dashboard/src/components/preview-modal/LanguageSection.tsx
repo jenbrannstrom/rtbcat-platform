@@ -11,6 +11,7 @@ import {
   localizeLanguageFlagReason,
   localizePlaintextLanguageSummary,
 } from "@/components/preview-modal/reason-localization";
+import { getGeoLinguisticBadgeStatus } from "@/components/preview-modal/utils";
 
 interface LanguageSectionProps {
   creative: Creative;
@@ -184,6 +185,7 @@ export function LanguageSection({
   const localizedGeoLinguisticReason = geoMismatch
     ? localizeGeoLinguisticReason(language, t.previewModal, geoMismatch.geo_linguistic_reason, geoMismatch)
     : null;
+  const geoLinguisticBadgeStatus = getGeoLinguisticBadgeStatus(geoMismatch);
 
   const renderServingCountriesValue = () => {
     if (isLoadingCountries) {
@@ -353,12 +355,14 @@ export function LanguageSection({
             </div>
             <div className="flex flex-wrap items-center gap-1.5">
               <span className="text-gray-500">{t.previewModal.geoLinguisticLabel}</span>
-              <span className={cn(
-                "rounded px-1.5 py-0.5 text-xs font-medium",
-                STATUS_STYLES[geoMismatch.geo_linguistic_status] || STATUS_STYLES.orange
-              )}>
-                {statusLabels[geoMismatch.geo_linguistic_status] || statusLabels.orange}
-              </span>
+              {geoLinguisticBadgeStatus && (
+                <span className={cn(
+                  "rounded px-1.5 py-0.5 text-xs font-medium",
+                  STATUS_STYLES[geoLinguisticBadgeStatus] || STATUS_STYLES.orange
+                )}>
+                  {statusLabels[geoLinguisticBadgeStatus] || statusLabels.orange}
+                </span>
+              )}
               {localizedGeoLinguisticReason && (
                 <span className="text-xs text-gray-500">{localizedGeoLinguisticReason}</span>
               )}

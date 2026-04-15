@@ -2,7 +2,7 @@
  * Utility functions for the preview modal.
  */
 
-import type { Creative, CreativePerformanceSummary } from "@/types/api";
+import type { Creative, CreativePerformanceSummary, GeoMismatchResponse } from "@/types/api";
 
 // ============================================================================
 // Formatting Helpers
@@ -171,6 +171,37 @@ export type LanguageCountryComparison = {
   countryCodes: string[];
   match: ReturnType<typeof checkLanguageCountryMatch>;
 };
+
+type GeoLinguisticBadgeInput = Pick<
+  GeoMismatchResponse,
+  "geo_linguistic_status" | "geo_linguistic_decision" | "geo_linguistic_reason"
+>;
+
+export function getGeoLinguisticBadgeStatus(
+  geoMismatch: GeoLinguisticBadgeInput | null | undefined,
+): string | null {
+  if (!geoMismatch) {
+    return null;
+  }
+
+  const status = (geoMismatch.geo_linguistic_status || "").trim().toLowerCase();
+  const decision = (geoMismatch.geo_linguistic_decision || "").trim().toLowerCase();
+  const reason = (geoMismatch.geo_linguistic_reason || "").trim().toLowerCase();
+
+  if (status === "green" || status === "red") {
+    return status;
+  }
+
+  if (decision === "needs_review") {
+    return "orange";
+  }
+
+  if (decision === "not_run" || reason === "ai report pending" || reason === "no ai geo-linguistic report yet") {
+    return null;
+  }
+
+  return status || null;
+}
 
 function normalizeCountryCodes(countryCodes: string[] | null | undefined): string[] {
   const normalized = new Set<string>();
