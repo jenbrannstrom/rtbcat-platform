@@ -60,6 +60,64 @@ def _status_rank(status: str) -> int:
     return {"red": 0, "orange": 1, "green": 2}.get(status, 3)
 
 
+def _is_meaningful_currency_signal(
+    status: str,
+    reason: Optional[str],
+    detected_currencies: list[str],
+) -> bool:
+    if status == "green" or not reason:
+        return False
+    if status == "red":
+        return True
+    return bool(detected_currencies)
+
+
+def _build_creative_market_alert(flag_row: dict[str, object]) -> Optional[dict[str, str]]:
+    candidates: list[tuple[int, str, str, str]] = []
+
+    language_status = str(flag_row.get("language_flag_status") or "green")
+    language_reason = str(flag_row.get("language_flag_reason") or "").strip()
+    if language_status == "red" and language_reason:
+        candidates.append((0, "language", language_status, language_reason))
+    elif language_status == "orange" and language_reason and language_reason != "No serving-country data available":
+        candidates.append((4, "language", language_status, language_reason))
+
+    geo_status = str(flag_row.get("geo_linguistic_status") or "green")
+    geo_reason = str(flag_row.get("geo_linguistic_reason") or "").strip()
+    geo_decision = str(flag_row.get("geo_linguistic_decision") or "").strip()
+    if geo_status == "red" and geo_reason:
+        candidates.append((1, "geo_linguistic", geo_status, geo_reason))
+    elif geo_status == "orange" and geo_decision == "needs_review" and geo_reason:
+        candidates.append((3, "geo_linguistic", geo_status, geo_reason))
+
+    currency_status = str(flag_row.get("currency_flag_status") or "green")
+    currency_reason = str(flag_row.get("currency_flag_reason") or "").strip()
+    detected_currencies = [
+        str(currency)
+        for currency in (flag_row.get("detected_currencies") or [])
+        if currency
+    ]
+    if _is_meaningful_currency_signal(currency_status, currency_reason, detected_currencies):
+        candidates.append(
+            (
+                2 if currency_status == "red" else 5,
+                "currency",
+                currency_status,
+                currency_reason,
+            )
+        )
+
+    if not candidates:
+        return None
+
+    _, category, status, reason = min(candidates, key=lambda item: item[0])
+    return {
+        "status": status,
+        "reason": reason,
+        "category": category,
+    }
+
+
 async def _get_spend_snapshot(creative_ids: list[str]) -> dict[str, dict[str, int | str | None]]:
     if not creative_ids:
         return {}
@@ -114,6 +172,80 @@ async def _get_serving_country_map(
     for row in rows:
         result.setdefault(row["creative_id"], []).append(row["country_code"])
     return result
+
+
+async def _get_market_alert_map(
+    store,
+    creative_ids: list[str],
+    days: int,
+) -> dict[str, dict[str, str]]:
+    if not creative_ids:
+        return {}
+
+    try:
+        if hasattr(store, "get_creatives_by_ids"):
+            creatives = await store.get_creatives_by_ids(creative_ids)
+        else:
+            creatives = []
+            for creative_id in creative_ids:
+                creative = await store.get_creative(creative_id)
+                if creative is not None:
+                    creatives.append(creative)
+    except Exception:
+        logger.warning(
+            "Creative market alert hydration failed while loading card metadata",
+            extra={"creative_ids": creative_ids},
+            exc_info=True,
+        )
+        return {}
+
+    creative_map = {creative.id: creative for creative in creatives}
+
+    try:
+        serving_country_map = await _get_serving_country_map(creative_ids, days)
+    except Exception:
+        logger.warning(
+            "Serving-country lookup failed while loading creative card alerts",
+            extra={"creative_ids": creative_ids},
+            exc_info=True,
+        )
+        serving_country_map = {}
+
+    try:
+        latest_geo_runs = await analysis_repo.get_latest_runs(creative_ids)
+    except Exception:
+        logger.warning(
+            "Geo-linguistic lookup failed while loading creative card alerts",
+            extra={"creative_ids": creative_ids},
+            exc_info=True,
+        )
+        latest_geo_runs = {}
+
+    alerts: dict[str, dict[str, str]] = {}
+    for creative_id in creative_ids:
+        creative = creative_map.get(creative_id)
+        if creative is None:
+            continue
+
+        try:
+            row_data = build_creative_language_flag_row(
+                creative=creative,
+                serving_countries=serving_country_map.get(creative_id, []),
+                latest_geo_run=latest_geo_runs.get(creative_id),
+            )
+            alert = _build_creative_market_alert(row_data)
+        except Exception:
+            logger.warning(
+                "Creative card alert build failed",
+                extra={"creative_id": creative_id},
+                exc_info=True,
+            )
+            continue
+
+        if alert:
+            alerts[creative_id] = alert
+
+    return alerts
 
 
 async def _list_creatives_for_language_flag_coverage(
@@ -318,6 +450,7 @@ async def list_creatives(
             thumbnail_statuses=thumbnail_statuses,
             waste_flags={},
             country_data={},
+            market_alerts={},
         )
     else:
         ctx = await creatives_service.get_list_context(store, creative_ids, days)
@@ -417,10 +550,12 @@ async def list_creatives_paginated(
             creatives,
             thumbnail_statuses,
         )
+        market_alerts = await _get_market_alert_map(store, creative_ids, days)
         ctx = CreativeListContext(
             thumbnail_statuses=thumbnail_statuses,
             waste_flags={},
             country_data={},
+            market_alerts=market_alerts,
         )
     else:
         ctx = await creatives_service.get_list_context(store, creative_ids, days)

@@ -234,10 +234,17 @@ export function CreativeCard({
   const showSpendFirst = sortField === "spend";
   const languageLabel = creative.detected_language || creative.detected_language_code;
   const countryLabel = creative.country;
-  const hasMismatch = isLanguageCountryMismatch(
+  const legacyMismatch = isLanguageCountryMismatch(
     creative.detected_language_code,
     creative.country
   );
+  const alertStatus = creative.market_alert?.status || (legacyMismatch ? "red" : null);
+  const alertReason = creative.market_alert?.reason || null;
+  const alertLabel = alertStatus === "red"
+    ? t.previewModal.mismatch
+    : alertStatus === "orange"
+    ? t.previewModal.needsReview
+    : null;
   const isStale = !!creative.data_source?.is_stale;
   const staleHours = creative.data_source?.stale_age_hours;
 
@@ -329,14 +336,20 @@ export function CreativeCard({
           </div>
         )}
 
-        {(countryLabel || languageLabel || hasMismatch) && (
+        {(countryLabel || languageLabel || alertLabel) && (
           <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-gray-500">
             {countryLabel && <span>{t.creatives.geoLabel}: {countryLabel}</span>}
             {languageLabel && <span>{t.creatives.langLabel}: {languageLabel}</span>}
-            {hasMismatch && (
-              <span className="inline-flex items-center gap-1 text-red-600">
+            {alertLabel && (
+              <span
+                className={cn(
+                  "inline-flex items-center gap-1",
+                  alertStatus === "red" ? "text-red-600" : "text-amber-600"
+                )}
+                title={alertReason || undefined}
+              >
                 <AlertTriangle className="h-3 w-3" />
-                {t.previewModal.mismatch}
+                {alertLabel}
               </span>
             )}
           </div>
@@ -347,7 +360,7 @@ export function CreativeCard({
           </div>
         )}
 
-        {/* Badges: Format + Status only */}
+        {/* Badges: Format + Status + Alert */}
         <div className="mt-2 flex flex-wrap gap-1.5">
           <span className={cn("badge text-[10px] px-1.5 py-0.5", getFormatColor(creative.format))}>
             {getFormatLabel(creative.format)}
@@ -355,6 +368,20 @@ export function CreativeCard({
           {creative.approval_status && (
             <span className={cn("badge text-[10px] px-1.5 py-0.5", getStatusColor(creative.approval_status))}>
               {creative.approval_status === "APPROVED" ? "✓" : ""} {creative.approval_status.replace("_", " ")}
+            </span>
+          )}
+          {alertLabel && (
+            <span
+              title={alertReason || undefined}
+              className={cn(
+                "badge inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5",
+                alertStatus === "red"
+                  ? "bg-red-100 text-red-800"
+                  : "bg-amber-100 text-amber-800"
+              )}
+            >
+              <AlertTriangle className="h-3 w-3" />
+              {alertLabel}
             </span>
           )}
         </div>

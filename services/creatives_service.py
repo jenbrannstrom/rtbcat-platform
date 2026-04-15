@@ -41,6 +41,7 @@ class CreativeListContext:
     thumbnail_statuses: dict[str, ThumbnailStatus]
     waste_flags: dict[str, WasteFlags]
     country_data: dict[str, str]
+    market_alerts: dict[str, dict[str, Any]]
 
 
 @dataclass
@@ -273,6 +274,7 @@ class CreativesService:
             thumbnail_statuses=thumbnail_statuses,
             waste_flags=waste_flags,
             country_data=country_data,
+            market_alerts={},
         )
 
     def build_preview(

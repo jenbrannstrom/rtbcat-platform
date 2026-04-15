@@ -17,7 +17,12 @@ import { CreativeCard } from "@/components/creative-card";
 import { PreviewModal } from "@/components/preview-modal";
 import { LoadingPage } from "@/components/loading";
 import { ErrorPage } from "@/components/error";
-import type { Creative, PerformancePeriod, CreativePerformanceSummary } from "@/types/api";
+import type {
+  Creative,
+  PaginatedCreativesResponse,
+  PerformancePeriod,
+  CreativePerformanceSummary,
+} from "@/types/api";
 import { cn } from "@/lib/utils";
 import { useAccount } from "@/contexts/account-context";
 import { useTranslation } from "@/contexts/i18n-context";
@@ -358,6 +363,7 @@ function CreativesContent() {
   const { t } = useTranslation();
   const { selectedBuyerId } = useAccount();
   const searchParams = useSearchParams();
+  const queryClient = useQueryClient();
 
   // Get buyer_id from context (persistent across pages)
   const selectedSeatId = selectedBuyerId;
@@ -373,6 +379,44 @@ function CreativesContent() {
   const [approvalFilter, setApprovalFilter] = useState<"all" | "approved" | "not_approved">("all");
   const [pageIndex, setPageIndex] = useState(0);
   const creativesOffset = pageIndex * CREATIVES_PAGE_SIZE;
+
+  const mergeCreative = (current: Creative, updated: Creative): Creative => ({
+    ...current,
+    ...updated,
+    market_alert: updated.market_alert ?? current.market_alert ?? null,
+  });
+
+  const syncUpdatedCreative = (updated: Creative) => {
+    setPreviewCreative((prev) => (prev && prev.id === updated.id ? mergeCreative(prev, updated) : prev));
+
+    queryClient.setQueriesData(
+      { queryKey: ["creatives"] },
+      (oldData: unknown) => {
+        if (Array.isArray(oldData)) {
+          return oldData.map((item) =>
+            item && typeof item === "object" && "id" in item && (item as Creative).id === updated.id
+              ? mergeCreative(item as Creative, updated)
+              : item
+          );
+        }
+
+        if (
+          oldData &&
+          typeof oldData === "object" &&
+          "data" in oldData &&
+          Array.isArray((oldData as PaginatedCreativesResponse).data)
+        ) {
+          const page = oldData as PaginatedCreativesResponse;
+          return {
+            ...page,
+            data: page.data.map((item) => (item.id === updated.id ? mergeCreative(item, updated) : item)),
+          };
+        }
+
+        return oldData;
+      }
+    );
+  };
 
   const {
     data: creativesPage,
@@ -595,7 +639,7 @@ function CreativesContent() {
             href={toBuyerScopedPath("/creatives/language-flags", selectedSeatId)}
             className="rounded border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
           >
-            Language Flags
+            {t.creatives.languageFlagsNav}
           </Link>
           {selectedSeatId && (
             <span className="rounded border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700">
@@ -838,6 +882,7 @@ function CreativesContent() {
             performanceData?.[previewCreative.id] ||
             previewPerformanceResponse?.performance?.[previewCreative.id]
           }
+          onCreativeUpdate={syncUpdatedCreative}
           onClose={() => setPreviewCreative(null)}
         />
       )}

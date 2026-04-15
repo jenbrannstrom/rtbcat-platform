@@ -27,6 +27,12 @@ export interface NativePreview {
   logo: ImagePreview | null;
 }
 
+export interface CreativeMarketAlert {
+  status: string;
+  reason: string;
+  category: string | null;
+}
+
 export interface Creative {
   id: string;
   name: string;
@@ -60,6 +66,7 @@ export interface Creative {
   language_source: string | null;
   language_analyzed_at: string | null;
   language_analysis_error: string | null;
+  market_alert?: CreativeMarketAlert | null;
   // Approval details
   is_disapproved?: boolean;
   disapproval_reasons?: Array<{ reason: string; details?: string }> | null;

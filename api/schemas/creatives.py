@@ -25,6 +25,14 @@ class CreativeDataSource(BaseModel):
     fallback_reason: Optional[str] = None
 
 
+class CreativeMarketAlert(BaseModel):
+    """Compact market-fit alert summary for creative cards."""
+
+    status: str
+    reason: str
+    category: Optional[str] = None
+
+
 class CreativeResponse(BaseModel):
     """Response model for creative data."""
     id: str
@@ -67,6 +75,7 @@ class CreativeResponse(BaseModel):
     language_source: Optional[str] = None
     language_analyzed_at: Optional[str] = None
     language_analysis_error: Optional[str] = None
+    market_alert: Optional[CreativeMarketAlert] = None
     # Live/cache preview source metadata
     data_source: Optional[CreativeDataSource] = None
 

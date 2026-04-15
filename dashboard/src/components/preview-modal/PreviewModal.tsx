@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { X, ExternalLink, Loader2, FileCode, RefreshCw, AlertTriangle } from "lucide-react";
 import type {
@@ -31,6 +31,7 @@ interface PreviewModalProps {
   creative: Creative;
   performance?: CreativePerformanceSummary;
   targetCountryCodes?: string[];
+  onCreativeUpdate?: (creative: Creative) => void;
   onClose: () => void;
 }
 
@@ -41,6 +42,7 @@ export function PreviewModal({
   creative: initialCreative,
   performance,
   targetCountryCodes,
+  onCreativeUpdate,
   onClose,
 }: PreviewModalProps) {
   const { t } = useTranslation();
@@ -53,6 +55,11 @@ export function PreviewModal({
   const [previewMessage, setPreviewMessage] = useState<string | null>(null);
   const [showHtmlCode, setShowHtmlCode] = useState(false);
   const [isRefetchingLive, setIsRefetchingLive] = useState(false);
+  const onCreativeUpdateRef = useRef(onCreativeUpdate);
+
+  useEffect(() => {
+    onCreativeUpdateRef.current = onCreativeUpdate;
+  }, [onCreativeUpdate]);
 
   useEffect(() => {
     const handleEsc = (e: KeyboardEvent) => {
@@ -68,6 +75,7 @@ export function PreviewModal({
     getCreativeLive(initialCreative.id, { allowCacheFallback: true, refreshCache: true, days: 7 })
       .then((resp) => {
         setCreative(resp.creative);
+        onCreativeUpdateRef.current?.(resp.creative);
         setPreviewSource(resp.source);
         setPreviewMessage(resp.message);
       })
@@ -76,6 +84,7 @@ export function PreviewModal({
         // Last-resort fallback keeps modal usable.
         const fullCreative = await getCreative(initialCreative.id);
         setCreative(fullCreative);
+        onCreativeUpdateRef.current?.(fullCreative);
         setPreviewSource("cache");
         setPreviewMessage(t.previewModal.liveFetchUnavailableShowingCached);
       })
@@ -116,6 +125,7 @@ export function PreviewModal({
         days: 7,
       });
       setCreative(resp.creative);
+      onCreativeUpdateRef.current?.(resp.creative);
       setPreviewSource(resp.source);
       setPreviewMessage(resp.message);
     } catch (err) {
@@ -435,11 +445,15 @@ export function PreviewModal({
               creative={creative}
               targetCountryCodes={targetCountryCodes}
               onLanguageUpdate={(language, languageCode) => {
-                setCreative((prev) => ({
-                  ...prev,
-                  detected_language: language,
-                  detected_language_code: languageCode,
-                }));
+                setCreative((prev) => {
+                  const nextCreative = {
+                    ...prev,
+                    detected_language: language,
+                    detected_language_code: languageCode,
+                  };
+                  onCreativeUpdateRef.current?.(nextCreative);
+                  return nextCreative;
+                });
               }}
             />
           </div>

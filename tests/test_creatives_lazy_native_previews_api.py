@@ -118,7 +118,15 @@ def test_paginated_creatives_lazily_hydrate_native_previews(
         _ = (store, user)
         return buyer_id
 
+    async def _get_serving_country_map(_creative_ids: list[str], _days: int):
+        return {}
+
+    async def _get_latest_runs(_creative_ids: list[str]):
+        return {}
+
     monkeypatch.setattr(creatives_router, "resolve_buyer_id", _resolve_buyer_id)
+    monkeypatch.setattr(creatives_router, "_get_serving_country_map", _get_serving_country_map)
+    monkeypatch.setattr(creatives_router.analysis_repo, "get_latest_runs", _get_latest_runs)
 
     client = _build_client(store)
     response = client.get(
@@ -131,3 +139,41 @@ def test_paginated_creatives_lazily_hydrate_native_previews(
     assert native["image"]["url"] == "https://static.example.com/native-image.jpg"
     assert native["logo"]["url"] == "https://static.example.com/native-logo.webp"
 
+
+def test_paginated_creatives_include_market_alert_summary(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = _Store()
+    store.slim_creative.detected_language = "English"
+    store.slim_creative.detected_language_code = "en"
+    store.full_creative.detected_language = "English"
+    store.full_creative.detected_language_code = "en"
+    store.full_creative.raw_data["native"]["callToAction"] = "instalar"
+
+    async def _resolve_buyer_id(buyer_id, store=None, user=None):
+        _ = (store, user)
+        return buyer_id
+
+    async def _get_serving_country_map(creative_ids: list[str], days: int):
+        assert creative_ids == ["2004488961817030661"]
+        assert days == 7
+        return {"2004488961817030661": ["IND"]}
+
+    async def _get_latest_runs(_creative_ids: list[str]):
+        return {}
+
+    monkeypatch.setattr(creatives_router, "resolve_buyer_id", _resolve_buyer_id)
+    monkeypatch.setattr(creatives_router, "_get_serving_country_map", _get_serving_country_map)
+    monkeypatch.setattr(creatives_router.analysis_repo, "get_latest_runs", _get_latest_runs)
+
+    client = _build_client(store)
+    response = client.get(
+        "/api/creatives/v2?buyer_id=1487810529&limit=1&offset=0&slim=true&format=NATIVE"
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    alert = payload["data"][0]["market_alert"]
+    assert alert["status"] == "red"
+    assert alert["category"] == "language"
+    assert "Spanish CTA 'instalar'" in alert["reason"]
