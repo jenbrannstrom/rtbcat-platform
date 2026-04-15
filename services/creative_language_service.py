@@ -39,6 +39,14 @@ class CreativeLanguageService:
             "success": success,
         }
 
+    @staticmethod
+    def _serialize_timestamp(value: Any) -> str | None:
+        if value is None:
+            return None
+        if isinstance(value, datetime):
+            return value.isoformat()
+        return str(value)
+
     async def analyze_language(self, creative: Any, store: Any, force: bool) -> dict[str, Any]:
         """Run language detection for a creative and persist results."""
         if not force and creative.language_analyzed_at:
@@ -196,5 +204,7 @@ class CreativeLanguageService:
             "geo_linguistic_status": flag_row["geo_linguistic_status"],
             "geo_linguistic_reason": flag_row["geo_linguistic_reason"],
             "geo_linguistic_decision": flag_row.get("geo_linguistic_decision"),
-            "geo_linguistic_completed_at": flag_row.get("geo_linguistic_completed_at"),
+            "geo_linguistic_completed_at": self._serialize_timestamp(
+                flag_row.get("geo_linguistic_completed_at")
+            ),
         }

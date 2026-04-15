@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime, UTC
 from types import SimpleNamespace
 
 import pytest
@@ -88,3 +89,56 @@ def test_geo_mismatch_response_exposes_language_and_currency_flags(
     assert payload["currency_flag_status"] == "red"
     assert payload["geo_linguistic_status"] == "red"
     assert payload["detected_currencies"] == ["AED"]
+
+
+def test_geo_mismatch_response_serializes_completed_at_datetime(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def _require_buyer_access(buyer_id: str, store=None, user=None):
+        _ = (buyer_id, store, user)
+        return None
+
+    completed_at = datetime(2026, 4, 14, 19, 40, 21, tzinfo=UTC)
+
+    async def _get_geo_mismatch(creative, days: int):
+        _ = (creative, days)
+        return {
+            "has_mismatch": True,
+            "alert": None,
+            "serving_countries": ["IN"],
+            "detected_currencies": [],
+            "language_flag_status": "red",
+            "language_flag_reason": "Spanish CTA 'instalar' mixed into English creative serving in IND",
+            "language_flag_source": "plaintext_fields",
+            "effective_language_code": "en",
+            "heuristic_language_code": None,
+            "plaintext_language_summary": "Primary plaintext: English · CTA: Spanish ('instalar')",
+            "primary_text_language": "English",
+            "primary_text_language_code": "en",
+            "secondary_text_language": "Spanish",
+            "secondary_text_language_code": "es",
+            "secondary_text_sample": "instalar",
+            "currency_flag_status": "orange",
+            "currency_flag_reason": "No obvious market currency detected",
+            "geo_linguistic_status": "orange",
+            "geo_linguistic_reason": "Spanish CTA mixed into English copy",
+            "geo_linguistic_decision": "needs_review",
+            "geo_linguistic_completed_at": completed_at,
+        }
+
+    monkeypatch.setattr(creative_language_router, "require_buyer_access", _require_buyer_access)
+    monkeypatch.setattr(
+        creative_language_router.language_service,
+        "get_geo_mismatch",
+        _get_geo_mismatch,
+    )
+
+    client = _build_client()
+    response = client.get("/api/creatives/creative-1/geo-mismatch")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["geo_linguistic_completed_at"] == "2026-04-14T19:40:21Z"
+    assert payload["plaintext_language_summary"] == (
+        "Primary plaintext: English · CTA: Spanish ('instalar')"
+    )
