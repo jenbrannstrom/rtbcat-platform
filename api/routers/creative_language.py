@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -61,7 +62,7 @@ class GeoMismatchResponse(BaseModel):
     geo_linguistic_status: str = "orange"
     geo_linguistic_reason: Optional[str] = None
     geo_linguistic_decision: Optional[str] = None
-    geo_linguistic_completed_at: Optional[str] = None
+    geo_linguistic_completed_at: Optional[datetime] = None
 
 
 class ManualLanguageUpdate(BaseModel):

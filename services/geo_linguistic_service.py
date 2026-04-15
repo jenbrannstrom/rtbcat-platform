@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from datetime import datetime
 from typing import Any, Optional
 
 from services.creative_countries_service import CreativeCountriesService
@@ -311,7 +312,15 @@ class GeoLinguisticService:
             "serving_countries": self._coerce_str_list(result_data.get("serving_countries")),
             "evidence_summary": self._coerce_evidence_summary(result_data.get("evidence_summary")),
             "error_message": run.get("error_message"),
-            "started_at": run.get("started_at"),
-            "completed_at": run.get("completed_at"),
-            "created_at": run.get("created_at"),
+            "started_at": self._serialize_timestamp(run.get("started_at")),
+            "completed_at": self._serialize_timestamp(run.get("completed_at")),
+            "created_at": self._serialize_timestamp(run.get("created_at")),
         }
+
+    @staticmethod
+    def _serialize_timestamp(value: Any) -> Optional[str]:
+        if value is None:
+            return None
+        if isinstance(value, datetime):
+            return value.isoformat()
+        return str(value)

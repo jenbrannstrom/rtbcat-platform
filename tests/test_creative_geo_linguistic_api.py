@@ -1,5 +1,6 @@
 """Integration tests for the geo-linguistic API endpoints."""
 
+from datetime import UTC, datetime
 from types import SimpleNamespace
 
 import pytest
@@ -186,3 +187,37 @@ def test_service_format_run_normalizes_malformed_stored_payload() -> None:
     assert resp.evidence_summary is None
     assert len(resp.findings) == 1
     assert resp.findings[0].description == "Spanish CTA mismatch"
+
+
+def test_service_format_run_serializes_datetime_fields() -> None:
+    service = GeoLinguisticService()
+    created_at = datetime(2026, 4, 14, 22, 37, 29, tzinfo=UTC)
+    completed_at = datetime(2026, 4, 14, 22, 40, 0, tzinfo=UTC)
+    started_at = datetime(2026, 4, 14, 22, 36, 55, tzinfo=UTC)
+
+    formatted = service._format_run(
+        {
+            "status": "completed",
+            "id": "run-2",
+            "creative_id": "creative-2",
+            "result": {
+                "decision": "needs_review",
+                "risk_score": 0.42,
+                "confidence": 0.85,
+                "primary_languages": ["English"],
+                "secondary_languages": ["Spanish"],
+                "detected_currencies": [],
+                "findings": [],
+                "serving_countries": ["IN"],
+            },
+            "error_message": None,
+            "started_at": started_at,
+            "completed_at": completed_at,
+            "created_at": created_at,
+        }
+    )
+
+    resp = GeoLinguisticReportResponse(**formatted)
+    assert resp.started_at == started_at
+    assert resp.completed_at == completed_at
+    assert resp.created_at == created_at

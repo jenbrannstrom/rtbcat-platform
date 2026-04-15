@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -49,9 +50,9 @@ class GeoLinguisticReportResponse(BaseModel):
     evidence_summary: Optional[EvidenceSummary] = None
     evidence: list[dict[str, Any]] = []
     error_message: Optional[str] = None
-    started_at: Optional[str] = None
-    completed_at: Optional[str] = None
-    created_at: Optional[str] = None
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+    created_at: Optional[datetime] = None
 
 
 @router.post(
