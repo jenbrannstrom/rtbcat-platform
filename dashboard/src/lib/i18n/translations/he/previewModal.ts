@@ -23,7 +23,10 @@ const value: PartialTranslations['previewModal'] = {
     'editLanguage': 'ערוך שפה',
     'geoMismatch': 'אי-התאמה גיאוגרפית',
     'match': 'התאמה',
-    'mismatch': 'אי-התאמה'
+    'mismatch': 'אי-התאמה',
+    'localizedCtaMixReasonTemplate': 'CTA בשפה {secondaryLanguage} "{sample}" משולב בקריאייטיב ב-{primaryLanguage} שמוצג ב{markets}',
+    'localizedPlaintextLanguageSummaryTemplate': 'טקסט ראשי: {primaryLanguage} · CTA: {secondaryLanguage} ("{sample}")',
+    'localizedAiWordMixReasonTemplate': 'המילה "{sample}" בשפה {secondaryLanguage} משולבת בתוכן שעיקרו {primaryLanguage} ומוצג ב{markets}'
 };
 
 export default value;

@@ -24,7 +24,10 @@ const value: PartialTranslations['previewModal'] = {
     'languageDetected': 'Wykryty język:',
     'geoMismatch': 'Niezgodność geo',
     'match': 'Zgodne',
-    'mismatch': 'Niezgodne'
+    'mismatch': 'Niezgodne',
+    'localizedCtaMixReasonTemplate': 'CTA w języku {secondaryLanguage} "{sample}" jest zmieszane z kreacją w języku {primaryLanguage}, emitowaną w {markets}',
+    'localizedPlaintextLanguageSummaryTemplate': 'Tekst główny: {primaryLanguage} · CTA: {secondaryLanguage} ("{sample}")',
+    'localizedAiWordMixReasonTemplate': 'Słowo "{sample}" w języku {secondaryLanguage} jest zmieszane z treścią głównie w języku {primaryLanguage}, emitowaną w {markets}'
 };
 
 export default value;

@@ -23,7 +23,10 @@ const value: PartialTranslations['previewModal'] = {
     'editLanguage': 'تعديل اللغة',
     'geoMismatch': 'عدم تطابق جغرافي',
     'match': 'تطابق',
-    'mismatch': 'عدم تطابق'
+    'mismatch': 'عدم تطابق',
+    'localizedCtaMixReasonTemplate': 'تم دمج CTA باللغة {secondaryLanguage} "{sample}" في إعلان {primaryLanguage} المعروض في {markets}',
+    'localizedPlaintextLanguageSummaryTemplate': 'النص الأساسي: {primaryLanguage} · CTA: {secondaryLanguage} ("{sample}")',
+    'localizedAiWordMixReasonTemplate': 'تم دمج الكلمة "{sample}" باللغة {secondaryLanguage} في محتوى يغلب عليه {primaryLanguage} ويُعرض في {markets}'
 };
 
 export default value;

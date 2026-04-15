@@ -23,7 +23,10 @@ const value: PartialTranslations['previewModal'] = {
     'editLanguage': 'Редагувати мову',
     'geoMismatch': 'Невідповідність гео',
     'match': 'Відповідає',
-    'mismatch': 'Не відповідає'
+    'mismatch': 'Не відповідає',
+    'localizedCtaMixReasonTemplate': 'CTA мовою {secondaryLanguage} "{sample}" змішано з креативом мовою {primaryLanguage}, що показується в {markets}',
+    'localizedPlaintextLanguageSummaryTemplate': 'Основний текст: {primaryLanguage} · CTA: {secondaryLanguage} ("{sample}")',
+    'localizedAiWordMixReasonTemplate': 'Слово "{sample}" мовою {secondaryLanguage} змішано з контентом, де переважає {primaryLanguage}, що показується в {markets}'
 };
 
 export default value;

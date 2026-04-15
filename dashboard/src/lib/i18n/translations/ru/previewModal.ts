@@ -105,6 +105,12 @@ const value: PartialTranslations['previewModal'] = {
   languageMismatch: 'Несоответствие языка',
   languageMatch: 'Соответствие языка',
   showAllCountries: 'Показать все страны',
+  localizedCtaMixReasonTemplate:
+    'CTA на {secondaryLanguage} "{sample}" смешано с креативом на {primaryLanguage}, который показывается в {markets}',
+  localizedPlaintextLanguageSummaryTemplate:
+    'Основной текст: {primaryLanguage} · CTA: {secondaryLanguage} ("{sample}")',
+  localizedAiWordMixReasonTemplate:
+    'Слово "{sample}" на {secondaryLanguage} смешано с контентом в основном на {primaryLanguage}, который показывается в {markets}',
 };
 
 export default value;

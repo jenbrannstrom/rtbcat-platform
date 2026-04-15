@@ -23,7 +23,10 @@ const value: PartialTranslations['previewModal'] = {
     'editLanguage': 'Rediger sprog',
     'geoMismatch': 'Geo-uoverensstemmelse',
     'match': 'Match',
-    'mismatch': 'Uoverensstemmelse'
+    'mismatch': 'Uoverensstemmelse',
+    'localizedCtaMixReasonTemplate': 'CTA på {secondaryLanguage} "{sample}" er blandet ind i et kreativ på {primaryLanguage}, der vises i {markets}',
+    'localizedPlaintextLanguageSummaryTemplate': 'Primær tekst: {primaryLanguage} · CTA: {secondaryLanguage} ("{sample}")',
+    'localizedAiWordMixReasonTemplate': 'Ordet "{sample}" på {secondaryLanguage} er blandet ind i indhold, der primært er på {primaryLanguage}, og vises i {markets}'
 };
 
 export default value;
