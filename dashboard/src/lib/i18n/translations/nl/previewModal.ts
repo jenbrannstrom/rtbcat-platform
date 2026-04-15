@@ -107,6 +107,12 @@ const value: PartialTranslations['previewModal'] = {
   languageMismatch: 'Taalmismatch',
   languageMatch: 'Taalmatch',
   showAllCountries: 'Alle landen tonen',
+  localizedCtaMixReasonTemplate:
+    'CTA in het {secondaryLanguage} "{sample}" is gemengd in een creative in het {primaryLanguage} die wordt getoond in {markets}',
+  localizedPlaintextLanguageSummaryTemplate:
+    'Primaire tekst: {primaryLanguage} · CTA: {secondaryLanguage} ("{sample}")',
+  localizedAiWordMixReasonTemplate:
+    'Het woord "{sample}" in het {secondaryLanguage} is gemengd met content die vooral in het {primaryLanguage} is en wordt getoond in {markets}',
 };
 
 export default value;

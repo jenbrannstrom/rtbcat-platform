@@ -2073,6 +2073,9 @@ export interface Translations {
     severityHigh: string;
     severityMedium: string;
     severityLow: string;
+    localizedCtaMixReasonTemplate: string;
+    localizedPlaintextLanguageSummaryTemplate: string;
+    localizedAiWordMixReasonTemplate: string;
   };
 
   language: {

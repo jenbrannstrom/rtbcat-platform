@@ -23,7 +23,10 @@ const value: PartialTranslations['previewModal'] = {
     'editLanguage': 'Modifier la langue',
     'geoMismatch': 'Inadéquation géo',
     'match': 'Correspondance',
-    'mismatch': 'Inadéquation'
+    'mismatch': 'Inadéquation',
+    'localizedCtaMixReasonTemplate': 'Le CTA en {secondaryLanguage} "{sample}" est mélangé à une création en {primaryLanguage} diffusée en {markets}',
+    'localizedPlaintextLanguageSummaryTemplate': 'Texte principal : {primaryLanguage} · CTA : {secondaryLanguage} ("{sample}")',
+    'localizedAiWordMixReasonTemplate': 'Le mot "{sample}" en {secondaryLanguage} est mélangé à un contenu principalement en {primaryLanguage} diffusé en {markets}'
 };
 
 export default value;

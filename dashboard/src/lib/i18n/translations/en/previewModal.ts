@@ -138,6 +138,9 @@ const value: Translations['previewModal'] = {
     severityHigh: 'high',
     severityMedium: 'medium',
     severityLow: 'low',
+    localizedCtaMixReasonTemplate: '{secondaryLanguage} CTA "{sample}" mixed into {primaryLanguage} creative serving in {markets}',
+    localizedPlaintextLanguageSummaryTemplate: 'Primary plaintext: {primaryLanguage} · CTA: {secondaryLanguage} ("{sample}")',
+    localizedAiWordMixReasonTemplate: '{secondaryLanguage} word "{sample}" mixed with {primaryLanguage} primary content served in {markets}',
   };
 
 export default value;

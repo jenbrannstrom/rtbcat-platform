@@ -139,6 +139,9 @@ const value: PartialTranslations['previewModal'] = {
   severityHigh: '高',
   severityMedium: '中',
   severityLow: '低',
+  localizedCtaMixReasonTemplate: '在{markets}投放的{primaryLanguage}素材中混入了{secondaryLanguage} CTA“{sample}”',
+  localizedPlaintextLanguageSummaryTemplate: '主要正文：{primaryLanguage} · CTA：{secondaryLanguage}（“{sample}”）',
+  localizedAiWordMixReasonTemplate: '在{markets}投放的以{primaryLanguage}为主的内容中混入了{secondaryLanguage}词语“{sample}”',
 };
 
 export default value;

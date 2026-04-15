@@ -176,13 +176,13 @@ export function LanguageSection({
   );
   const hasPlaintextLanguageMix = Boolean(geoMismatch?.plaintext_language_summary);
   const localizedLanguageFlagReason = geoMismatch
-    ? localizeLanguageFlagReason(language, geoMismatch.language_flag_reason, geoMismatch)
+    ? localizeLanguageFlagReason(language, t.previewModal, geoMismatch.language_flag_reason, geoMismatch)
     : null;
   const localizedPlaintextLanguageSummary = geoMismatch
-    ? localizePlaintextLanguageSummary(language, geoMismatch.plaintext_language_summary, geoMismatch)
+    ? localizePlaintextLanguageSummary(language, t.previewModal, geoMismatch.plaintext_language_summary, geoMismatch)
     : null;
   const localizedGeoLinguisticReason = geoMismatch
-    ? localizeGeoLinguisticReason(language, geoMismatch.geo_linguistic_reason, geoMismatch)
+    ? localizeGeoLinguisticReason(language, t.previewModal, geoMismatch.geo_linguistic_reason, geoMismatch)
     : null;
 
   const renderServingCountriesValue = () => {
