@@ -13,12 +13,6 @@ interface LanguageSectionProps {
   onLanguageUpdate?: (language: string, languageCode: string) => void;
 }
 
-const STATUS_LABELS: Record<string, string> = {
-  green: "Match",
-  orange: "Needs Review",
-  red: "Mismatch",
-};
-
 const STATUS_STYLES: Record<string, string> = {
   green: "bg-green-100 text-green-700",
   orange: "bg-amber-100 text-amber-700",
@@ -31,6 +25,11 @@ export function LanguageSection({
   onLanguageUpdate,
 }: LanguageSectionProps) {
   const { t, language } = useTranslation();
+  const statusLabels: Record<string, string> = {
+    green: t.previewModal.match,
+    orange: t.previewModal.needsReview,
+    red: t.previewModal.mismatch,
+  };
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [countryData, setCountryData] = useState<CreativeCountryBreakdown | null>(null);
   const [isLoadingCountries, setIsLoadingCountries] = useState(false);
@@ -165,7 +164,10 @@ export function LanguageSection({
     geoMismatch && geoMismatch.language_flag_reason && geoMismatch.language_flag_status !== "green"
   );
   const showCurrencySignal = Boolean(
-    geoMismatch && geoMismatch.currency_flag_reason && geoMismatch.currency_flag_status !== "green"
+    geoMismatch &&
+    geoMismatch.currency_flag_reason &&
+    geoMismatch.currency_flag_status !== "green" &&
+    (geoMismatch.currency_flag_status === "red" || geoMismatch.detected_currencies.length > 0)
   );
   const hasPlaintextLanguageMix = Boolean(geoMismatch?.plaintext_language_summary);
 
@@ -221,18 +223,18 @@ export function LanguageSection({
               geoMismatch?.language_flag_status === "red" ? "text-red-800" : "text-amber-800"
             )}>
               <div className="flex items-center gap-2">
-                <span className="font-medium">Lang mismatch</span>
+                <span className="font-medium">{t.previewModal.langMismatchTitle}</span>
                 <span className={cn(
                   "rounded px-1.5 py-0.5 text-[11px] font-medium",
                   STATUS_STYLES[geoMismatch?.language_flag_status || "orange"] || STATUS_STYLES.orange
                 )}>
-                  {STATUS_LABELS[geoMismatch?.language_flag_status || "orange"] || STATUS_LABELS.orange}
+                  {statusLabels[geoMismatch?.language_flag_status || "orange"] || statusLabels.orange}
                 </span>
               </div>
               <div className="mt-0.5">{geoMismatch?.language_flag_reason}</div>
               {geoMismatch?.language_flag_source === "heuristic" && effectiveLanguageCode && (
                 <div className="mt-1 text-[11px] opacity-80">
-                  Heuristic cue: {effectiveLanguageCode.toUpperCase()}
+                  {t.previewModal.heuristicCue.replace("{code}", effectiveLanguageCode.toUpperCase())}
                 </div>
               )}
             </div>
@@ -257,18 +259,18 @@ export function LanguageSection({
               geoMismatch?.currency_flag_status === "red" ? "text-red-800" : "text-amber-800"
             )}>
               <div className="flex items-center gap-2">
-                <span className="font-medium">Market currency</span>
+                <span className="font-medium">{t.previewModal.marketCurrencyTitle}</span>
                 <span className={cn(
                   "rounded px-1.5 py-0.5 text-[11px] font-medium",
                   STATUS_STYLES[geoMismatch?.currency_flag_status || "orange"] || STATUS_STYLES.orange
                 )}>
-                  {STATUS_LABELS[geoMismatch?.currency_flag_status || "orange"] || STATUS_LABELS.orange}
+                  {statusLabels[geoMismatch?.currency_flag_status || "orange"] || statusLabels.orange}
                 </span>
               </div>
               <div className="mt-0.5">{geoMismatch?.currency_flag_reason}</div>
               {geoMismatch?.detected_currencies.length ? (
                 <div className="mt-1 text-[11px] opacity-80">
-                  Detected: {geoMismatch.detected_currencies.join(", ")}
+                  {t.previewModal.detectedLabel} {geoMismatch.detected_currencies.join(", ")}
                 </div>
               ) : null}
             </div>
@@ -291,7 +293,7 @@ export function LanguageSection({
           )}
           {!creative.detected_language && heuristicLanguageCode && (
             <span className="text-xs text-amber-700">
-              Heuristic: {heuristicLanguageCode.toUpperCase()}
+              {t.previewModal.heuristicLabel} {heuristicLanguageCode.toUpperCase()}
             </span>
           )}
         </div>
@@ -320,28 +322,28 @@ export function LanguageSection({
         {isLoadingSignals && (
           <div className="flex items-center gap-1 text-xs text-gray-400">
             <Loader2 className="h-3 w-3 animate-spin" />
-            Checking market signals...
+            {t.previewModal.checkingMarketSignals}
           </div>
         )}
 
         {geoMismatch && (
           <>
             <div className="flex flex-wrap items-center gap-1.5">
-              <span className="text-gray-500">Lang mismatch:</span>
+              <span className="text-gray-500">{t.previewModal.langMismatchLabel}</span>
               <span className={cn(
                 "rounded px-1.5 py-0.5 text-xs font-medium",
                 STATUS_STYLES[geoMismatch.language_flag_status] || STATUS_STYLES.orange
               )}>
-                {STATUS_LABELS[geoMismatch.language_flag_status] || STATUS_LABELS.orange}
+                {statusLabels[geoMismatch.language_flag_status] || statusLabels.orange}
               </span>
             </div>
             <div className="flex flex-wrap items-center gap-1.5">
-              <span className="text-gray-500">Geo-Linguistic:</span>
+              <span className="text-gray-500">{t.previewModal.geoLinguisticLabel}</span>
               <span className={cn(
                 "rounded px-1.5 py-0.5 text-xs font-medium",
                 STATUS_STYLES[geoMismatch.geo_linguistic_status] || STATUS_STYLES.orange
               )}>
-                {STATUS_LABELS[geoMismatch.geo_linguistic_status] || STATUS_LABELS.orange}
+                {statusLabels[geoMismatch.geo_linguistic_status] || statusLabels.orange}
               </span>
               {geoMismatch.geo_linguistic_reason && (
                 <span className="text-xs text-gray-500">{geoMismatch.geo_linguistic_reason}</span>
@@ -414,7 +416,10 @@ export function LanguageSection({
               ? "bg-yellow-100 text-yellow-700"
               : "bg-gray-100 text-gray-600"
           )}>
-            {Math.round(creative.language_confidence * 100)}% primary-language confidence
+            {t.previewModal.primaryLanguageConfidence.replace(
+              "{percent}",
+              String(Math.round(creative.language_confidence * 100))
+            )}
           </span>
         )}
       </div>
@@ -429,7 +434,7 @@ export function LanguageSection({
       )}
       {hasPlaintextLanguageMix && creative.language_confidence !== null && (
         <div className="text-xs text-gray-400 mt-1">
-          Confidence reflects the dominant language only; mixed CTA text lowers certainty.
+          {t.previewModal.dominantLanguageConfidenceHelp}
         </div>
       )}
     </div>
