@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+import unicodedata
 from typing import Any, Optional
 
 from utils.country_codes import get_country_alpha3, normalize_country_code
@@ -75,6 +76,29 @@ _ENGLISH_HINT_WORDS = {
     "your",
     "the",
     "and",
+}
+
+_SPANISH_HINT_WORDS = {
+    "instalar",
+    "instala",
+    "descargar",
+    "descarga",
+    "comprar",
+    "ahora",
+    "jugar",
+    "abrir",
+    "obtener",
+    "obtenga",
+    "suscribete",
+    "suscribirse",
+    "registrarse",
+    "mas",
+}
+
+_LANGUAGE_NAMES = {
+    "en": "English",
+    "es": "Spanish",
+    "hi": "Hindi",
 }
 
 
@@ -160,12 +184,36 @@ def detect_currencies(text: str) -> list[str]:
 
 
 def infer_language_code(text: str) -> Optional[str]:
+    return _detect_obvious_language_code(text)
+
+
+def _normalize_token_text(text: str) -> str:
+    normalized = unicodedata.normalize("NFKD", text or "")
+    return "".join(ch for ch in normalized if not unicodedata.combining(ch))
+
+
+def _detect_obvious_language_code(text: str) -> Optional[str]:
     words = re.findall(r"[A-Za-z]{2,}", text or "")
+    if re.search(r"[\u0900-\u097F]", text or ""):
+        return "hi"
     if len(words) < 4:
+        short_words = re.findall(r"[A-Za-z]{2,}", _normalize_token_text(text or ""))
+        lowered_short = [word.lower() for word in short_words]
+        if any(word in _SPANISH_HINT_WORDS for word in lowered_short):
+            return "es"
+        if any(word in _ENGLISH_HINT_WORDS for word in lowered_short):
+            return "en"
         return None
-    lowered = [word.lower() for word in words]
-    hits = sum(1 for word in lowered if word in _ENGLISH_HINT_WORDS)
-    if hits >= 2:
+
+    lowered = [word.lower() for word in re.findall(r"[A-Za-z]{2,}", _normalize_token_text(text or ""))]
+    english_hits = sum(1 for word in lowered if word in _ENGLISH_HINT_WORDS)
+    spanish_hits = sum(1 for word in lowered if word in _SPANISH_HINT_WORDS)
+
+    if english_hits >= 2 and english_hits > spanish_hits:
+        return "en"
+    if spanish_hits >= 1 and spanish_hits >= english_hits:
+        return "es"
+    if english_hits >= 1:
         return "en"
     return None
 
@@ -185,6 +233,52 @@ def _normalize_country_list(country_codes: list[str]) -> list[str]:
         normalized.append(canonical)
         seen.add(canonical)
     return normalized
+
+
+def _status_rank(status: Optional[str]) -> int:
+    return {"green": 0, "orange": 1, "red": 2}.get(str(status or "").lower(), 0)
+
+
+def _build_native_plaintext_language_signal(
+    creative: Any,
+    serving_countries: list[str],
+    primary_language_code: Optional[str],
+) -> Optional[dict[str, str]]:
+    raw_data = _coerce_raw_data(getattr(creative, "raw_data", None))
+    native_payload = raw_data.get("native")
+    if not isinstance(native_payload, dict):
+        return None
+
+    body_text = " ".join(
+        str(native_payload.get(field_name) or "").strip()
+        for field_name in ("headline", "body", "snippet")
+        if str(native_payload.get(field_name) or "").strip()
+    ).strip()
+    cta_text = str(native_payload.get("callToAction") or "").strip()
+    if not body_text or not cta_text:
+        return None
+
+    body_language_code = primary_language_code or _detect_obvious_language_code(body_text)
+    cta_language_code = _detect_obvious_language_code(cta_text)
+    if not body_language_code or not cta_language_code or body_language_code == cta_language_code:
+        return None
+
+    body_language = _LANGUAGE_NAMES.get(body_language_code, body_language_code.upper())
+    cta_language = _LANGUAGE_NAMES.get(cta_language_code, cta_language_code.upper())
+    cta_match = check_language_country_match(cta_language_code, serving_countries)
+    status = "orange" if cta_match["is_match"] else "red"
+    country_suffix = _format_country_list(serving_countries) if serving_countries else "current markets"
+
+    return {
+        "status": status,
+        "reason": f"{cta_language} CTA '{cta_text}' mixed into {body_language} creative serving in {country_suffix}",
+        "primary_language_code": body_language_code,
+        "primary_language": body_language,
+        "secondary_language_code": cta_language_code,
+        "secondary_language": cta_language,
+        "cta_text": cta_text,
+        "summary": f"Primary plaintext: {body_language} · CTA: {cta_language} ('{cta_text}')",
+    }
 
 
 def assess_language_market_flag(
@@ -411,6 +505,20 @@ def build_creative_language_flag_row(
         serving_countries,
         heuristic_language_code=heuristic_language_code,
     )
+    plaintext_language_signal = _build_native_plaintext_language_signal(
+        creative=creative,
+        serving_countries=serving_countries,
+        primary_language_code=language_flag.get("effective_language_code"),
+    )
+    if plaintext_language_signal and (
+        _status_rank(plaintext_language_signal["status"]) >= _status_rank(language_flag["status"])
+    ):
+        language_flag = {
+            **language_flag,
+            "status": plaintext_language_signal["status"],
+            "reason": plaintext_language_signal["reason"],
+            "source": "plaintext_fields",
+        }
     currency_flag = assess_currency_market_flag(detected_currencies, serving_countries)
     geo_flag = assess_geo_linguistic_flag(latest_geo_run, currency_flag)
 
@@ -423,6 +531,24 @@ def build_creative_language_flag_row(
         "detected_language": getattr(creative, "detected_language", None),
         "detected_language_code": getattr(creative, "detected_language_code", None),
         "heuristic_language_code": heuristic_language_code,
+        "plaintext_language_summary": (
+            plaintext_language_signal.get("summary") if plaintext_language_signal else None
+        ),
+        "primary_text_language": (
+            plaintext_language_signal.get("primary_language") if plaintext_language_signal else None
+        ),
+        "primary_text_language_code": (
+            plaintext_language_signal.get("primary_language_code") if plaintext_language_signal else None
+        ),
+        "secondary_text_language": (
+            plaintext_language_signal.get("secondary_language") if plaintext_language_signal else None
+        ),
+        "secondary_text_language_code": (
+            plaintext_language_signal.get("secondary_language_code") if plaintext_language_signal else None
+        ),
+        "secondary_text_sample": (
+            plaintext_language_signal.get("cta_text") if plaintext_language_signal else None
+        ),
         "serving_countries": serving_countries,
         "detected_currencies": detected_currencies,
         "language_flag_status": language_flag["status"],

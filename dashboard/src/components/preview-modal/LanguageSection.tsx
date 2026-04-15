@@ -167,6 +167,7 @@ export function LanguageSection({
   const showCurrencySignal = Boolean(
     geoMismatch && geoMismatch.currency_flag_reason && geoMismatch.currency_flag_status !== "green"
   );
+  const hasPlaintextLanguageMix = Boolean(geoMismatch?.plaintext_language_summary);
 
   const renderServingCountriesValue = () => {
     if (isLoadingCountries) {
@@ -295,6 +296,15 @@ export function LanguageSection({
           )}
         </div>
 
+        {hasPlaintextLanguageMix && (
+          <div className={cn(
+            "text-xs",
+            geoMismatch?.language_flag_status === "red" ? "text-red-700" : "text-amber-700"
+          )}>
+            {geoMismatch?.plaintext_language_summary}
+          </div>
+        )}
+
         {showConfiguredTargetCountries && (
           <div className="flex flex-wrap items-center gap-1.5">
             <span className="text-gray-500">{t.previewModal.countryTargeted}</span>
@@ -404,7 +414,7 @@ export function LanguageSection({
               ? "bg-yellow-100 text-yellow-700"
               : "bg-gray-100 text-gray-600"
           )}>
-            {Math.round(creative.language_confidence * 100)}% {t.previewModal.confidence}
+            {Math.round(creative.language_confidence * 100)}% primary-language confidence
           </span>
         )}
       </div>
@@ -415,6 +425,11 @@ export function LanguageSection({
           {creative.language_analyzed_at && (
             <> · {new Date(creative.language_analyzed_at).toLocaleDateString(language)}</>
           )}
+        </div>
+      )}
+      {hasPlaintextLanguageMix && creative.language_confidence !== null && (
+        <div className="text-xs text-gray-400 mt-1">
+          Confidence reflects the dominant language only; mixed CTA text lowers certainty.
         </div>
       )}
     </div>

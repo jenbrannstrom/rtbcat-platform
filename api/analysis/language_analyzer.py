@@ -215,7 +215,7 @@ class LanguageAnalyzer:
             return LanguageDetectionResult(source=self.provider, error=str(exc))
 
     def _build_prompt(self, text: str) -> str:
-        return f"""Analyze the following advertising creative text and detect its primary language.
+        return f"""Analyze the following advertising creative text and detect its dominant language.
 
 Text to analyze:
 "{text}"
@@ -228,9 +228,11 @@ Respond ONLY with valid JSON in this exact format:
 }}
 
 Rules:
-- "language" should be the full English name of the language (e.g., "German", "French", "Spanish")
+- "language" should be the full English name of the dominant language (e.g., "German", "French", "Spanish")
 - "language_code" should be the ISO 639-1 two-letter code (e.g., "de", "fr", "es")
 - "confidence" should be between 0.0 and 1.0
+- Do not ignore short CTA/button text like "instalar", "download", or "comprar ahora"
+- If the text mixes multiple languages, still return the dominant language but lower confidence below 0.8
 - If the text is too short or ambiguous, set confidence below 0.5
 - If you cannot determine the language, respond with: {{"language": null, "language_code": null, "confidence": 0.0}}
 """
@@ -430,7 +432,7 @@ Rules:
             return None
 
     def _build_vision_prompt(self) -> str:
-        return """Analyze this advertising creative image and detect the primary language of any visible text.
+        return """Analyze this advertising creative image and detect the dominant language of any visible text.
 
 Respond ONLY with valid JSON in this exact format:
 {
@@ -440,9 +442,11 @@ Respond ONLY with valid JSON in this exact format:
 }
 
 Rules:
-- "language" should be the full English name of the language (e.g., "German", "French", "Spanish")
+- "language" should be the full English name of the dominant language (e.g., "German", "French", "Spanish")
 - "language_code" should be the ISO 639-1 two-letter code (e.g., "de", "fr", "es")
 - "confidence" should be between 0.0 and 1.0
+- Do not ignore CTA/button text if it is visible
+- If the image shows mixed languages, still return the dominant language but lower confidence below 0.8
 - If you cannot see any text in the image, respond with: {"language": null, "language_code": null, "confidence": 0.0}
 """
 

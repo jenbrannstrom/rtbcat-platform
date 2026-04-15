@@ -538,6 +538,12 @@ export interface GeoMismatchResponse {
   language_flag_source: string | null;
   effective_language_code: string | null;
   heuristic_language_code: string | null;
+  plaintext_language_summary: string | null;
+  primary_text_language: string | null;
+  primary_text_language_code: string | null;
+  secondary_text_language: string | null;
+  secondary_text_language_code: string | null;
+  secondary_text_sample: string | null;
   currency_flag_status: string;
   currency_flag_reason: string | null;
   geo_linguistic_status: string;
