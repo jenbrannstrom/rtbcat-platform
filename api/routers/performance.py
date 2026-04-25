@@ -26,6 +26,7 @@ from api.dependencies import (
     get_allowed_buyer_ids,
     require_admin,
     require_seat_admin_or_sudo,
+    resolve_buyer_id,
 )
 from services.auth_service import User
 from api.schemas.performance import (
@@ -755,6 +756,11 @@ async def get_batch_performance(
             "all_time": 365,
         }
         days = period_days.get(request.period, 7)
+        resolved_buyer_id = (
+            await resolve_buyer_id(request.buyer_id, store=store, user=user)
+            if request.buyer_id
+            else None
+        )
 
         allowed = await get_allowed_buyer_ids(store=store, user=user)
         if allowed is not None:
@@ -764,14 +770,16 @@ async def get_batch_performance(
             perf_service = PerformanceService()
             rows = await perf_service.get_creative_buyer_ids(request.creative_ids)
             for row in rows:
-                buyer_id = row["buyer_id"]
-                if buyer_id and buyer_id not in allowed:
+                creative_buyer_id = row["buyer_id"]
+                if creative_buyer_id and creative_buyer_id not in allowed:
                     raise HTTPException(status_code=403, detail="You don't have access to this buyer account.")
 
         # Batch query from rtb_daily (click-capable)
         repo = _get_creative_perf_repo()
         rtb_summaries = await repo.get_creative_summaries(
-            request.creative_ids, days=days,
+            request.creative_ids,
+            days=days,
+            buyer_id_filter=resolved_buyer_id,
         )
 
         results: dict[str, CreativePerformanceSummary] = {}
@@ -800,7 +808,9 @@ async def get_batch_performance(
         for creative_id in missing_ids:
             try:
                 summary = await store.get_creative_performance_summary(
-                    creative_id, days=days
+                    creative_id,
+                    days=days,
+                    buyer_id=resolved_buyer_id,
                 )
                 has_data = summary.get("total_impressions", 0) > 0 or summary.get("total_spend_micros", 0) > 0
                 results[creative_id] = CreativePerformanceSummary(

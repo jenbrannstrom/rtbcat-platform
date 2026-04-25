@@ -1544,17 +1544,27 @@ class PostgresStore:
         return []
 
     async def get_creative_performance_summary(
-        self, creative_id: str, days: int = 30
+        self,
+        creative_id: str,
+        days: int = 30,
+        buyer_id: Optional[str] = None,
     ) -> dict:
         """Get aggregated performance summary for a creative.
 
         Queries pretarg_creative_daily (view over config_creative_daily)
-        aggregated across all configs/buyers for the given date range.
+        aggregated across configs for the given date range, optionally scoped
+        to a buyer account.
 
         Returns dict with total_impressions, total_spend_micros, etc.
         """
+        buyer_clause = ""
+        params: list[Any] = [creative_id, days]
+        if buyer_id:
+            buyer_clause = " AND buyer_account_id = %s"
+            params.append(buyer_id)
+
         row = await pg_query_one(
-            """
+            f"""
             SELECT
                 COALESCE(SUM(reached_queries), 0) as total_reached,
                 COALESCE(SUM(impressions), 0) as total_impressions,
@@ -1565,8 +1575,9 @@ class PostgresStore:
             FROM pretarg_creative_daily
             WHERE creative_id = %s
               AND metric_date >= CURRENT_DATE - %s * INTERVAL '1 day'
+              {buyer_clause}
             """,
-            (creative_id, days),
+            tuple(params),
         )
 
         total_impressions = int(row["total_impressions"]) if row else 0

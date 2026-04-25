@@ -70,13 +70,15 @@ export async function generateMockTraffic(params?: {
 
 export async function getBatchPerformance(
   creativeIds: string[],
-  period: PerformancePeriod = "7d"
+  period: PerformancePeriod = "7d",
+  buyerId?: string
 ): Promise<BatchPerformanceResponse> {
   return fetchApi<BatchPerformanceResponse>("/performance/metrics/batch", {
     method: "POST",
     body: JSON.stringify({
       creative_ids: creativeIds,
       period,
+      buyer_id: buyerId,
     }),
   });
 }

@@ -65,6 +65,7 @@ class BatchPerformanceRequest(BaseModel):
     """Request model for batch performance lookup."""
     creative_ids: list[str]
     period: str = "7d"
+    buyer_id: Optional[str] = None
 
 
 class CreativePerformanceSummary(BaseModel):

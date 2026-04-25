@@ -455,14 +455,15 @@ function CreativesContent() {
     data: performanceResponse,
     isLoading: isLoadingPerformance,
   } = useQuery({
-    queryKey: ["performance", creatives?.map((c) => c.id), period],
+    queryKey: ["performance", selectedSeatId, creatives?.map((c) => c.id), period],
     queryFn: () => {
       if (!creatives || creatives.length === 0) {
         return null;
       }
       return getBatchPerformance(
         creatives.map((c) => c.id),
-        period
+        period,
+        selectedSeatId ?? undefined,
       );
     },
     enabled: !!creatives && creatives.length > 0,
@@ -472,10 +473,10 @@ function CreativesContent() {
   const performanceData = performanceResponse?.performance;
 
   const { data: previewPerformanceResponse } = useQuery({
-    queryKey: ["preview-performance", previewCreative?.id, period],
+    queryKey: ["preview-performance", selectedSeatId, previewCreative?.id, period],
     queryFn: () => {
       if (!previewCreative) return null;
-      return getBatchPerformance([previewCreative.id], period);
+      return getBatchPerformance([previewCreative.id], period, selectedSeatId ?? undefined);
     },
     enabled: !!previewCreative && !performanceData?.[previewCreative.id],
     staleTime: 60000,
