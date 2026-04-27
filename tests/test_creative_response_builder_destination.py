@@ -52,6 +52,41 @@ def test_resolve_destination_uses_html_click_target_not_image_asset() -> None:
     assert resolve_creative_destination_url(creative) == "https://example.com/deal?id=1"
 
 
+def test_resolve_destination_decodes_macro_prefixed_encoded_html_href() -> None:
+    creative = SimpleNamespace(
+        final_url="redbrid-7be14.web.app",
+        display_url="redbrid-7be14.web.app",
+        raw_data={
+            "declaredClickThroughUrls": ["redbrid-7be14.web.app"],
+            "html": {
+                "snippet": (
+                    "<a href='%%CLICK_URL_UNESC%%"
+                    "https%3A%2F%2Fapp.appsflyer.com%2Fid6740606431"
+                    "%3Fpid%3Duplivo2wj_int%26af_ad_id%3D197224"
+                    "%26clickid%3D10104%257C276%257C704'>Open</a>"
+                )
+            },
+        },
+    )
+
+    diagnostics = build_creative_destination_diagnostics(creative)
+
+    assert diagnostics["resolved_destination_url"].startswith(
+        "https://app.appsflyer.com/id6740606431"
+    )
+    assert "af_ad_id=197224" in diagnostics["resolved_destination_url"]
+    assert any(
+        row["source"] == "declared_click_through_url"
+        and row["url"] == "redbrid-7be14.web.app"
+        and row["reason"] == "unsupported_scheme"
+        for row in diagnostics["candidates"]
+    )
+    assert any(
+        row["source"] == "html_snippet" and row["eligible"]
+        for row in diagnostics["candidates"]
+    )
+
+
 def test_resolve_destination_returns_none_when_only_assets_exist() -> None:
     creative = SimpleNamespace(
         final_url="https://cdn.example.com/creative/banner.jpg",

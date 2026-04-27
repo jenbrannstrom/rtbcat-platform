@@ -81,11 +81,9 @@ def extract_click_destinations_from_html(html_snippet: str) -> list[str]:
     candidates: list[str] = []
 
     def _append_urls(value: str) -> None:
-        urls = re.findall(r"https?://[^\s\"'<>]+", value)
-        for url in urls:
-            cleaned = url.rstrip(",;)}]>")
-            if cleaned not in candidates:
-                candidates.append(cleaned)
+        for url in _extract_detection_urls(value):
+            if url not in candidates:
+                candidates.append(url)
 
     for pattern in (
         r"\bhref\s*=\s*(['\"])(.*?)\1",
