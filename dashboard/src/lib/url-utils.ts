@@ -133,14 +133,22 @@ const MACRO_PATTERNS = [
   /__DFA_.*?__/g, // __DFA_CLICK__
 ];
 
+function repairMissingSchemeColon(value: string): string {
+  return value.replace(
+    /\b(https?)\/\/(?=[a-z0-9.-]+\.[a-z]{2,})/gi,
+    "$1://",
+  );
+}
+
 /**
  * Remove ad server macros from URL
  */
 export function cleanUrlMacros(url: string): string {
-  let cleaned = url;
+  let cleaned = repairMissingSchemeColon(url);
   for (const pattern of MACRO_PATTERNS) {
     cleaned = cleaned.replace(pattern, "");
   }
+  cleaned = repairMissingSchemeColon(cleaned);
   // Remove any double slashes that aren't part of http://
   cleaned = cleaned.replace(/([^:])\/\//g, "$1/");
   return cleaned;
@@ -173,10 +181,9 @@ export function fullyDecodeUrl(url: string): string {
 export function extractUrlsFromChain(rawUrl: string): string[] {
   if (!rawUrl) return [];
 
-  // First, fully decode the URL
-  let decoded = fullyDecodeUrl(rawUrl);
-
-  // Clean macros
+  // Remove macros before decoding; decodeURIComponent treats %%CLICK_URL%% as malformed.
+  let decoded = cleanUrlMacros(rawUrl);
+  decoded = fullyDecodeUrl(decoded);
   decoded = cleanUrlMacros(decoded);
 
   // Find all URLs in the string (with protocol)
@@ -191,10 +198,10 @@ export function extractUrlsFromChain(rawUrl: string): string[] {
 
   // If no URLs found with protocol, check if the entire string is a domain
   if (urls.length === 0 && decoded.trim()) {
-    // Check if it looks like a domain (contains a dot, no spaces, not just numbers)
     const trimmed = decoded.trim();
-    if (trimmed.includes(".") && !trimmed.includes(" ") && !/^\d+$/.test(trimmed)) {
-      // Add https:// prefix
+    const bareDomainPattern =
+      /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+(?:\:\d+)?(?:[/?#][^\s"'<>]*)?$/i;
+    if (bareDomainPattern.test(trimmed)) {
       urls = [`https://${trimmed}`];
     }
   }
