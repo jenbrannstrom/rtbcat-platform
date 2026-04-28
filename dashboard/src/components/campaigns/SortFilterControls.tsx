@@ -44,6 +44,7 @@ export function SortFilterControls({
       <span className="text-sm text-gray-600 font-medium">{t.campaigns.sort}</span>
       {(['spend', 'impressions', 'clicks', 'creatives', 'name'] as const).map(field => (
         <button
+          type="button"
           key={field}
           onClick={() => handleSortClick(field)}
           className={cn(
@@ -66,6 +67,7 @@ export function SortFilterControls({
 
       {/* Phase 29: Issues filter */}
       <button
+        type="button"
         onClick={() => onShowIssuesOnlyChange(!showIssuesOnly)}
         className={cn(
           "px-3 py-1 text-sm rounded flex items-center gap-1 transition-colors",
@@ -97,6 +99,7 @@ export function SortFilterControls({
           </select>
           {countryFilter && (
             <button
+              type="button"
               onClick={() => onCountryFilterChange(null)}
               className="p-1 text-gray-400 hover:text-gray-600"
               title={t.campaigns.clearFilter}

@@ -39,6 +39,7 @@ interface ListClusterProps {
   onDelete?: (id: string) => void;
   onOpenPreview?: (id: string) => void;
   pageSortField?: 'spend' | 'impressions' | 'clicks' | 'creatives' | 'name';
+  pageSortDir?: 'asc' | 'desc';
 }
 
 function formatSpend(micros?: number): string {
@@ -62,6 +63,7 @@ export function ListCluster({
   onDelete,
   onOpenPreview,
   pageSortField,
+  pageSortDir,
 }: ListClusterProps) {
   const { t } = useTranslation();
   const { setNodeRef, isOver } = useDroppable({ id });
@@ -75,6 +77,12 @@ export function ListCluster({
   const sortDropdownRef = useRef<HTMLDivElement>(null);
   const unknownCountryLabel = t.campaigns.unknownCountry;
   const creativeCount = totalCreativeCount ?? creatives.length;
+  const pageMetricSortField =
+    pageSortField === 'spend' || pageSortField === 'impressions' || pageSortField === 'clicks'
+      ? pageSortField
+      : undefined;
+  const effectiveSortField = pageMetricSortField ?? sortField;
+  const effectiveSortDirection = pageMetricSortField ? (pageSortDir ?? 'desc') : sortDirection;
 
   // Update local name when prop changes
   useEffect(() => {
@@ -138,17 +146,17 @@ export function ListCluster({
 
     // Then sort
     const sorted = [...filtered].sort((a, b) => {
-      if (sortField === 'country') {
+      if (effectiveSortField === 'country') {
         const aCountry = a.country || '';
         const bCountry = b.country || '';
-        return sortDirection === 'desc'
+        return effectiveSortDirection === 'desc'
           ? bCountry.localeCompare(aCountry)
           : aCountry.localeCompare(bCountry);
       }
 
       let aVal: number, bVal: number;
 
-      switch (sortField) {
+      switch (effectiveSortField) {
         case 'spend':
           aVal = a.performance?.total_spend_micros || 0;
           bVal = b.performance?.total_spend_micros || 0;
@@ -173,10 +181,10 @@ export function ListCluster({
           return 0;
       }
 
-      return sortDirection === 'desc' ? bVal - aVal : aVal - bVal;
+      return effectiveSortDirection === 'desc' ? bVal - aVal : aVal - bVal;
     });
     return sorted;
-  }, [creatives, sortField, sortDirection, excludedCountries, unknownCountryLabel]);
+  }, [creatives, effectiveSortField, effectiveSortDirection, excludedCountries, unknownCountryLabel]);
 
   // Calculate total spend
   const totalSpend = typeof totalSpendMicros === 'number'
@@ -207,7 +215,7 @@ export function ListCluster({
   // Map page sort field to local sort field for ListItem
   const itemSortField = pageSortField === 'creatives' || pageSortField === 'name'
     ? sortField
-    : (pageSortField as SortField | undefined) || sortField;
+    : (pageMetricSortField as SortField | undefined) || sortField;
 
   return (
     <div

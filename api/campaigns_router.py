@@ -131,6 +131,7 @@ class CampaignCreateRequest(BaseModel):
     name: str
     creative_ids: list[str] = []
     description: Optional[str] = None
+    buyer_id: Optional[str] = None
 
 
 class CampaignUpdateRequest(BaseModel):
@@ -818,22 +819,34 @@ async def list_campaigns(
 
 
 @router.post("", response_model=AICampaignResponse)
-async def create_campaign(request: CampaignCreateRequest):
+async def create_campaign(
+    request: CampaignCreateRequest,
+    store: PostgresStore = Depends(get_store),
+    user: User = Depends(get_current_user),
+):
     """
     Create a new campaign and optionally assign creatives to it.
     """
     try:
+        buyer_id = await resolve_buyer_id(request.buyer_id, store=store, user=user)
         svc = get_campaigns_service()
 
-        # Create the campaign
-        campaign_id = await svc.create_campaign(
-            name=request.name,
-            seat_id=None,  # Could be added to request if needed
-            description=request.description,
-            ai_generated=False,
-            ai_confidence=None,
-            clustering_method="manual",
-        )
+        campaign_id = None
+        if request.creative_ids:
+            campaign_id = await svc.find_existing_campaign_for_creatives(
+                request.creative_ids,
+                buyer_id=buyer_id,
+            )
+
+        if not campaign_id:
+            campaign_id = await svc.create_campaign(
+                name=request.name,
+                seat_id=None,  # Could be added to request if needed
+                description=request.description,
+                ai_generated=False,
+                ai_confidence=None,
+                clustering_method="manual",
+            )
 
         # Assign creatives if provided
         if request.creative_ids:
@@ -846,7 +859,7 @@ async def create_campaign(request: CampaignCreateRequest):
 
         # Fetch the created campaign
         campaign = await svc.get_campaign(campaign_id)
-        creative_ids = await svc.get_campaign_creatives(campaign_id)
+        creative_ids = await svc.get_campaign_creatives(campaign_id, buyer_id=buyer_id)
 
         campaign_data = {
             "id": campaign.id,

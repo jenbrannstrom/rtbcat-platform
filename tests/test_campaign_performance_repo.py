@@ -59,3 +59,39 @@ async def test_get_campaign_performance_returns_zero_shape(monkeypatch) -> None:
         "ctr": None,
         "cpm": None,
     }
+
+
+@pytest.mark.asyncio
+async def test_find_existing_campaign_for_creatives_matches_single_destination_identity(monkeypatch) -> None:
+    calls = []
+
+    async def fake_query_one(sql: str, params: tuple):
+        calls.append((sql, params))
+        return {"campaign_id": "existing-campaign"}
+
+    monkeypatch.setattr(campaign_repo, "pg_query_one", fake_query_one)
+
+    result = await CampaignRepository().find_existing_campaign_for_creatives(
+        ["creative-1", "creative-2"],
+        buyer_id="buyer-1",
+    )
+
+    sql, params = calls[0]
+    assert "single_identity.identity_count = 1" in sql
+    assert "single_identity.identified_count = single_identity.total_count" in sql
+    assert "single_identity.buyer_count = 1" in sql
+    assert "display:" in sql
+    assert params == (["creative-1", "creative-2"], "buyer-1", "buyer-1", "buyer-1", "buyer-1")
+    assert result == "existing-campaign"
+
+
+@pytest.mark.asyncio
+async def test_find_existing_campaign_for_creatives_ignores_empty_requests(monkeypatch) -> None:
+    async def fake_query_one(_sql: str, _params: tuple):
+        raise AssertionError("empty creative requests should not hit the database")
+
+    monkeypatch.setattr(campaign_repo, "pg_query_one", fake_query_one)
+
+    result = await CampaignRepository().find_existing_campaign_for_creatives([])
+
+    assert result is None
