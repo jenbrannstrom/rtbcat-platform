@@ -42,11 +42,14 @@ export async function autoCluster(buyerId?: string | null): Promise<AutoClusterR
   return res.json();
 }
 
-export async function createCampaign(data: { name: string; creative_ids: string[] }): Promise<Campaign> {
+export async function createCampaign(
+  data: { name: string; creative_ids: string[] },
+  buyerId?: string | null,
+): Promise<Campaign> {
   const res = await fetch('/api/campaigns', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
+    body: JSON.stringify({ ...data, buyer_id: buyerId ?? undefined }),
   });
   if (!res.ok) throw new Error('Failed to create campaign');
   return res.json();

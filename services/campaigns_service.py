@@ -52,6 +52,17 @@ class CampaignsService:
             clustering_method=clustering_method,
         )
 
+    async def find_existing_campaign_for_creatives(
+        self,
+        creative_ids: list[str],
+        buyer_id: Optional[str] = None,
+    ) -> Optional[str]:
+        """Find an active campaign with the same canonical destination identity."""
+        return await self._repo.find_existing_campaign_for_creatives(
+            creative_ids=creative_ids,
+            buyer_id=buyer_id,
+        )
+
     async def get_campaign(self, campaign_id: str) -> Optional[AICampaign]:
         """Get a campaign by ID."""
         row = await self._repo.get_campaign(campaign_id)

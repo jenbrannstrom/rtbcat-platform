@@ -101,6 +101,14 @@ export default function CampaignsPage() {
   // Phase 29: Issues filter
   const [showIssuesOnly, setShowIssuesOnly] = useState<boolean>(() => searchParams.get('issues') === '1');
 
+  useEffect(() => {
+    setPageSortField(parseSortField(searchParams.get('sort')));
+    setPageSortDir(parseSortDir(searchParams.get('dir')));
+    setViewMode(parseViewMode(searchParams.get('view')));
+    setCountryFilter(searchParams.get('country') || null);
+    setShowIssuesOnly(searchParams.get('issues') === '1');
+  }, [searchParams]);
+
   // Preview modal state (Phase 24)
   const [previewCreativeId, setPreviewCreativeId] = useState<string | null>(null);
   const previewCreative = previewCreativeId ? creativesMap.get(previewCreativeId) : null;
@@ -224,7 +232,8 @@ export default function CampaignsPage() {
 
   // Create campaign mutation
   const createMutation = useMutation({
-    mutationFn: createCampaign,
+    mutationFn: (data: { name: string; creative_ids: string[] }) =>
+      createCampaign(data, selectedBuyerId),
     onSuccess: () => {
       setCampaignError(null);
       queryClient.invalidateQueries({ queryKey: ['campaigns'] });
@@ -789,6 +798,7 @@ export default function CampaignsPage() {
                   onDelete={handleDelete}
                   onOpenPreview={handleOpenPreview}
                   pageSortField={pageSortField}
+                  pageSortDir={pageSortDir}
                 />
               );
             })}
@@ -806,6 +816,7 @@ export default function CampaignsPage() {
               onCreativeSelect={handleCreativeSelect}
               onOpenPreview={handleOpenPreview}
               pageSortField={pageSortField}
+              pageSortDir={pageSortDir}
             />
 
             {/* New Campaign Drop Zone (List view) */}

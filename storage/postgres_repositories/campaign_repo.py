@@ -192,6 +192,91 @@ class CampaignRepository:
         )
         return campaign_id
 
+    async def find_existing_campaign_for_creatives(
+        self,
+        creative_ids: list[str],
+        buyer_id: Optional[str] = None,
+    ) -> Optional[str]:
+        """Find an active campaign that already owns the creatives' canonical destination.
+
+        Auto-cluster suggestions are built from unassigned creatives only. Without this
+        lookup, later uploads for the same app/domain create a second campaign row with
+        the same display name instead of adding to the existing cluster.
+        """
+        if not creative_ids:
+            return None
+
+        row = await pg_query_one(
+            """
+            WITH incoming AS (
+                SELECT
+                    id,
+                    buyer_id,
+                    CASE
+                        WHEN NULLIF(BTRIM(LOWER(app_id)), '') IS NOT NULL
+                            THEN 'app:' || NULLIF(BTRIM(LOWER(app_id)), '')
+                        WHEN NULLIF(BTRIM(LOWER(display_url)), '') IS NOT NULL
+                            THEN 'display:' || NULLIF(BTRIM(LOWER(display_url)), '')
+                        WHEN NULLIF(BTRIM(LOWER(final_url)), '') IS NOT NULL
+                            THEN 'final:' || NULLIF(BTRIM(LOWER(final_url)), '')
+                        WHEN NULLIF(BTRIM(LOWER(app_name)), '') IS NOT NULL
+                            THEN 'name:' || NULLIF(BTRIM(LOWER(app_name)), '')
+                        ELSE NULL
+                    END AS cluster_identity
+                FROM creatives
+                WHERE id = ANY(%s)
+                  AND (%s IS NULL OR buyer_id = %s)
+            ),
+            single_identity AS (
+                SELECT
+                    MIN(cluster_identity) AS cluster_identity,
+                    MIN(buyer_id) AS buyer_id,
+                    COUNT(*) AS total_count,
+                    COUNT(cluster_identity) AS identified_count,
+                    COUNT(DISTINCT buyer_id) AS buyer_count,
+                    COUNT(DISTINCT cluster_identity) AS identity_count
+                FROM incoming
+            ),
+            candidate_creatives AS (
+                SELECT
+                    ac.id AS campaign_id,
+                    ac.created_at,
+                    cc.creative_id,
+                    c.buyer_id,
+                    CASE
+                        WHEN NULLIF(BTRIM(LOWER(c.app_id)), '') IS NOT NULL
+                            THEN 'app:' || NULLIF(BTRIM(LOWER(c.app_id)), '')
+                        WHEN NULLIF(BTRIM(LOWER(c.display_url)), '') IS NOT NULL
+                            THEN 'display:' || NULLIF(BTRIM(LOWER(c.display_url)), '')
+                        WHEN NULLIF(BTRIM(LOWER(c.final_url)), '') IS NOT NULL
+                            THEN 'final:' || NULLIF(BTRIM(LOWER(c.final_url)), '')
+                        WHEN NULLIF(BTRIM(LOWER(c.app_name)), '') IS NOT NULL
+                            THEN 'name:' || NULLIF(BTRIM(LOWER(c.app_name)), '')
+                        ELSE NULL
+                    END AS cluster_identity
+                FROM ai_campaigns ac
+                JOIN creative_campaigns cc ON cc.campaign_id = ac.id
+                JOIN creatives c ON c.id = cc.creative_id
+                WHERE ac.status = 'active'
+                  AND (%s IS NULL OR c.buyer_id = %s)
+            )
+            SELECT candidate_creatives.campaign_id
+            FROM candidate_creatives
+            JOIN single_identity
+              ON single_identity.cluster_identity = candidate_creatives.cluster_identity
+             AND single_identity.buyer_id = candidate_creatives.buyer_id
+            WHERE single_identity.identity_count = 1
+              AND single_identity.identified_count = single_identity.total_count
+              AND single_identity.buyer_count = 1
+            GROUP BY candidate_creatives.campaign_id, candidate_creatives.created_at
+            ORDER BY COUNT(DISTINCT candidate_creatives.creative_id) DESC,
+                     candidate_creatives.created_at ASC
+            LIMIT 1
+            """,
+            (creative_ids, buyer_id, buyer_id, buyer_id, buyer_id),
+        )
+        return row["campaign_id"] if row else None
+
     async def get_campaign(self, campaign_id: str) -> Optional[dict[str, Any]]:
         """Get a campaign by ID with creative count."""
         return await pg_query_one(
