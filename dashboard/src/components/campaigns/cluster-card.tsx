@@ -23,6 +23,10 @@ interface Campaign {
   id: string;
   name: string;
   creative_ids: string[];
+  performance?: {
+    spend?: number;
+    spend_micros?: number;
+  } | null;
   // Phase 29: Disapproval tracking
   disapproved_count?: number;
   has_disapproved?: boolean;
@@ -197,12 +201,17 @@ export function ClusterCard({ campaign, creatives, onRename, onDelete, selectedI
 
   const SortIcon = sortDirection === 'desc' ? ArrowDown : ArrowUp;
   const currentZoom = ZOOM_LEVELS[zoomLevel];
+  const totalCreativeCount = campaign.creative_ids.length || creatives.length;
 
   // Calculate total spend
-  const totalSpend = creatives.reduce(
-    (sum, c) => sum + (c.performance?.total_spend_micros || 0),
-    0
-  );
+  const totalSpend = typeof campaign.performance?.spend_micros === 'number'
+    ? campaign.performance.spend_micros
+    : typeof campaign.performance?.spend === 'number'
+      ? Math.round(campaign.performance.spend * 1_000_000)
+      : creatives.reduce(
+          (sum, c) => sum + (c.performance?.total_spend_micros || 0),
+          0
+        );
 
   const formatTotalSpend = (micros: number): string => {
     const dollars = micros / 1_000_000;
@@ -378,24 +387,22 @@ export function ClusterCard({ campaign, creatives, onRename, onDelete, selectedI
       {/* Stats */}
       <div className="mt-2 text-sm text-gray-600 flex items-center gap-3">
         <span>
-          {excludedCountries.size > 0 ? (
-            <>{t.campaigns.filteredCreativesCount
-              .replace('{shown}', String(sortedCreatives.length))
-              .replace('{total}', String(creatives.length))}</>
-          ) : (
-            <>
-              {creatives.length !== 1
-                ? t.campaigns.creativeCountPlural.replace('{count}', String(creatives.length))
-                : t.campaigns.creativeCount.replace('{count}', String(creatives.length))}
-            </>
-          )}
+              {excludedCountries.size > 0 ? (
+                <>{t.campaigns.filteredCreativesCount
+                  .replace('{shown}', String(sortedCreatives.length))
+                  .replace('{total}', String(totalCreativeCount))}</>
+              ) : (
+                <>
+                  {totalCreativeCount !== 1
+                    ? t.campaigns.creativeCountPlural.replace('{count}', String(totalCreativeCount))
+                    : t.campaigns.creativeCount.replace('{count}', String(totalCreativeCount))}
+                </>
+              )}
         </span>
-        {totalSpend > 0 && (
-          <>
-            <span>·</span>
-            <span>{formatTotalSpend(totalSpend)}</span>
-          </>
-        )}
+        <span>·</span>
+        <span className="font-medium text-gray-800">
+          {t.campaigns.spend}: {formatTotalSpend(totalSpend)}
+        </span>
       </div>
     </div>
   );

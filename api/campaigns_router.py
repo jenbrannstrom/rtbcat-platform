@@ -162,6 +162,7 @@ class CampaignPerformanceResponse(BaseModel):
     impressions: int = 0
     clicks: int = 0
     spend: float = 0
+    spend_micros: int = 0
     queries: int = 0
     win_rate: Optional[float] = None
     ctr: Optional[float] = None
@@ -740,10 +741,13 @@ def _generate_name_from_domain(domain: str) -> str:
 @router.get("", response_model=list[AICampaignResponse])
 async def list_campaigns(
     seat_id: Optional[int] = Query(None),
+    buyer_id: Optional[str] = Query(None, description="Filter creative assignments and metrics by buyer seat ID"),
     status: Optional[str] = Query(None),
     include_performance: bool = Query(True),
     include_country_breakdown: bool = Query(False, description="Include country breakdown per campaign"),
     period: str = Query("7d"),
+    store: PostgresStore = Depends(get_store),
+    user: User = Depends(get_current_user),
 ):
     """
     List all AI campaigns with optional performance data.
@@ -751,6 +755,7 @@ async def list_campaigns(
     Phase 22: Country-aware clustering support via include_country_breakdown.
     """
     try:
+        buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
         days = {"1d": 1, "7d": 7, "30d": 30, "all": 365}.get(period, 7)
         svc = get_campaigns_service()
 
@@ -759,7 +764,7 @@ async def list_campaigns(
         result = []
         for campaign in campaigns:
             # Get creative IDs for this campaign
-            creative_ids = await svc.get_campaign_creatives(campaign.id)
+            creative_ids = await svc.get_campaign_creatives(campaign.id, buyer_id=buyer_id)
 
             # Phase 29: Count disapproved creatives in this campaign
             disapproved_count = await svc.count_disapproved_creatives(creative_ids)
@@ -783,11 +788,15 @@ async def list_campaigns(
             }
 
             if include_performance:
-                perf = await svc.get_campaign_performance(campaign.id, days=days)
+                perf = await svc.get_campaign_performance(campaign.id, days=days, buyer_id=buyer_id)
                 campaign_data["performance"] = perf
 
             if include_country_breakdown:
-                breakdown_raw = await svc.get_campaign_country_breakdown(campaign.id, days=days)
+                breakdown_raw = await svc.get_campaign_country_breakdown(
+                    campaign.id,
+                    days=days,
+                    buyer_id=buyer_id,
+                )
                 campaign_data["country_breakdown"] = {
                     country: {
                         "creative_ids": data['creative_ids'],

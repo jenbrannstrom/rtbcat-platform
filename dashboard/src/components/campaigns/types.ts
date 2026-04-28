@@ -8,6 +8,16 @@ export interface Campaign {
   creative_ids: string[];
   created_at: string | null;
   updated_at: string | null;
+  performance?: {
+    impressions?: number;
+    clicks?: number;
+    spend?: number;
+    spend_micros?: number;
+    queries?: number;
+    win_rate?: number | null;
+    ctr?: number | null;
+    cpm?: number | null;
+  } | null;
   // Phase 29: Disapproval tracking
   disapproved_count?: number;
   has_disapproved?: boolean;

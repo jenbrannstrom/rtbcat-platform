@@ -4,8 +4,11 @@
 
 import type { Campaign, CampaignCreative, AutoClusterResponse } from './types';
 
-export async function fetchCampaigns(): Promise<Campaign[]> {
-  const res = await fetch('/api/campaigns');
+export async function fetchCampaigns(buyerId?: string | null): Promise<Campaign[]> {
+  const params = new URLSearchParams();
+  if (buyerId) params.set('buyer_id', buyerId);
+  const query = params.toString();
+  const res = await fetch(`/api/campaigns${query ? `?${query}` : ''}`);
   if (!res.ok) throw new Error('Failed to fetch campaigns');
   return res.json();
 }

@@ -339,8 +339,23 @@ class CampaignRepository:
         )
         return rowcount > 0
 
-    async def get_campaign_creatives(self, campaign_id: str) -> list[str]:
+    async def get_campaign_creatives(
+        self, campaign_id: str, buyer_id: Optional[str] = None
+    ) -> list[str]:
         """Get all creative IDs in a campaign."""
+        if buyer_id:
+            rows = await pg_query(
+                """
+                SELECT cc.creative_id
+                FROM creative_campaigns cc
+                JOIN creatives c ON c.id = cc.creative_id
+                WHERE cc.campaign_id = %s
+                  AND c.buyer_id = %s
+                """,
+                (campaign_id, buyer_id),
+            )
+            return [row["creative_id"] for row in rows]
+
         rows = await pg_query(
             "SELECT creative_id FROM creative_campaigns WHERE campaign_id = %s",
             (campaign_id,),
@@ -350,22 +365,32 @@ class CampaignRepository:
     # ==================== Performance ====================
 
     async def get_campaign_country_breakdown(
-        self, campaign_id: str, days: int = 7
+        self, campaign_id: str, days: int = 7, buyer_id: Optional[str] = None
     ) -> dict[str, dict[str, Any]]:
         """Get country breakdown for a campaign's creatives."""
+        buyer_join = ""
+        buyer_clause = ""
+        params: list[Any] = [campaign_id, days]
+        if buyer_id:
+            buyer_join = "JOIN creatives c ON c.id = cc.creative_id"
+            buyer_clause = "AND c.buyer_id = %s"
+            params.append(buyer_id)
+
         rows = await pg_query(
-            """
+            f"""
             SELECT pm.creative_id, pm.geography,
                    SUM(pm.spend_micros) as spend_micros,
                    SUM(pm.impressions) as impressions
             FROM creative_campaigns cc
+            {buyer_join}
             JOIN performance_metrics pm ON cc.creative_id = pm.creative_id
             WHERE cc.campaign_id = %s
               AND pm.geography IS NOT NULL
               AND pm.metric_date >= CURRENT_DATE - make_interval(days => %s)
+              {buyer_clause}
             GROUP BY pm.creative_id, pm.geography
             """,
-            (campaign_id, days),
+            tuple(params),
         )
 
         breakdown: dict[str, dict[str, Any]] = {}
@@ -383,44 +408,114 @@ class CampaignRepository:
 
         return breakdown
 
-    async def get_campaign_performance(self, campaign_id: str, days: int = 7) -> dict[str, Any]:
-        """Get aggregated performance for a campaign."""
+    async def get_campaign_performance(
+        self, campaign_id: str, days: int = 7, buyer_id: Optional[str] = None
+    ) -> dict[str, Any]:
+        """Get aggregated performance for a campaign.
+
+        Use the live creative fact tables instead of campaign_daily_summary.
+        campaign_daily_summary is a derived cache and can be stale when cluster
+        membership changes; the cluster page needs the current spend for sorting.
+        """
+        buyer_join = ""
+        buyer_clause = ""
+        params: list[Any] = [campaign_id]
+        if buyer_id:
+            buyer_join = "JOIN creatives c ON c.id = cc.creative_id"
+            buyer_clause = "AND c.buyer_id = %s"
+            params.append(buyer_id)
+        params.extend([days, days, days])
+
         row = await pg_query_one(
-            """
+            f"""
+            WITH campaign_creatives AS (
+                SELECT cc.creative_id
+                FROM creative_campaigns cc
+                {buyer_join}
+                WHERE cc.campaign_id = %s
+                  {buyer_clause}
+            ),
+            rtb_by_creative AS (
+                SELECT rd.creative_id,
+                       COALESCE(SUM(rd.impressions), 0)::bigint AS impressions,
+                       COALESCE(SUM(rd.clicks), 0)::bigint AS clicks,
+                       COALESCE(SUM(rd.spend_micros), 0)::bigint AS spend_micros,
+                       COALESCE(SUM(rd.reached_queries), 0)::bigint AS queries
+                FROM rtb_daily rd
+                JOIN campaign_creatives cc ON cc.creative_id = rd.creative_id
+                WHERE rd.metric_date >= CURRENT_DATE - make_interval(days => %s)
+                GROUP BY rd.creative_id
+            ),
+            config_by_creative AS (
+                SELECT cd.creative_id,
+                       COALESCE(SUM(cd.impressions), 0)::bigint AS impressions,
+                       0::bigint AS clicks,
+                       COALESCE(SUM(cd.spend_micros), 0)::bigint AS spend_micros,
+                       COALESCE(SUM(cd.reached_queries), 0)::bigint AS queries
+                FROM config_creative_daily cd
+                JOIN campaign_creatives cc ON cc.creative_id = cd.creative_id
+                WHERE cd.metric_date >= CURRENT_DATE - make_interval(days => %s)
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM rtb_by_creative rtb
+                      WHERE rtb.creative_id = cd.creative_id
+                  )
+                GROUP BY cd.creative_id
+            ),
+            performance_by_creative AS (
+                SELECT pm.creative_id,
+                       COALESCE(SUM(pm.impressions), 0)::bigint AS impressions,
+                       COALESCE(SUM(pm.clicks), 0)::bigint AS clicks,
+                       COALESCE(SUM(pm.spend_micros), 0)::bigint AS spend_micros,
+                       COALESCE(SUM(pm.reached_queries), 0)::bigint AS queries
+                FROM performance_metrics pm
+                JOIN campaign_creatives cc ON cc.creative_id = pm.creative_id
+                WHERE pm.metric_date >= CURRENT_DATE - make_interval(days => %s)
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM rtb_by_creative rtb
+                      WHERE rtb.creative_id = pm.creative_id
+                  )
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM config_by_creative cfg
+                      WHERE cfg.creative_id = pm.creative_id
+                  )
+                GROUP BY pm.creative_id
+            ),
+            combined AS (
+                SELECT * FROM rtb_by_creative
+                UNION ALL
+                SELECT * FROM config_by_creative
+                UNION ALL
+                SELECT * FROM performance_by_creative
+            )
             SELECT
-                SUM(total_impressions) as impressions,
-                SUM(total_clicks) as clicks,
-                SUM(total_spend) as spend,
-                SUM(total_queries) as queries,
-                AVG(avg_win_rate) as win_rate,
-                AVG(avg_ctr) as ctr,
-                AVG(avg_cpm) as cpm
-            FROM campaign_daily_summary
-            WHERE campaign_id = %s
-              AND date >= CURRENT_DATE - make_interval(days => %s)
+                COALESCE(SUM(impressions), 0)::bigint AS impressions,
+                COALESCE(SUM(clicks), 0)::bigint AS clicks,
+                COALESCE(SUM(spend_micros), 0)::bigint AS spend_micros,
+                COALESCE(SUM(queries), 0)::bigint AS queries
+            FROM combined
             """,
-            (campaign_id, days),
+            tuple(params),
         )
 
-        if row:
-            return {
-                "impressions": row["impressions"] or 0,
-                "clicks": row["clicks"] or 0,
-                "spend": row["spend"] or 0,
-                "queries": row["queries"] or 0,
-                "win_rate": row["win_rate"],
-                "ctr": row["ctr"],
-                "cpm": row["cpm"],
-            }
+        impressions = int(row["impressions"] or 0) if row else 0
+        clicks = int(row["clicks"] or 0) if row else 0
+        spend_micros = int(row["spend_micros"] or 0) if row else 0
+        queries = int(row["queries"] or 0) if row else 0
 
         return {
-            "impressions": 0,
-            "clicks": 0,
-            "spend": 0,
-            "queries": 0,
-            "win_rate": None,
-            "ctr": None,
-            "cpm": None,
+            "impressions": impressions,
+            "clicks": clicks,
+            "spend": spend_micros / 1_000_000.0,
+            "spend_micros": spend_micros,
+            "queries": queries,
+            "win_rate": (impressions / queries * 100) if queries > 0 else None,
+            "ctr": (clicks / impressions * 100) if impressions > 0 else None,
+            "cpm": ((spend_micros / 1_000_000.0) / impressions * 1000)
+            if impressions > 0
+            else None,
         }
 
     async def get_campaign_daily_trend(self, campaign_id: str, days: int = 30) -> list[dict[str, Any]]:

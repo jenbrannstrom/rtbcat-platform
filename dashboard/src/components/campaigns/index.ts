@@ -14,7 +14,13 @@
 export * from './types';
 
 // Utils
-export { formatBundleId, generateClusterName } from './utils';
+export {
+  formatBundleId,
+  generateClusterName,
+  getCampaignClicks,
+  getCampaignImpressions,
+  getCampaignSpendMicros,
+} from './utils';
 
 // API
 export {
