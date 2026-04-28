@@ -36,6 +36,9 @@ import {
   deleteCampaign,
   // Utils
   generateClusterName,
+  getCampaignClicks,
+  getCampaignImpressions,
+  getCampaignSpendMicros,
   // Components
   ClusterCard,
   UnassignedPool,
@@ -177,8 +180,8 @@ export default function CampaignsPage() {
 
   // Queries
   const { data: campaigns = [], isLoading: loadingCampaigns } = useQuery({
-    queryKey: ['campaigns'],
-    queryFn: fetchCampaigns,
+    queryKey: ['campaigns', selectedBuyerId],
+    queryFn: () => fetchCampaigns(selectedBuyerId),
   });
 
   const { data: unclustered, isLoading: loadingUnclustered } = useQuery({
@@ -544,9 +547,10 @@ export default function CampaignsPage() {
     // Calculate totals for each campaign
     const campaignsWithTotals = campaigns.map(campaign => {
       const creatives = getCampaignCreatives(campaign);
-      const totalSpend = creatives.reduce((sum, c) => sum + (c.performance?.total_spend_micros || 0), 0);
-      const totalImpressions = creatives.reduce((sum, c) => sum + (c.performance?.total_impressions || 0), 0);
-      const totalClicks = creatives.reduce((sum, c) => sum + (c.performance?.total_clicks || 0), 0);
+      const totalSpend = getCampaignSpendMicros(campaign, creatives);
+      const totalImpressions = getCampaignImpressions(campaign, creatives);
+      const totalClicks = getCampaignClicks(campaign, creatives);
+      const totalCreativeCount = campaign.creative_ids.length || creatives.length;
 
       // Filter creatives by country if filter is set
       const filteredCreatives = countryFilter
@@ -559,9 +563,9 @@ export default function CampaignsPage() {
         _totalSpend: totalSpend,
         _totalImpressions: totalImpressions,
         _totalClicks: totalClicks,
-        _creativeCount: creatives.length,
+        _creativeCount: totalCreativeCount,
         _hasFilteredCreatives: countryFilter ? filteredCreatives.length > 0 : true,
-        _hasBuyerCreatives: creatives.length > 0, // True if campaign has creatives from selected buyer
+        _hasBuyerCreatives: totalCreativeCount > 0, // True if campaign has creatives from selected buyer
       };
     });
 
@@ -769,20 +773,25 @@ export default function CampaignsPage() {
           /* List View */
           <div className="flex gap-4 overflow-x-auto pb-4">
             {/* Campaign columns */}
-            {sortedCampaigns.map((campaign) => (
-              <ListCluster
-                key={campaign.id}
-                id={campaign.id}
-                name={campaign.name}
-                creatives={getCampaignCreatives(campaign)}
-                selectedIds={selectedIds}
-                onCreativeSelect={handleCreativeSelect}
-                onRename={handleRename}
-                onDelete={handleDelete}
-                onOpenPreview={handleOpenPreview}
-                pageSortField={pageSortField}
-              />
-            ))}
+            {sortedCampaigns.map((campaign) => {
+              const campaignCreatives = getCampaignCreatives(campaign);
+              return (
+                <ListCluster
+                  key={campaign.id}
+                  id={campaign.id}
+                  name={campaign.name}
+                  creatives={campaignCreatives}
+                  totalCreativeCount={campaign.creative_ids.length || campaignCreatives.length}
+                  totalSpendMicros={getCampaignSpendMicros(campaign, campaignCreatives)}
+                  selectedIds={selectedIds}
+                  onCreativeSelect={handleCreativeSelect}
+                  onRename={handleRename}
+                  onDelete={handleDelete}
+                  onOpenPreview={handleOpenPreview}
+                  pageSortField={pageSortField}
+                />
+              );
+            })}
 
             {/* Unclustered column */}
             <ListCluster

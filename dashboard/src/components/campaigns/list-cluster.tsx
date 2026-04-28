@@ -30,6 +30,8 @@ interface ListClusterProps {
   id: string;
   name: string;
   creatives: Creative[];
+  totalCreativeCount?: number;
+  totalSpendMicros?: number;
   isUnclustered?: boolean;
   selectedIds?: Set<string>;
   onCreativeSelect?: (id: string, event?: { ctrlKey?: boolean; metaKey?: boolean; shiftKey?: boolean }) => void;
@@ -51,6 +53,8 @@ export function ListCluster({
   id,
   name,
   creatives,
+  totalCreativeCount,
+  totalSpendMicros,
   isUnclustered = false,
   selectedIds = new Set(),
   onCreativeSelect,
@@ -70,6 +74,7 @@ export function ListCluster({
   const inputRef = useRef<HTMLInputElement>(null);
   const sortDropdownRef = useRef<HTMLDivElement>(null);
   const unknownCountryLabel = t.campaigns.unknownCountry;
+  const creativeCount = totalCreativeCount ?? creatives.length;
 
   // Update local name when prop changes
   useEffect(() => {
@@ -174,10 +179,12 @@ export function ListCluster({
   }, [creatives, sortField, sortDirection, excludedCountries, unknownCountryLabel]);
 
   // Calculate total spend
-  const totalSpend = creatives.reduce(
-    (sum, c) => sum + (c.performance?.total_spend_micros || 0),
-    0
-  );
+  const totalSpend = typeof totalSpendMicros === 'number'
+    ? totalSpendMicros
+    : creatives.reduce(
+        (sum, c) => sum + (c.performance?.total_spend_micros || 0),
+        0
+      );
 
   const handleSave = () => {
     if (editName.trim() && editName !== name && onRename) {
@@ -262,17 +269,19 @@ export function ListCluster({
         <div className="text-xs text-gray-500 flex items-center gap-2 mb-2">
           <span>
             {excludedCountries.size > 0
-              ? `${sortedCreatives.length}/${creatives.length}`
-              : creatives.length
+              ? `${sortedCreatives.length}/${creativeCount}`
+              : creativeCount
             }{' '}
-            {creatives.length !== 1
+            {creativeCount !== 1
               ? t.campaigns.creativeCountPlural.replace('{count}', '')
               : t.campaigns.creativeCount.replace('{count}', '')}
           </span>
-          {totalSpend > 0 && (
+          {(!isUnclustered || totalSpend > 0) && (
             <>
               <span>·</span>
-              <span className="text-green-600 font-medium">{formatSpend(totalSpend)}</span>
+              <span className="text-green-700 font-medium">
+                {t.campaigns.spend}: {formatSpend(totalSpend)}
+              </span>
             </>
           )}
         </div>

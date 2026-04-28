@@ -122,21 +122,25 @@ class CampaignsService:
         """Remove a creative from its campaign."""
         return await self._repo.remove_creative_from_campaign(creative_id)
 
-    async def get_campaign_creatives(self, campaign_id: str) -> list[str]:
+    async def get_campaign_creatives(
+        self, campaign_id: str, buyer_id: Optional[str] = None
+    ) -> list[str]:
         """Get all creative IDs in a campaign."""
-        return await self._repo.get_campaign_creatives(campaign_id)
+        return await self._repo.get_campaign_creatives(campaign_id, buyer_id=buyer_id)
 
     # ==================== Performance ====================
 
-    async def get_campaign_performance(self, campaign_id: str, days: int = 7) -> dict[str, Any]:
+    async def get_campaign_performance(
+        self, campaign_id: str, days: int = 7, buyer_id: Optional[str] = None
+    ) -> dict[str, Any]:
         """Get aggregated performance for a campaign."""
-        return await self._repo.get_campaign_performance(campaign_id, days)
+        return await self._repo.get_campaign_performance(campaign_id, days, buyer_id=buyer_id)
 
     async def get_campaign_country_breakdown(
-        self, campaign_id: str, days: int = 7
+        self, campaign_id: str, days: int = 7, buyer_id: Optional[str] = None
     ) -> dict[str, dict[str, Any]]:
         """Get country breakdown for a campaign."""
-        return await self._repo.get_campaign_country_breakdown(campaign_id, days)
+        return await self._repo.get_campaign_country_breakdown(campaign_id, days, buyer_id=buyer_id)
 
     async def get_campaign_daily_trend(self, campaign_id: str, days: int = 30) -> list[dict[str, Any]]:
         """Get daily performance trend for a campaign."""

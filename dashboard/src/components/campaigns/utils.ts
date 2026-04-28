@@ -2,6 +2,41 @@
  * Helper functions for campaigns page.
  */
 
+import type { Campaign, CampaignCreative } from './types';
+
+export function getCampaignSpendMicros(
+  campaign: Campaign,
+  creatives: CampaignCreative[],
+): number {
+  if (typeof campaign.performance?.spend_micros === 'number') {
+    return campaign.performance.spend_micros;
+  }
+  if (typeof campaign.performance?.spend === 'number') {
+    return Math.round(campaign.performance.spend * 1_000_000);
+  }
+  return creatives.reduce((sum, c) => sum + (c.performance?.total_spend_micros || 0), 0);
+}
+
+export function getCampaignImpressions(
+  campaign: Campaign,
+  creatives: CampaignCreative[],
+): number {
+  if (typeof campaign.performance?.impressions === 'number') {
+    return campaign.performance.impressions;
+  }
+  return creatives.reduce((sum, c) => sum + (c.performance?.total_impressions || 0), 0);
+}
+
+export function getCampaignClicks(
+  campaign: Campaign,
+  creatives: CampaignCreative[],
+): number {
+  if (typeof campaign.performance?.clicks === 'number') {
+    return campaign.performance.clicks;
+  }
+  return creatives.reduce((sum, c) => sum + (c.performance?.total_clicks || 0), 0);
+}
+
 /**
  * Format a bundle ID like com.example.myapp into "Example Myapp"
  */
