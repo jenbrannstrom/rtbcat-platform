@@ -21,6 +21,7 @@ import argparse
 import logging
 import os
 import sys
+import time
 from datetime import date, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -373,6 +374,81 @@ def write_to_postgres(
     return len(values)
 
 
+def _is_recoverable_postgres_error(exc: Exception) -> bool:
+    """Return True when a write failure is likely transient and worth retrying."""
+    recoverable_names = (
+        "OperationalError",
+        "InterfaceError",
+        "AdminShutdown",
+        "ConnectionDoesNotExist",
+        "ConnectionFailure",
+        "QueryCanceled",
+    )
+    if any(name in type(exc).__name__ for name in recoverable_names):
+        return True
+
+    message = str(exc).lower()
+    transient_markers = (
+        "connection is lost",
+        "server closed the connection unexpectedly",
+        "terminating connection",
+        "connection refused",
+        "connection reset",
+        "could not receive data from server",
+        "could not send data to server",
+        "broken pipe",
+        "bad connection",
+    )
+    return any(marker in message for marker in transient_markers)
+
+
+def _write_to_postgres_with_retry(
+    dsn: str,
+    table_name: str,
+    rows: List[Dict[str, Any]],
+    *,
+    max_attempts: int = 3,
+    backoff_seconds: float = 1.5,
+) -> int:
+    """Write aggregated rows with a fresh connection per attempt.
+
+    The Gmail worker is long-lived and the Cloud SQL / network path can drop
+    mid-batch. Retrying with a new connection makes the batch resilient to a
+    transient disconnect without requiring a manual restart.
+    """
+    if not rows:
+        return 0
+
+    last_error: Exception | None = None
+    for attempt in range(1, max_attempts + 1):
+        pg_conn: psycopg.Connection | None = None
+        try:
+            pg_conn = psycopg.connect(dsn)
+            return write_to_postgres(pg_conn, table_name, rows)
+        except Exception as exc:  # noqa: BLE001
+            last_error = exc
+            if attempt < max_attempts and _is_recoverable_postgres_error(exc):
+                logger.warning(
+                    "Transient Postgres error writing %s (attempt %s/%s): %s",
+                    table_name,
+                    attempt,
+                    max_attempts,
+                    exc,
+                )
+                time.sleep(backoff_seconds * attempt)
+                continue
+            raise
+        finally:
+            if pg_conn is not None:
+                try:
+                    pg_conn.close()
+                except Exception:
+                    pass
+
+    assert last_error is not None
+    raise last_error
+
+
 def aggregate_date(
     metric_date: date,
     tables: Optional[List[str]] = None,
@@ -392,32 +468,31 @@ def aggregate_date(
     tables = tables or list(AGG_QUERIES.keys())
 
     bq_client = bigquery.Client(project=config["project_id"])
-    pg_conn = psycopg.connect(config["postgres_dsn"])
 
     results = {}
 
-    try:
-        for table_name in tables:
-            try:
-                # Run BigQuery aggregation
-                rows = run_bq_aggregation(
-                    bq_client=bq_client,
-                    table_name=table_name,
-                    metric_date=metric_date,
-                    project_id=config["project_id"],
-                    dataset=config["dataset"],
-                )
+    for table_name in tables:
+        try:
+            # Run BigQuery aggregation
+            rows = run_bq_aggregation(
+                bq_client=bq_client,
+                table_name=table_name,
+                metric_date=metric_date,
+                project_id=config["project_id"],
+                dataset=config["dataset"],
+            )
 
-                # Write to Postgres
-                count = write_to_postgres(pg_conn, table_name, rows)
-                results[table_name] = count
+            # Write to Postgres
+            count = _write_to_postgres_with_retry(
+                config["postgres_dsn"],
+                table_name,
+                rows,
+            )
+            results[table_name] = count
 
-            except Exception as e:
-                logger.error(f"Error aggregating {table_name}: {e}")
-                results[table_name] = -1  # Indicate error
-
-    finally:
-        pg_conn.close()
+        except Exception as e:
+            logger.error(f"Error aggregating {table_name}: {e}")
+            results[table_name] = -1  # Indicate error
 
     return results
 
