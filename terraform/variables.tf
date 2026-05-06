@@ -13,7 +13,7 @@ variable "instance_type" {
 }
 
 variable "environment" {
-  description = "Environment name (e.g., production, staging)"
+  description = "Environment name. Production should use 'production'."
   type        = string
   default     = "production"
 }
