@@ -29,7 +29,7 @@ deploy.yml (workflow_dispatch)
 Automatyczne wdrożenie przy push zostało wyłączone po incydencie ze stycznia 2026, kiedy automatyczne wdrożenia kolidowały z ręcznymi wdrożeniami przez SSH, co powodowało uszkodzenie kontenerów i utratę danych. Workflow wdrożeniowy wymaga teraz:
 
 1. Ręcznego uruchomienia przez interfejs GitHub Actions („Run workflow")
-2. Jawnego wyboru środowiska docelowego (staging lub produkcja)
+2. Explicit production deploy confirmation
 3. Wpisania `DEPLOY` jako potwierdzenia
 4. Opcjonalnego podania powodu dla ścieżki audytu
 
@@ -71,14 +71,9 @@ Po wdrożeniu workflow uruchamia `scripts/contracts_check.py` wewnątrz kontener
 - Przy `ALLOW_CONTRACT_FAILURE=false` (domyślnie): wdrożenie jest oznaczane jako nieudane.
 - Przy `ALLOW_CONTRACT_FAILURE=true` (tymczasowe obejście): wdrożenie kończy się sukcesem z ostrzeżeniem. To obejście musi zostać usunięte po wyjaśnieniu problemu.
 
-## Staging a produkcja
+## Production environment
 
-| Środowisko | Nazwa VM | Domena |
-|------------|----------|--------|
-| Staging | `catscan-vm` | (wewnętrzna) |
-| Produkcja | `catscan-vm` | `your-deployment.example.com` |
-
-Najpierw wdróż na staging, zweryfikuj, a potem wdróż na produkcję.
+Staging is retired. Deploy only to production from GitHub Actions.
 
 ## Wycofanie zmian (rollback)
 

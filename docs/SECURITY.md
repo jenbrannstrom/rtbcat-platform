@@ -113,8 +113,14 @@ And variables:
 | Variable | Description |
 |----------|-------------|
 | `GCP_PROJECT` | Your GCP project ID |
-| `GCP_ZONE` | VM zone (e.g., `europe-west1-b`) |
-| `VM_NAME` | Your VM name |
+| `GCP_REGION` | GCP region |
+| `GCP_ZONE` | VM zone |
+| `GCP_VM_PRODUCTION` | Production VM name |
+| `CLOUDSQL_INSTANCE` | Cloud SQL instance name |
+| `CLOUDSQL_CONNECTION_NAME` | Cloud SQL connection name |
+| `IMAGE_REGISTRY` | Artifact Registry image prefix |
+| `GCP_REPOSITORY` | Artifact Registry repository |
+| `GCP_REGISTRY_HOST` | Artifact Registry host |
 
 ### 4. Never Commit These
 
@@ -135,7 +141,7 @@ Cat-Scan uses a layered approach to secret management:
 
 | Backend | When used | How secrets are stored |
 |---------|-----------|----------------------|
-| **GCP Secret Manager** | Production (GCE VMs) | Terraform creates GSM secrets; startup.sh fetches at boot |
+| **GCP Secret Manager** | Production (GCE VMs) | Terraform creates GSM secret resources; `scripts/provision_gcp_runtime_config.sh` creates versions; startup.sh fetches at boot |
 | **Environment variables** | Local dev / Docker | Plain `.env` file (gitignored) |
 | **Template fallback** | Phase 1 migration | Terraform `templatefile()` injects into startup script |
 
@@ -143,15 +149,15 @@ Cat-Scan uses a layered approach to secret management:
 
 | Secret ID pattern | Source | Used by |
 |-------------------|--------|---------|
-| `{app}-precompute-refresh-secret` | `random_password` | Cloud Scheduler precompute refresh |
-| `{app}-precompute-monitor-secret` | `random_password` | Cloud Scheduler precompute monitoring |
-| `{app}-gmail-import-secret` | `random_password` | Cloud Scheduler Gmail import |
-| `{app}-creative-cache-refresh-secret` | `random_password` | Cloud Scheduler creative cache refresh |
-| `{app}-oauth-client-secret` | `var.google_oauth_client_secret` | OAuth2 Proxy Google login |
+| `{app}-precompute-refresh-secret` | Recovery script generated version | Cloud Scheduler precompute refresh |
+| `{app}-precompute-monitor-secret` | Recovery script generated version | Cloud Scheduler precompute monitoring |
+| `{app}-gmail-import-secret` | Recovery script generated version | Cloud Scheduler Gmail import |
+| `{app}-creative-cache-refresh-secret` | Recovery script generated version | Creative cache refresh |
+| `{app}-oauth-client-secret` | Recovery script or operator-provided value | OAuth2 Proxy Google login |
 | `{app}-gmail-oauth-client` | Manual upload | Gmail API authentication |
 | `{app}-gmail-token` | Manual upload | Gmail API token |
 | `{app}-ab-service-account` | Manual upload | Authorized Buyers API |
-| `{app}-serving-db-credentials` | Terraform (Cloud SQL) | Postgres DSN |
+| `{app}-serving-db-credentials` | Recovery script generated version | Postgres DSN |
 
 ### Bootstrap token
 

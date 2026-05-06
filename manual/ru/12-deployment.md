@@ -29,7 +29,7 @@ deploy.yml (workflow_dispatch)
 Автоматическое развёртывание при пуше было отключено после инцидента в январе 2026 года, когда автоматические деплои конкурировали с ручными SSH-деплоями, что привело к повреждению контейнеров и потере данных. Теперь для запуска развёртывания необходимо:
 
 1. Ручной запуск через интерфейс GitHub Actions («Run workflow»)
-2. Явный выбор целевого окружения (staging или production)
+2. Explicit production deploy confirmation
 3. Ввод `DEPLOY` для подтверждения
 4. Необязательное поле с причиной для журнала аудита
 
@@ -71,14 +71,9 @@ deploy.yml (workflow_dispatch)
 - При `ALLOW_CONTRACT_FAILURE=false` (по умолчанию): развёртывание помечается как неуспешное.
 - При `ALLOW_CONTRACT_FAILURE=true` (временный обход): развёртывание считается успешным, но выводится предупреждение. Этот обход необходимо убрать после расследования.
 
-## Staging и production
+## Production environment
 
-| Окружение | Имя ВМ | Домен |
-|-----------|--------|-------|
-| Staging | `catscan-vm` | (внутренний) |
-| Production | `catscan-vm` | `your-deployment.example.com` |
-
-Сначала разверните на staging, проверьте, затем разверните на production.
+Staging is retired. Deploy only to production from GitHub Actions.
 
 ## Откат
 

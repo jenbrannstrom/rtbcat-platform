@@ -31,7 +31,7 @@ automatic deploys competed with manual SSH deployments, corrupting containers
 and causing data loss. The deploy workflow now requires:
 
 1. Manual trigger via GitHub Actions UI ("Run workflow")
-2. Explicit target selection (staging or production)
+2. Explicit production deploy confirmation
 3. Typing `DEPLOY` as confirmation
 4. Optional reason field for audit trail
 
@@ -78,14 +78,9 @@ import through API output) are holding. If the check fails:
 - With `ALLOW_CONTRACT_FAILURE=true` (temporary bypass): deploy succeeds with
   a warning. This bypass must be removed after investigation.
 
-## Staging vs. production
+## Production environment
 
-| Environment | VM name | Domain |
-|-------------|---------|--------|
-| Staging | `catscan-vm` | (internal) |
-| Production | `catscan-vm` | `your-deployment.example.com` |
-
-Deploy to staging first, verify, then deploy to production.
+Staging is retired. Deploy only to production from GitHub Actions.
 
 ## Rollback
 

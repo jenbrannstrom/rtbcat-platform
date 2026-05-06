@@ -25,7 +25,7 @@ variable "app_name" {
 }
 
 variable "environment" {
-  description = "Environment (production, staging, dev)"
+  description = "Environment name. Production should use 'production'."
   type        = string
   default     = "production"
 }
@@ -134,6 +134,16 @@ variable "bigquery_raw_facts_table_id" {
   description = "BigQuery table ID for raw facts"
   type        = string
   default     = "raw_facts"
+}
+
+# =============================================================================
+# Artifact Registry - Docker Images
+# =============================================================================
+
+variable "artifact_registry_repository_id" {
+  description = "Artifact Registry Docker repository used by GitHub Actions"
+  type        = string
+  default     = "catscan"
 }
 
 # =============================================================================

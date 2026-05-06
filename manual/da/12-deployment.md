@@ -29,7 +29,7 @@ deploy.yml (workflow_dispatch)
 Automatisk udrulning ved push blev deaktiveret efter en hændelse i januar 2026, hvor automatiske udrulninger kolliderede med manuelle SSH-udrulninger, hvilket ødelagde containere og forårsagede datatab. Udrulningsworkflowet kræver nu:
 
 1. Manuel aktivering via GitHub Actions-brugerfladen ("Run workflow")
-2. Eksplicit valg af mål (staging eller produktion)
+2. Explicit production deploy confirmation
 3. Indtastning af `DEPLOY` som bekræftelse
 4. Valgfrit begrundelsefelt til revisionsloggen
 
@@ -71,14 +71,9 @@ Efter udrulning kører workflowet `scripts/contracts_check.py` inde i API-contai
 - Med `ALLOW_CONTRACT_FAILURE=false` (standard): udrulningen markeres som fejlet.
 - Med `ALLOW_CONTRACT_FAILURE=true` (midlertidig omgåelse): udrulningen lykkes med en advarsel. Denne omgåelse skal fjernes efter undersøgelse.
 
-## Staging vs. produktion
+## Production environment
 
-| Miljø | VM-navn | Domæne |
-|-------|---------|--------|
-| Staging | `catscan-vm` | (intern) |
-| Produktion | `catscan-vm` | `your-deployment.example.com` |
-
-Udrul til staging først, verificér, og udrul derefter til produktion.
+Staging is retired. Deploy only to production from GitHub Actions.
 
 ## Tilbagerulning
 
