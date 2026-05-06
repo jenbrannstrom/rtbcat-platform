@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 import urllib.error
 import pytest
 
@@ -54,6 +54,10 @@ def _base_conversion_readiness_payload(state: str = "ready") -> dict:
         "active_sources": 1,
         "reasons": [],
     }
+
+
+def _active_waiver_expiry() -> date:
+    return datetime.now(timezone.utc).date() + timedelta(days=30)
 
 
 def test_validate_data_health_payload_passes_default_rules():
@@ -141,8 +145,8 @@ def test_validate_data_health_payload_allows_zero_seat_day_rows_with_waiver():
         max_dimension_missing_pct=99.9,
         bidstream_dimension_waiver=BidstreamDimensionWaiver(
             buyer_id="buyer-1",
-            expires_on=date(2026, 6, 30),
-            note="known staging seat-day gap",
+            expires_on=_active_waiver_expiry(),
+            note="known canary seat-day gap",
             allow_seat_day_zero_rows=True,
         ),
     )
@@ -167,8 +171,8 @@ def test_validate_conversion_readiness_payload_allows_degraded_with_waiver():
         require_conversion_ready=True,
         conversion_readiness_waiver=ConversionReadinessWaiver(
             buyer_id="buyer-1",
-            expires_on=date(2026, 3, 31),
-            note="known staging conversion lag",
+            expires_on=_active_waiver_expiry(),
+            note="known canary conversion lag",
             allow_degraded=True,
         ),
     )
@@ -193,8 +197,8 @@ def test_validate_conversion_readiness_payload_allows_unavailable_with_waiver():
         require_conversion_ready=True,
         conversion_readiness_waiver=ConversionReadinessWaiver(
             buyer_id="buyer-1",
-            expires_on=date(2026, 3, 31),
-            note="known staging conversion outage",
+            expires_on=_active_waiver_expiry(),
+            note="known canary conversion outage",
             allow_unavailable=True,
         ),
     )
