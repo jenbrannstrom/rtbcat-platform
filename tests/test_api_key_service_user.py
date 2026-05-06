@@ -29,6 +29,10 @@ def _app_with_auth(monkeypatch) -> FastAPI:
     async def admin_only(user: User = Depends(require_admin)) -> dict[str, str]:
         return {"email": user.email, "role": user.role}
 
+    @app.get("/precompute/health")
+    async def precompute_health() -> dict[str, str]:
+        return {"ok": "true"}
+
     app.add_middleware(APIKeyAuthMiddleware)
     app.add_middleware(SessionAuthMiddleware)
     return app
@@ -58,3 +62,12 @@ def test_invalid_api_key_still_rejected(monkeypatch) -> None:
     )
 
     assert response.status_code == 401
+
+
+def test_secret_gated_scheduler_paths_bypass_api_key_middleware(monkeypatch) -> None:
+    client = TestClient(_app_with_auth(monkeypatch))
+
+    response = client.get("/precompute/health")
+
+    assert response.status_code == 200
+    assert response.json() == {"ok": "true"}

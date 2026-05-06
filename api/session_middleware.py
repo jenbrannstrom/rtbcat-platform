@@ -57,6 +57,7 @@ PUBLIC_PATHS = {
     "/gmail/import/scheduled",  # Cloud Scheduler (uses secret header)
     "/precompute/refresh/scheduled",  # Cloud Scheduler (uses secret header)
     "/precompute/health",  # Monitoring (uses secret header)
+    "/creatives/cache/refresh/scheduled",  # Cloud Scheduler (uses secret header)
 }
 
 # Path prefixes that are public
