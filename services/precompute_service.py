@@ -48,6 +48,16 @@ def _parse_metric_date(value: Optional[str]) -> Optional[date]:
         return None
 
 
+def _parse_refresh_datetime(value: str) -> datetime | None:
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=UTC)
+    return parsed
+
+
 class PrecomputeService:
     """Orchestrates precompute health checks."""
 
@@ -101,9 +111,8 @@ class PrecomputeService:
                 missing_caches.append(cache_name)
                 continue
 
-            try:
-                refreshed_dt = datetime.fromisoformat(refreshed_at)
-            except ValueError:
+            refreshed_dt = _parse_refresh_datetime(refreshed_at)
+            if refreshed_dt is None:
                 missing_caches.append(cache_name)
                 continue
 

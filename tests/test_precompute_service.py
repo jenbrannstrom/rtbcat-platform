@@ -66,3 +66,25 @@ async def test_health_falls_back_to_legacy_tables_when_views_missing() -> None:
         assert canonical_name in repo.requested_table_names
         assert status.serving_metric_dates[legacy_name] == source_date
         assert status.serving_lag_days[legacy_name] == 0
+
+
+@pytest.mark.asyncio
+async def test_health_accepts_naive_refresh_timestamps_as_utc() -> None:
+    source_date = "2026-02-12"
+    table_dates: dict[str, str | None] = {PrecomputeService.RAW_FACT_TABLE: source_date}
+    for legacy_name, _canonical_name in PrecomputeService.SERVING_TABLE_ALIASES:
+        table_dates[legacy_name] = source_date
+
+    repo = StubPrecomputeRepo(table_dates=table_dates)
+    naive_now = datetime.now(UTC).replace(tzinfo=None).isoformat()
+    repo._refresh_rows = [
+        {"cache_name": cache_name, "refreshed_at": naive_now}
+        for cache_name in PrecomputeService.REQUIRED_CACHES
+    ]
+
+    service = PrecomputeService(repo=repo)
+    status = await service.get_health_status(max_age_hours=48)
+
+    assert status.ok is True
+    assert status.stale_caches == []
+    assert status.missing_caches == []
