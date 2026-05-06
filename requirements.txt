@@ -8,10 +8,10 @@ fastapi==0.135.1
 starlette==0.52.1
 uvicorn[standard]==0.41.0
 pydantic[email]==2.12.5
-python-multipart==0.0.22
-aiohttp==3.13.3
+python-multipart==0.0.26
+aiohttp==3.13.4
 httpx==0.28.1
-requests==2.32.5
+requests==2.33.0
 
 # Google Authorized Buyers + Gmail integrations
 google-api-python-client==2.192.0
@@ -28,7 +28,7 @@ pyarrow==23.0.1
 numpy==2.4.2
 
 # Security and configuration
-cryptography==46.0.5
+cryptography==46.0.7
 bcrypt==5.0.0
 passlib[bcrypt]==1.7.4
 pyyaml==6.0.3
