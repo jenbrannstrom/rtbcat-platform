@@ -7,6 +7,7 @@
 #   IMAGE_REGISTRY  - Container registry (default: build locally)
 #   IMAGE_TAG       - Image version tag (default: latest)
 #   DATA_DIR        - Host path for persistent data (default: ~/.catscan)
+#   CATSCAN_API_KEY - Bearer token for automation/agent API access (optional)
 #   GMAIL_IMPORT_SECRET - Secret for Gmail webhook (optional)
 #   CREATIVE_CACHE_REFRESH_SECRET - Secret for creative cache refresh webhook (optional)
 #   CLOUDSQL_INSTANCE - Required Cloud SQL instance connection name (project:region:instance)

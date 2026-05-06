@@ -113,11 +113,14 @@ scripts/provision_gcp_runtime_config.sh \
   --gmail-oauth-client-file /secure/path/gmail-oauth-client.json \
   --gmail-token-file /secure/path/gmail-token.json \
   --ab-service-account-file /secure/path/catscan-service-account.json \
-  --oauth-client-secret "$OAUTH_CLIENT_SECRET"
+  --oauth-client-secret "$OAUTH_CLIENT_SECRET" \
+  --github-repo jenbrannstrom/rtbcat-platform \
+  --sync-github-canary-secret
 ```
 
 If the scheduler or DB secrets already exist, the script keeps them unless
-`--rotate-scheduler-secrets` or `--rotate-db-password` is passed.
+`--rotate-scheduler-secrets`, `--rotate-api-key`, or `--rotate-db-password` is
+passed.
 
 7. Trigger image build if needed.
 
@@ -144,6 +147,16 @@ curl -sS https://scan.rtb.cat/api/health
 ```
 
 The health payload must show the expected `version` or `git_sha`.
+
+If GSM values are rotated outside a deploy, refresh the VM env and recreate the
+API container:
+
+```bash
+gcloud compute ssh catscan-production-sg \
+  --zone asia-southeast1-b \
+  --tunnel-through-iap \
+  --command "cd /opt/catscan && sudo bash scripts/refresh_gcp_vm_runtime_env.sh --recreate-api"
+```
 
 ## Restore From Cloud SQL Backup
 
@@ -178,6 +191,7 @@ The production secret IDs are:
 - `catscan-gmail-oauth-client`
 - `catscan-gmail-token`
 - `catscan-ab-service-account`
+- `catscan-api-key`
 - `catscan-precompute-refresh-secret`
 - `catscan-precompute-monitor-secret`
 - `catscan-gmail-import-secret`
@@ -208,6 +222,7 @@ Production deploy expects these repository variables:
 GitHub secret:
 
 - `GCP_SA_KEY`
+- `CATSCAN_CANARY_BEARER_TOKEN` mirrors `catscan-api-key` for scheduled runtime guardrails and API automation
 
 ## Recovery Checks
 

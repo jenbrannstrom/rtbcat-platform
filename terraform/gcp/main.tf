@@ -458,6 +458,22 @@ resource "google_secret_manager_secret" "ab_service_account" {
   depends_on = [google_project_service.secretmanager]
 }
 
+resource "google_secret_manager_secret" "api_key" {
+  secret_id = "${var.app_name}-api-key"
+
+  replication {
+    auto {}
+  }
+
+  labels = {
+    app         = var.app_name
+    environment = var.environment
+    type        = "auth"
+  }
+
+  depends_on = [google_project_service.secretmanager]
+}
+
 resource "google_secret_manager_secret" "precompute_refresh_secret" {
   secret_id = "${var.app_name}-precompute-refresh-secret"
 
@@ -569,6 +585,12 @@ resource "google_secret_manager_secret_iam_member" "gmail_token_access" {
 
 resource "google_secret_manager_secret_iam_member" "ab_service_account_access" {
   secret_id = google_secret_manager_secret.ab_service_account.id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.catscan.email}"
+}
+
+resource "google_secret_manager_secret_iam_member" "api_key_access" {
+  secret_id = google_secret_manager_secret.api_key.id
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${google_service_account.catscan.email}"
 }

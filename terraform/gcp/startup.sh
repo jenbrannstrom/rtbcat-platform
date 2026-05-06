@@ -20,6 +20,7 @@ GITHUB_BRANCH="${github_branch}"
 GCS_BUCKET="${gcs_bucket}"
 # Secret values must come from Secret Manager at runtime.
 # Keep startup metadata secret-free to avoid metadata/state exposure.
+CATSCAN_API_KEY=""
 PRECOMPUTE_REFRESH_SECRET=""
 PRECOMPUTE_MONITOR_SECRET=""
 GMAIL_IMPORT_SECRET=""
@@ -271,6 +272,7 @@ _fetch_secret() {
 
 echo ">>> Fetching scheduler + OAuth secrets from Secret Manager..."
 
+CATSCAN_API_KEY=$(_fetch_secret "${app_name}-api-key" "API bearer key")
 PRECOMPUTE_REFRESH_SECRET=$(_fetch_secret "${app_name}-precompute-refresh-secret" "Precompute refresh secret")
 PRECOMPUTE_MONITOR_SECRET=$(_fetch_secret "${app_name}-precompute-monitor-secret" "Precompute monitor secret")
 GMAIL_IMPORT_SECRET=$(_fetch_secret "${app_name}-gmail-import-secret" "Gmail import secret")
@@ -330,6 +332,7 @@ echo ">>> Writing runtime environment variables..."
 CATSCAN_BOOTSTRAP_TOKEN=$(openssl rand -hex 24)
 
 cat > /etc/catscan.env << EOF
+CATSCAN_API_KEY=$CATSCAN_API_KEY
 PRECOMPUTE_REFRESH_SECRET=$PRECOMPUTE_REFRESH_SECRET
 PRECOMPUTE_MONITOR_SECRET=$PRECOMPUTE_MONITOR_SECRET
 GMAIL_IMPORT_SECRET=$GMAIL_IMPORT_SECRET
@@ -377,6 +380,7 @@ ENV_SOURCE="/etc/catscan.env"
     echo "DATA_DIR=$DATA_DIR"
     echo "OAUTH2_PROXY_ENABLED=true"
     echo "UVICORN_WORKERS=2"
+    grep '^CATSCAN_API_KEY=' "$ENV_SOURCE" 2>/dev/null || true
     grep '^POSTGRES_DSN=' "$ENV_SOURCE" 2>/dev/null || true
     grep '^POSTGRES_SERVING_DSN=' "$ENV_SOURCE" 2>/dev/null || true
     grep '^PRECOMPUTE_REFRESH_SECRET=' "$ENV_SOURCE" 2>/dev/null || true
