@@ -229,6 +229,15 @@ jobs:
               fi
               echo '✓ Docker image pull from Artifact Registry succeeded'
 
+              # Refresh VM-local env files from GSM before recreating containers.
+              # GitHub and Terraform define the wiring; GSM remains the runtime
+              # source of truth for secret values.
+              sudo bash scripts/refresh_gcp_vm_runtime_env.sh \
+                --app-name catscan \
+                --app-dir '${{ env.APP_DIR }}' \
+                --no-recreate-api
+              echo '✓ Runtime env refreshed from GSM'
+
               # Start containers with new images
               sudo -E docker compose -f docker-compose.gcp.yml up -d --force-recreate
 

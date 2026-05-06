@@ -36,6 +36,13 @@ SESSION_COOKIE_NAME = "rtbcat_session"
 OAUTH2_PROXY_EMAIL_HEADER = "X-Email"
 OAUTH2_PROXY_USER_HEADER = "X-User"
 
+API_KEY_USER = User(
+    id="api-key-automation",
+    email="api-key@automation.local",
+    display_name="API Key Automation",
+    role="sudo",
+)
+
 # Paths that don't require authentication
 PUBLIC_PATHS = {
     "/health",
@@ -318,7 +325,8 @@ class SessionAuthMiddleware(BaseHTTPMiddleware):
                     parts = auth_header.split()
                     if len(parts) == 2 and parts[0].lower() == "bearer":
                         if secrets.compare_digest(parts[1], api_key):
-                            # API key auth successful - allow without user context
+                            request.state.user = API_KEY_USER
+                            request.state.api_key_authenticated = True
                             return await call_next(request)
 
             return JSONResponse(

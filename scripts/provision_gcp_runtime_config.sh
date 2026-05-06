@@ -20,7 +20,10 @@ GMAIL_TOKEN_FILE=""
 AB_SERVICE_ACCOUNT_FILE=""
 OAUTH_CLIENT_SECRET_VALUE="${OAUTH_CLIENT_SECRET:-}"
 ROTATE_SCHEDULER_SECRETS="false"
+ROTATE_API_KEY="false"
 ROTATE_DB_PASSWORD="false"
+GITHUB_REPO=""
+SYNC_GITHUB_CANARY_SECRET="false"
 GMAIL_SCHEDULE="0 12 * * *"
 PRECOMPUTE_SCHEDULE="30 13 * * *"
 TIME_ZONE="Etc/UTC"
@@ -42,7 +45,10 @@ Optional inputs:
   --gmail-token-file path/to/gmail-token.json
   --ab-service-account-file path/to/catscan-service-account.json
   --oauth-client-secret "$OAUTH_CLIENT_SECRET"
+  --github-repo jenbrannstrom/rtbcat-platform
+  --sync-github-canary-secret
   --rotate-scheduler-secrets
+  --rotate-api-key
   --rotate-db-password
 
 This script does not print secret values.
@@ -62,7 +68,10 @@ while [ "$#" -gt 0 ]; do
     --gmail-token-file) GMAIL_TOKEN_FILE="${2:-}"; shift 2 ;;
     --ab-service-account-file) AB_SERVICE_ACCOUNT_FILE="${2:-}"; shift 2 ;;
     --oauth-client-secret) OAUTH_CLIENT_SECRET_VALUE="${2:-}"; shift 2 ;;
+    --github-repo) GITHUB_REPO="${2:-}"; shift 2 ;;
+    --sync-github-canary-secret) SYNC_GITHUB_CANARY_SECRET="true"; shift ;;
     --rotate-scheduler-secrets) ROTATE_SCHEDULER_SECRETS="true"; shift ;;
+    --rotate-api-key) ROTATE_API_KEY="true"; shift ;;
     --rotate-db-password) ROTATE_DB_PASSWORD="true"; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown argument: $1" >&2; usage >&2; exit 2 ;;
@@ -180,7 +189,7 @@ upsert_http_scheduler() {
       --time-zone="$TIME_ZONE" \
       --uri="$uri" \
       --http-method=POST \
-      --headers="$headers" \
+      --update-headers="$headers" \
       --description="$description" \
       >/dev/null
   else
@@ -204,6 +213,7 @@ for suffix in \
   gmail-oauth-client \
   gmail-token \
   ab-service-account \
+  api-key \
   precompute-refresh-secret \
   precompute-monitor-secret \
   gmail-import-secret \
@@ -226,9 +236,35 @@ elif ! secret_has_latest_version "$(secret_name oauth-client-secret)"; then
 fi
 
 ensure_generated_secret_version "$(secret_name gmail-import-secret)"
+if [ "$ROTATE_API_KEY" = "true" ] || ! secret_has_latest_version "$(secret_name api-key)"; then
+  echo "Adding generated secret version: $(secret_name api-key)"
+  add_secret_string "$(secret_name api-key)" "$(openssl rand -hex 32)"
+else
+  echo "Keeping existing API key secret version"
+fi
 ensure_generated_secret_version "$(secret_name precompute-refresh-secret)"
 ensure_generated_secret_version "$(secret_name precompute-monitor-secret)"
 ensure_generated_secret_version "$(secret_name creative-cache-refresh-secret)"
+
+if [ "$SYNC_GITHUB_CANARY_SECRET" = "true" ]; then
+  if [ -z "$GITHUB_REPO" ]; then
+    echo "--sync-github-canary-secret requires --github-repo owner/repo" >&2
+    exit 2
+  fi
+  if ! command -v gh >/dev/null 2>&1; then
+    echo "--sync-github-canary-secret requires gh CLI" >&2
+    exit 2
+  fi
+  echo "Syncing GitHub Actions CATSCAN_CANARY_BEARER_TOKEN from GSM API key"
+  tmp_api_key="$(mktemp)"
+  chmod 600 "$tmp_api_key"
+  get_secret "$(secret_name api-key)" > "$tmp_api_key"
+  gh secret set CATSCAN_CANARY_BEARER_TOKEN \
+    --repo "$GITHUB_REPO" \
+    < "$tmp_api_key" \
+    >/dev/null
+  rm -f "$tmp_api_key"
+fi
 
 if [ "$ROTATE_DB_PASSWORD" = "true" ] || ! secret_has_latest_version "$(secret_name serving-db-credentials)"; then
   echo "Creating Cloud SQL serving DB credential version"

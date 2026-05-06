@@ -50,7 +50,7 @@ else
     --project="$PROJECT" \
     --location="$LOCATION" \
     --uniform-bucket-level-access \
-    --public-access-prevention=enforced \
+    --pap \
     >/dev/null
 fi
 
@@ -67,5 +67,7 @@ if [ "$RUN_INIT" = "true" ]; then
   terraform -chdir="$ROOT_DIR/terraform/gcp" init \
     -backend-config="bucket=${BUCKET}" \
     -backend-config="prefix=${PREFIX}" \
-    -migrate-state
+    -migrate-state \
+    -force-copy \
+    -input=false
 fi
