@@ -25,6 +25,10 @@ PUBLIC_PATHS = {
     "/auth/providers",
     "/auth/check",
     "/auth/me",
+    "/gmail/import/scheduled",
+    "/precompute/refresh/scheduled",
+    "/precompute/health",
+    "/creatives/cache/refresh/scheduled",
 }
 
 
