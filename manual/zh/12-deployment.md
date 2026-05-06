@@ -30,7 +30,7 @@ deploy.yml（workflow_dispatch）
 部署冲突，导致容器损坏和数据丢失。部署工作流现在需要：
 
 1. 通过 GitHub Actions UI 手动触发（"Run workflow"）
-2. 明确选择目标（staging 或 production）
+2. Explicit production deploy confirmation
 3. 输入 `DEPLOY` 确认
 4. 可选的原因字段用于审计追踪
 
@@ -75,14 +75,9 @@ deploy.yml（workflow_dispatch）
 - `ALLOW_CONTRACT_FAILURE=true`（临时绕过）：部署成功但显示警告。
   此绕过必须在调查后移除。
 
-## Staging vs. 生产
+## Production environment
 
-| 环境 | VM 名称 | 域名 |
-|------|---------|------|
-| Staging | `catscan-vm` | （内部） |
-| 生产 | `catscan-vm` | `your-deployment.example.com` |
-
-先部署到 staging，验证后再部署到生产。
+Staging is retired. Deploy only to production from GitHub Actions.
 
 ## 回滚
 

@@ -1,6 +1,13 @@
 # Secrets Migration Guide (env, GCP, AWS, optional Alibaba)
 
-This guide shows how to migrate Cat-Scan secret handling to the unified secrets manager with startup validation.
+This guide shows how Cat-Scan secret handling works with the unified secrets
+manager and startup validation.
+
+For production rebuilds, use
+[`scripts/provision_gcp_runtime_config.sh`](../scripts/provision_gcp_runtime_config.sh)
+after Terraform has created the GCP resources. That script creates missing GSM
+secret versions, provisions Cloud SQL serving credentials, and applies Cloud
+Scheduler secret headers.
 
 ## 1) Define logical keys
 
@@ -59,12 +66,21 @@ SECRETS_NAME_PREFIX=catscan
 SECRETS_PREFER_ENV=false
 ```
 
-Create secrets (example):
+Create or update production secrets with the recovery script:
 
 ```bash
-echo -n "replace-me" | gcloud secrets create catscan-gmail-import-secret --data-file=-
-echo -n "replace-me" | gcloud secrets create catscan-precompute-refresh-secret --data-file=-
+scripts/provision_gcp_runtime_config.sh \
+  --project catscan-prod-202601 \
+  --domain scan.rtb.cat \
+  --db-instance catscan-production-serving \
+  --gmail-oauth-client-file /secure/path/gmail-oauth-client.json \
+  --gmail-token-file /secure/path/gmail-token.json \
+  --ab-service-account-file /secure/path/catscan-service-account.json \
+  --oauth-client-secret "$OAUTH_CLIENT_SECRET"
 ```
+
+The script does not print secret values. It keeps existing generated scheduler
+and DB secrets unless explicit rotation flags are passed.
 
 ### C) `aws` backend (AWS Secrets Manager)
 

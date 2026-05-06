@@ -199,6 +199,30 @@ resource "google_bigquery_table" "raw_facts" {
 }
 
 # =============================================================================
+# ARTIFACT REGISTRY - Docker Images
+# =============================================================================
+
+resource "google_project_service" "artifactregistry" {
+  service            = "artifactregistry.googleapis.com"
+  disable_on_destroy = false
+}
+
+resource "google_artifact_registry_repository" "docker" {
+  location      = var.gcp_region
+  repository_id = var.artifact_registry_repository_id
+  description   = "Cat-Scan Docker images built from GitHub"
+  format        = "DOCKER"
+
+  labels = {
+    app         = var.app_name
+    environment = var.environment
+    purpose     = "docker-images"
+  }
+
+  depends_on = [google_project_service.artifactregistry]
+}
+
+# =============================================================================
 # IAM - Service Account
 # =============================================================================
 
@@ -354,7 +378,6 @@ resource "google_compute_instance" "catscan" {
   lifecycle {
     create_before_destroy = true
     ignore_changes = [
-      metadata_startup_script,
       metadata,
       boot_disk[0].initialize_params[0].image,
     ]

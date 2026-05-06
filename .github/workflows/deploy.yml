@@ -7,11 +7,10 @@ on:
   workflow_dispatch:  # Manual trigger only - click "Run workflow" in GitHub
     inputs:
       target:
-        description: "Deploy target. Deploy to staging first, verify, then production."
+        description: "Deploy target. Staging is retired; production is the only supported target."
         required: true
         type: choice
         options:
-          - staging
           - production
       confirm:
         description: "Type DEPLOY to confirm this manual deployment."
@@ -34,12 +33,8 @@ on:
         required: false
         type: boolean
         default: true
-      staging_verification_notes:
-        description: "For production promotion: brief note on what was verified on vm2."
-        required: false
-        default: ""
 
-# Prevent concurrent deployments to the same VM
+# Prevent concurrent production deployments
 concurrency:
   group: cd-manual-deploy-${{ github.event.inputs.target }}
   cancel-in-progress: true
@@ -49,14 +44,12 @@ env:
   GCP_REGION: ${{ vars.GCP_REGION }}
   GCP_ZONE: ${{ vars.GCP_ZONE }}
   GCP_VM_PRODUCTION: ${{ vars.GCP_VM_PRODUCTION }}
-  GCP_VM_STAGING: ${{ vars.GCP_VM_STAGING }}
   CLOUDSQL_INSTANCE_NAME: ${{ vars.CLOUDSQL_INSTANCE }}
   CLOUDSQL_CONNECTION_NAME: ${{ vars.CLOUDSQL_CONNECTION_NAME }}
   APP_DIR: ${{ vars.APP_DIR || '/opt/catscan' }}
   GIT_BRANCH: ${{ vars.GIT_BRANCH || 'main' }}
   GIT_REMOTE_URL: ${{ vars.GIT_REMOTE_URL || 'https://github.com/jenbrannstrom/rtbcat-platform.git' }}
   IMAGE_REGISTRY: ${{ vars.IMAGE_REGISTRY }}
-  STAGING_API_BASE_URL: ${{ vars.STAGING_API_BASE_URL || 'https://vm2.scan.rtb.cat/api' }}
   PRODUCTION_API_BASE_URL: ${{ vars.PRODUCTION_API_BASE_URL || 'https://scan.rtb.cat/api' }}
   ALLOW_CONTRACT_FAILURE: ${{ vars.ALLOW_CONTRACT_FAILURE || 'false' }}
   CATSCAN_ENABLE_GMAIL_IMPORT_SCHEDULER: ${{ vars.CATSCAN_ENABLE_GMAIL_IMPORT_SCHEDULER || 'true' }}
@@ -79,7 +72,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for var_name in GCP_PROJECT GCP_REGION GCP_ZONE GCP_VM_PRODUCTION GCP_VM_STAGING IMAGE_REGISTRY CLOUDSQL_INSTANCE_NAME GIT_REMOTE_URL; do
+          if [ "${{ github.event.inputs.target }}" != "production" ]; then
+            echo "Only production deploys are supported. Staging has been retired."
+            exit 1
+          fi
+
+          for var_name in GCP_PROJECT GCP_REGION GCP_ZONE GCP_VM_PRODUCTION IMAGE_REGISTRY CLOUDSQL_INSTANCE_NAME GIT_REMOTE_URL; do
             if [ -z "${!var_name:-}" ]; then
               echo "Missing required repository variable: ${var_name}"
               exit 1
@@ -89,59 +87,13 @@ jobs:
       - name: Set VM name
         id: vm
         run: |
-          if [ "${{ github.event.inputs.target }}" = "production" ]; then
-            echo "name=${{ env.GCP_VM_PRODUCTION }}" >> "$GITHUB_OUTPUT"
-          else
-            echo "name=${{ env.GCP_VM_STAGING }}" >> "$GITHUB_OUTPUT"
-          fi
+          echo "name=${{ env.GCP_VM_PRODUCTION }}" >> "$GITHUB_OUTPUT"
 
       - name: Show deployment intent
         run: |
           echo "Manual deploy approved."
           echo "Target: ${{ github.event.inputs.target }} (${{ steps.vm.outputs.name }})"
           echo "Reason: ${{ github.event.inputs.reason }}"
-
-      - name: Require staging verification before production
-        if: ${{ github.event.inputs.target == 'production' }}
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          if [ -z "${{ github.event.inputs.staging_verification_notes }}" ]; then
-            echo "Production promotion requires staging verification notes."
-            echo "Re-run this workflow and fill in staging_verification_notes with what was tested on vm2."
-            exit 1
-          fi
-
-          EXPECTED_SHORT_SHA="${GITHUB_SHA::7}"
-          STAGING_HEALTH_URL="${{ env.STAGING_API_BASE_URL }}/health"
-
-          echo "Checking staging health at ${STAGING_HEALTH_URL}"
-          RESPONSE="$(curl -fsSL "${STAGING_HEALTH_URL}")"
-          echo "${RESPONSE}"
-
-          python3 - "${RESPONSE}" "${EXPECTED_SHORT_SHA}" <<'PY'
-          import json
-          import sys
-
-          payload = json.loads(sys.argv[1])
-          expected = sys.argv[2].lower()
-          status = str(payload.get("status") or "")
-          version = str(payload.get("version") or "")
-          git_sha = str(payload.get("git_sha") or "").lower()
-
-          if status != "healthy":
-              raise SystemExit("Staging is not healthy")
-
-          if not (version == f"sha-{expected}" or git_sha.startswith(expected)):
-              current = version or git_sha or "unknown"
-              raise SystemExit(
-                  f"Staging is running {current}, expected sha-{expected}"
-              )
-          PY
-
-          echo "Verified staging is healthy on sha-${EXPECTED_SHORT_SHA}"
-          echo "Verification notes: ${{ github.event.inputs.staging_verification_notes }}"
 
       - name: Checkout code
         uses: actions/checkout@v4
@@ -358,12 +310,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [ "${{ github.event.inputs.target }}" = "staging" ]; then
-            echo "Staging deploy complete on ${{ env.STAGING_API_BASE_URL }}."
-            echo "Next step: verify the change on vm2, then run this workflow again with target=production."
-          else
-            echo "Production promotion complete on ${{ env.PRODUCTION_API_BASE_URL }}."
-          fi
+          echo "Production deploy complete on ${{ env.PRODUCTION_API_BASE_URL }}."
 
       - name: Post-deploy contract check
         if: ${{ github.event.inputs.run_contract_check != 'false' }}

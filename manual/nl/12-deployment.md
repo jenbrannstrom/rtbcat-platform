@@ -29,7 +29,7 @@ deploy.yml (workflow_dispatch)
 Automatische deployment bij een push is uitgeschakeld na een incident in januari 2026, waarbij automatische deploys conflicteerden met handmatige SSH-deploys. Dit leidde tot corrupte containers en dataverlies. De deploy-workflow vereist nu:
 
 1. Handmatige trigger via de GitHub Actions UI ("Run workflow")
-2. Expliciete selectie van het doelomgeving (staging of productie)
+2. Explicit production deploy confirmation
 3. Het invoeren van `DEPLOY` als bevestiging
 4. Een optioneel redenveld voor de audittrail
 
@@ -71,14 +71,9 @@ Na de deployment voert de workflow `scripts/contracts_check.py` uit binnen de AP
 - Met `ALLOW_CONTRACT_FAILURE=false` (standaard): de deploy wordt als mislukt gemarkeerd.
 - Met `ALLOW_CONTRACT_FAILURE=true` (tijdelijke bypass): de deploy slaagt met een waarschuwing. Deze bypass moet na onderzoek worden verwijderd.
 
-## Staging vs. productie
+## Production environment
 
-| Omgeving | VM-naam | Domein |
-|----------|---------|--------|
-| Staging | `catscan-vm` | (intern) |
-| Productie | `catscan-vm` | `your-deployment.example.com` |
-
-Deploy eerst naar staging, verifieer, en deploy dan naar productie.
+Staging is retired. Deploy only to production from GitHub Actions.
 
 ## Rollback
 

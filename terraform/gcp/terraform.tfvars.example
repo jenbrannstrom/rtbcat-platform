@@ -14,9 +14,9 @@ gcp_zone   = "asia-southeast1-b"
 app_name    = "catscan"
 environment = "production"
 
-# VM size (e2-medium is good for moderate load)
+# VM size
 machine_type   = "e2-medium"
-boot_disk_size = 30
+boot_disk_size = 80
 
 # Domain name (required for HTTPS)
 domain_name  = "scan.example.com"
@@ -31,11 +31,6 @@ allowed_ssh_cidrs = []
 github_repo   = "https://github.com/YOUR_ORG/rtbcat-platform.git"
 github_branch = "main"
 
-# Optional: Cloudflare DNS management
-# Leave empty if managing DNS manually
-cloudflare_api_token = ""
-cloudflare_zone_id   = ""
-
 # =============================================================================
 # REQUIRED: Google OAuth Authentication
 # =============================================================================
@@ -48,10 +43,10 @@ cloudflare_zone_id   = ""
 # 3. Application type: "Web application"
 # 4. Name: "Cat-Scan"
 # 5. Authorized redirect URIs: https://YOUR_DOMAIN/oauth2/callback
-# 6. Copy the Client ID and Client Secret below
+# 6. Copy the Client ID below
+# 7. Store the Client Secret in GSM with scripts/provision_gcp_runtime_config.sh
 
 google_oauth_client_id     = "123456789-xxxxxxxxxx.apps.googleusercontent.com"
-google_oauth_client_secret = "GOCSPX-xxxxxxxxxx"
 
 # Restrict access to specific email domains (recommended)
 # Example: ["company.com", "partner.org"]
@@ -75,6 +70,12 @@ bigquery_location           = "asia-southeast1"
 bigquery_raw_facts_table_id = "raw_facts"
 
 # =============================================================================
+# Artifact Registry
+# =============================================================================
+
+artifact_registry_repository_id = "catscan"
+
+# =============================================================================
 # Cloud SQL (Postgres)
 # =============================================================================
 
@@ -94,19 +95,3 @@ precompute_refresh_days = 2
 
 # How many hours before data is considered stale
 precompute_refresh_max_age_hours = 36
-
-# Daily schedule for precompute refresh (UTC)
-precompute_refresh_schedule = "0 3 * * *"
-
-# Daily schedule for creative cache refresh (UTC)
-creative_cache_refresh_schedule = "10 3 * * *"
-
-# =============================================================================
-# Data Retention (GCS Parquet + BigQuery partitions)
-# =============================================================================
-
-# Retention days for parquet exports stored in GCS
-parquet_retention_days = 90
-
-# Retention period for BigQuery partitions (days)
-bigquery_partition_retention_days = 90

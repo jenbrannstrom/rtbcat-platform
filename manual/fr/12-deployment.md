@@ -32,7 +32,7 @@ en conflit avec des déploiements manuels via SSH, corrompant les conteneurs et
 provoquant des pertes de données. Le workflow de déploiement exige désormais :
 
 1. Un déclenchement manuel via l'interface GitHub Actions (« Run workflow »)
-2. La sélection explicite de la cible (staging ou production)
+2. Explicit production deploy confirmation
 3. La saisie de `DEPLOY` comme confirmation
 4. Un champ optionnel de motif pour la traçabilité
 
@@ -82,14 +82,9 @@ En cas d'échec de la vérification :
   déploiement réussit avec un avertissement. Ce contournement doit être retiré
   après investigation.
 
-## Staging vs. production
+## Production environment
 
-| Environnement | Nom de la VM | Domaine |
-|----------------|--------------|---------|
-| Staging | `catscan-vm` | (interne) |
-| Production | `catscan-vm` | `your-deployment.example.com` |
-
-Déployez d'abord sur le staging, vérifiez, puis déployez en production.
+Staging is retired. Deploy only to production from GitHub Actions.
 
 ## Retour en arrière
 

@@ -50,6 +50,16 @@ output "bigquery_raw_facts_table" {
   value       = google_bigquery_table.raw_facts.table_id
 }
 
+output "artifact_registry_repository" {
+  description = "Artifact Registry Docker repository name"
+  value       = google_artifact_registry_repository.docker.name
+}
+
+output "artifact_registry_image_prefix" {
+  description = "Image prefix for GitHub Actions IMAGE_REGISTRY"
+  value       = "${var.gcp_region}-docker.pkg.dev/${var.gcp_project}/${google_artifact_registry_repository.docker.repository_id}"
+}
+
 output "cloudsql_instance_connection_name" {
   description = "Cloud SQL instance connection name"
   value       = google_sql_database_instance.rtbcat_serving.connection_name

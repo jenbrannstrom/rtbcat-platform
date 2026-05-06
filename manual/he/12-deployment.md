@@ -29,7 +29,7 @@ deploy.yml (workflow_dispatch)
 פריסה אוטומטית בעת push בוטלה לאחר תקרית בינואר 2026, שבה פריסות אוטומטיות התנגשו עם פריסות ידניות דרך SSH, מה שגרם לפגיעה בקונטיינרים ולאובדן נתונים. תהליך הפריסה דורש כעת:
 
 1. הפעלה ידנית דרך ממשק GitHub Actions ("Run workflow")
-2. בחירה מפורשת של סביבת יעד (staging או production)
+2. Explicit production deploy confirmation
 3. הקלדת `DEPLOY` כאישור
 4. שדה אופציונלי לסיבה לצורך מעקב ביקורת
 
@@ -71,14 +71,9 @@ deploy.yml (workflow_dispatch)
 - כאשר `ALLOW_CONTRACT_FAILURE=false` (ברירת מחדל): הפריסה מסומנת ככישלון.
 - כאשר `ALLOW_CONTRACT_FAILURE=true` (עקיפה זמנית): הפריסה מצליחה עם אזהרה. עקיפה זו חייבת להיות מוסרת לאחר בירור.
 
-## Staging מול production
+## Production environment
 
-| סביבה | שם VM | דומיין |
-|--------|-------|--------|
-| Staging | `catscan-vm` | (פנימי) |
-| Production | `catscan-vm` | `your-deployment.example.com` |
-
-פרסו תחילה ל-staging, אמתו, ואז פרסו ל-production.
+Staging is retired. Deploy only to production from GitHub Actions.
 
 ## שחזור לגרסה קודמת
 

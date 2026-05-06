@@ -29,7 +29,7 @@ deploy.yml (workflow_dispatch)
 Автоматичне розгортання при push було вимкнено після інциденту в січні 2026 року, коли автоматичні розгортання конфліктували з ручними SSH-розгортаннями, пошкоджуючи контейнери та спричиняючи втрату даних. Робочий процес розгортання тепер вимагає:
 
 1. Ручного запуску через інтерфейс GitHub Actions ("Run workflow")
-2. Явного вибору цільового середовища (staging або production)
+2. Explicit production deploy confirmation
 3. Введення `DEPLOY` як підтвердження
 4. Необов'язкового поля причини для журналу аудиту
 
@@ -71,14 +71,9 @@ deploy.yml (workflow_dispatch)
 - З `ALLOW_CONTRACT_FAILURE=false` (за замовчуванням): розгортання позначається як невдале.
 - З `ALLOW_CONTRACT_FAILURE=true` (тимчасовий обхід): розгортання завершується успішно з попередженням. Цей обхід необхідно видалити після розслідування.
 
-## Staging та production
+## Production environment
 
-| Середовище | Назва VM | Домен |
-|------------|----------|-------|
-| Staging | `catscan-vm` | (внутрішній) |
-| Production | `catscan-vm` | `your-deployment.example.com` |
-
-Спершу розгортайте на staging, перевірте, а потім розгортайте на production.
+Staging is retired. Deploy only to production from GitHub Actions.
 
 ## Відкат
 
