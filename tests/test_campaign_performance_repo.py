@@ -95,3 +95,27 @@ async def test_find_existing_campaign_for_creatives_ignores_empty_requests(monke
     result = await CampaignRepository().find_existing_campaign_for_creatives([])
 
     assert result is None
+
+
+@pytest.mark.asyncio
+async def test_assign_creatives_batch_uses_single_bulk_statement(monkeypatch) -> None:
+    calls = []
+
+    async def fake_execute(sql: str, params: tuple):
+        calls.append((sql, params))
+        return 2
+
+    monkeypatch.setattr(campaign_repo, "pg_execute", fake_execute)
+
+    result = await CampaignRepository().assign_creatives_batch(
+        ["creative-1", "creative-2", "creative-1"],
+        "campaign-1",
+        assigned_by="user",
+        manually_assigned=True,
+    )
+
+    assert result == 2
+    assert len(calls) == 1
+    sql, params = calls[0]
+    assert "unnest(%s::text[])" in sql
+    assert params == (["creative-1", "creative-2"], "campaign-1", True, "user")

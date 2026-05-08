@@ -66,6 +66,9 @@ export interface Creative {
   language_source: string | null;
   language_analyzed_at: string | null;
   language_analysis_error: string | null;
+  first_seen_at?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
   market_alert?: CreativeMarketAlert | null;
   // Approval details
   is_disapproved?: boolean;

@@ -45,7 +45,7 @@ export function PreviewModal({
   onCreativeUpdate,
   onClose,
 }: PreviewModalProps) {
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
   const [creative, setCreative] = useState<Creative>(initialCreative);
   const [isLoadingFull, setIsLoadingFull] = useState(false);
   const [isLoadingDestinationDiagnostics, setIsLoadingDestinationDiagnostics] = useState(false);
@@ -199,6 +199,20 @@ export function PreviewModal({
   const isStaleCache = effectiveSource === "cache" && !!creative.data_source?.is_stale;
   const staleHours = creative.data_source?.stale_age_hours;
   const staleThreshold = creative.data_source?.stale_threshold_hours;
+  const cachedRowCreatedAt = creative.first_seen_at || creative.created_at;
+
+  const formatTimestamp = (value?: string | null): string => {
+    if (!value) return t.common.none;
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return value;
+    return new Intl.DateTimeFormat(language, {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(date);
+  };
 
   const formatApprovalStatus = (status?: string | null): string => {
     if (!status) return t.common.none;
@@ -493,6 +507,12 @@ export function PreviewModal({
                       {creative.width && creative.height && ` (${creative.width}×${creative.height})`}
                     </span>
                   </div>
+                  {cachedRowCreatedAt && (
+                    <div className="flex justify-between gap-3">
+                      <span className="text-gray-500">{t.previewModal.cachedRowCreated}</span>
+                      <span className="text-right text-xs text-gray-700">{formatTimestamp(cachedRowCreatedAt)}</span>
+                    </div>
+                  )}
                   {rejectionReason && (
                     <div className="flex justify-between">
                       <span className="text-gray-500">{t.previewModal.rejection}</span>

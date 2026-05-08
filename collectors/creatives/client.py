@@ -6,6 +6,7 @@ creative data from the Google Authorized Buyers Real-Time Bidding API.
 
 import logging
 from typing import AsyncIterator, Optional
+from urllib.parse import quote
 
 from googleapiclient.errors import HttpError
 
@@ -181,7 +182,8 @@ class CreativesClient(BaseAuthorizedBuyersClient):
             if creative and not creative.get("disapprovalReasons"):
                 effective_buyer = buyer_id or self.account_id
                 try:
-                    name = f"buyers/{effective_buyer}/creatives/{creative_id}"
+                    encoded_creative_id = quote(creative_id, safe="")
+                    name = f"buyers/{effective_buyer}/creatives/{encoded_creative_id}"
                     sd_params = {"name": name, "view": "SERVING_DECISION_ONLY"}
                     sd_response = await self._execute_with_retry(
                         lambda p=sd_params: service.buyers().creatives().get(**p)
@@ -194,8 +196,8 @@ class CreativesClient(BaseAuthorizedBuyersClient):
                             creative["approvalStatus"] = sd_parsed.get("approvalStatus") or creative.get("approvalStatus")
                             creative["disapprovalReasons"] = sd_parsed.get("disapprovalReasons") or creative.get("disapprovalReasons")
                             creative["servingRestrictions"] = sd_parsed.get("servingRestrictions") or creative.get("servingRestrictions")
-                except HttpError:
-                    pass  # buyers endpoint may 404 for bidder-level creatives
+                except (HttpError, TypeError):
+                    pass  # buyers endpoint may 404 or reject unusual IDs.
 
             return creative
 

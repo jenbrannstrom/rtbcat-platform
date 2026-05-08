@@ -10,6 +10,7 @@ from collectors import CreativesClient
 from config import ConfigManager
 from services.seats_service import SeatsService, is_gcp_mode
 from storage.adapters import creative_dict_to_storage
+from storage.models import Creative
 from storage.postgres_database import pg_query
 from storage.postgres_store import PostgresStore
 
@@ -95,12 +96,23 @@ class CreativeCacheService:
 
         rows = await pg_query(
             """
-            SELECT pm.creative_id
-            FROM performance_metrics pm
-            WHERE pm.metric_date >= CURRENT_DATE - (%s::int * INTERVAL '1 day')
-              AND (pm.impressions > 0 OR pm.spend_micros > 0 OR pm.clicks > 0)
-            GROUP BY pm.creative_id
-            ORDER BY SUM(pm.impressions) DESC, SUM(pm.spend_micros) DESC
+            SELECT
+                rd.creative_id,
+                rd.buyer_account_id AS buyer_id,
+                SUM(COALESCE(rd.impressions, 0)) AS total_impressions,
+                SUM(COALESCE(rd.spend_micros, 0)) AS total_spend_micros
+            FROM rtb_daily rd
+            WHERE rd.metric_date >= CURRENT_DATE - (%s::int * INTERVAL '1 day')
+              AND NULLIF(rd.creative_id, '') IS NOT NULL
+              AND NULLIF(rd.buyer_account_id, '') IS NOT NULL
+              AND (
+                  COALESCE(rd.impressions, 0) > 0
+                  OR COALESCE(rd.spend_micros, 0) > 0
+                  OR COALESCE(rd.clicks, 0) > 0
+              )
+            GROUP BY rd.creative_id, rd.buyer_account_id
+            ORDER BY SUM(COALESCE(rd.impressions, 0)) DESC,
+                     SUM(COALESCE(rd.spend_micros, 0)) DESC
             LIMIT %s
             """,
             (days, limit),
@@ -108,9 +120,26 @@ class CreativeCacheService:
         creative_ids = [r["creative_id"] for r in rows if r.get("creative_id")]
         result.scanned = len(creative_ids)
 
-        for creative_id in creative_ids:
+        for row in rows:
+            creative_id = row.get("creative_id")
+            buyer_id = row.get("buyer_id")
+            if not creative_id or not buyer_id:
+                result.skipped += 1
+                continue
+
             creative = await self._store.get_creative(creative_id)
-            if not creative or not creative.buyer_id:
+            if not creative:
+                creative = Creative(
+                    id=creative_id,
+                    name=creative_id,
+                    format="UNKNOWN",
+                    account_id=buyer_id,
+                    buyer_id=buyer_id,
+                )
+            elif not creative.buyer_id:
+                creative.buyer_id = buyer_id
+
+            if not creative.buyer_id:
                 result.skipped += 1
                 continue
 

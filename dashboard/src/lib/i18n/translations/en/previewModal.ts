@@ -30,6 +30,7 @@ const value: Translations['previewModal'] = {
     creativeDetails: 'Creative Details',
     status: 'Status',
     format: 'Format',
+    cachedRowCreated: 'Cached Row Created',
     rejection: 'Rejection',
     disapprovalReasons: 'Disapproval Reasons',
     readMore: 'Read more',
