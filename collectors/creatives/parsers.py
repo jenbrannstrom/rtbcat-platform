@@ -8,7 +8,7 @@ side effects or API calls.
 import logging
 from datetime import datetime, timezone
 from typing import Any, Optional
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 from collectors.creatives.schemas import (
     ApprovalStatus,
@@ -305,7 +305,12 @@ def parse_creative_response(
     # Extract resource name components
     name = creative_data.get("name", "")
     parts = name.split("/")
-    creative_id = parts[-1] if len(parts) >= 4 else ""
+    if creative_data.get("creativeId"):
+        creative_id = unquote(str(creative_data["creativeId"]))
+    elif "/creatives/" in name:
+        creative_id = unquote(name.split("/creatives/", 1)[1])
+    else:
+        creative_id = unquote(parts[-1]) if len(parts) >= 4 else ""
     account_id = parts[1] if len(parts) >= 2 else default_account_id
 
     # Determine format and get destination URL

@@ -1965,6 +1965,7 @@ export interface Translations {
     creativeDetails: string;
     status: string;
     format: string;
+    cachedRowCreated: string;
     rejection: string;
     disapprovalReasons: string;
     readMore: string;

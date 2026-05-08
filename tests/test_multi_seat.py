@@ -353,6 +353,19 @@ class TestCreativeParserBuyerId:
         result = parse_creative_response(data, "123")
         assert result["buyerId"] is None
 
+    def test_parse_creative_decodes_resource_name_creative_id(self):
+        """Creative IDs from resource names may contain encoded path characters."""
+        from collectors.creatives.parsers import parse_creative_response
+
+        data = {
+            "name": "buyers/6574658621/creatives/LiKriOR6b%2Babc%2F4mo",
+            "html": {"snippet": "<div></div>", "width": 300, "height": 250},
+        }
+
+        result = parse_creative_response(data, "123", buyer_id="6574658621")
+
+        assert result["creativeId"] == "LiKriOR6b+abc/4mo"
+
 
 class TestStorageAdapter:
     """Tests for storage adapter with buyer_id."""

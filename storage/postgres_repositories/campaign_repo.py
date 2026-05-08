@@ -398,23 +398,30 @@ class CampaignRepository:
         manually_assigned: bool = False,
     ) -> int:
         """Batch assign multiple creatives to a campaign. Returns count."""
-        count = 0
-        for creative_id in creative_ids:
-            await pg_execute(
-                """
-                INSERT INTO creative_campaigns
-                (creative_id, campaign_id, manually_assigned, assigned_at, assigned_by)
-                VALUES (%s, %s, %s, CURRENT_TIMESTAMP, %s)
-                ON CONFLICT (creative_id) DO UPDATE SET
-                    campaign_id = EXCLUDED.campaign_id,
-                    manually_assigned = EXCLUDED.manually_assigned,
-                    assigned_at = EXCLUDED.assigned_at,
-                    assigned_by = EXCLUDED.assigned_by
-                """,
-                (creative_id, campaign_id, manually_assigned, assigned_by),
+        unique_ids = list(dict.fromkeys(cid for cid in creative_ids if cid))
+        if not unique_ids:
+            return 0
+
+        rowcount = await pg_execute(
+            """
+            WITH incoming AS (
+                SELECT DISTINCT creative_id
+                FROM unnest(%s::text[]) AS ids(creative_id)
+                WHERE creative_id IS NOT NULL AND creative_id <> ''
             )
-            count += 1
-        return count
+            INSERT INTO creative_campaigns
+            (creative_id, campaign_id, manually_assigned, assigned_at, assigned_by)
+            SELECT creative_id, %s, %s, CURRENT_TIMESTAMP, %s
+            FROM incoming
+            ON CONFLICT (creative_id) DO UPDATE SET
+                campaign_id = EXCLUDED.campaign_id,
+                manually_assigned = EXCLUDED.manually_assigned,
+                assigned_at = EXCLUDED.assigned_at,
+                assigned_by = EXCLUDED.assigned_by
+            """,
+            (unique_ids, campaign_id, manually_assigned, assigned_by),
+        )
+        return rowcount if rowcount >= 0 else len(unique_ids)
 
     async def remove_creative_from_campaign(self, creative_id: str) -> bool:
         """Remove a creative from its campaign. Returns True if removed."""

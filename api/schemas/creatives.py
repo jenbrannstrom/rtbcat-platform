@@ -75,6 +75,10 @@ class CreativeResponse(BaseModel):
     language_source: Optional[str] = None
     language_analyzed_at: Optional[str] = None
     language_analysis_error: Optional[str] = None
+    # Existing cached-row timestamps
+    first_seen_at: Optional[str] = None
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
     market_alert: Optional[CreativeMarketAlert] = None
     # Live/cache preview source metadata
     data_source: Optional[CreativeDataSource] = None

@@ -154,6 +154,9 @@ def build_creative_response(
         language_source=creative.language_source,
         language_analyzed_at=creative.language_analyzed_at.isoformat() if creative.language_analyzed_at else None,
         language_analysis_error=creative.language_analysis_error,
+        first_seen_at=_iso(getattr(creative, "first_seen_at", None)),
+        created_at=_iso(getattr(creative, "created_at", None)),
+        updated_at=_iso(getattr(creative, "updated_at", None)),
         market_alert=ctx.market_alerts.get(creative_id),
         data_source=build_data_source(
             source=source,
