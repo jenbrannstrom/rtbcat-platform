@@ -62,6 +62,30 @@ async def test_get_campaign_performance_returns_zero_shape(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
+async def test_list_campaigns_filters_to_buyer_creative_membership(monkeypatch) -> None:
+    calls = []
+
+    async def fake_query(sql: str, params: tuple):
+        calls.append((sql, params))
+        return []
+
+    monkeypatch.setattr(campaign_repo, "pg_query", fake_query)
+
+    await CampaignRepository().list_campaigns(
+        status="active",
+        buyer_id="buyer-1",
+        limit=25,
+        offset=5,
+    )
+
+    sql, params = calls[0]
+    assert "EXISTS" in sql
+    assert "JOIN creatives cr ON cr.id = cc.creative_id" in sql
+    assert "AND cr.buyer_id = %s" in sql
+    assert params == ("active", "buyer-1", 25, 5)
+
+
+@pytest.mark.asyncio
 async def test_find_existing_campaign_for_creatives_matches_single_destination_identity(monkeypatch) -> None:
     calls = []
 

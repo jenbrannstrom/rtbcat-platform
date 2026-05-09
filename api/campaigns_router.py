@@ -760,7 +760,11 @@ async def list_campaigns(
         days = {"1d": 1, "7d": 7, "30d": 30, "all": 365}.get(period, 7)
         svc = get_campaigns_service()
 
-        campaigns = await svc.list_campaigns(seat_id=seat_id, status=status)
+        campaigns = await svc.list_campaigns(
+            seat_id=seat_id,
+            status=status,
+            buyer_id=buyer_id,
+        )
 
         result = []
         for campaign in campaigns:
@@ -779,7 +783,7 @@ async def list_campaigns(
                 "ai_confidence": campaign.ai_confidence,
                 "clustering_method": campaign.clustering_method,
                 "status": campaign.status,
-                "creative_count": campaign.creative_count,
+                "creative_count": len(creative_ids),
                 "creative_ids": creative_ids,
                 "performance": None,
                 "country_breakdown": None,

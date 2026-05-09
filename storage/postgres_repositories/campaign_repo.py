@@ -295,6 +295,7 @@ class CampaignRepository:
         status: Optional[str] = None,
         limit: int = 100,
         offset: int = 0,
+        buyer_id: Optional[str] = None,
     ) -> list[dict[str, Any]]:
         """List campaigns with optional filtering."""
         conditions = []
@@ -306,6 +307,19 @@ class CampaignRepository:
         if status:
             conditions.append("c.status = %s")
             params.append(status)
+        if buyer_id:
+            conditions.append(
+                """
+                EXISTS (
+                    SELECT 1
+                    FROM creative_campaigns cc
+                    JOIN creatives cr ON cr.id = cc.creative_id
+                    WHERE cc.campaign_id = c.id
+                      AND cr.buyer_id = %s
+                )
+                """
+            )
+            params.append(buyer_id)
 
         where_clause = " AND ".join(conditions) if conditions else "TRUE"
         params.extend([limit, offset])
