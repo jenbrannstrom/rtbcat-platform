@@ -14,8 +14,8 @@ class DummyCampaignRepo:
     def __init__(self) -> None:
         self.calls = []
 
-    async def list_campaigns(self, seat_id=None, status=None, limit=100, offset=0):
-        self.calls.append(("list_campaigns", seat_id, status, limit, offset))
+    async def list_campaigns(self, seat_id=None, status=None, limit=100, offset=0, buyer_id=None):
+        self.calls.append(("list_campaigns", seat_id, status, limit, offset, buyer_id))
         return [
             {
                 "id": "camp-1",
@@ -38,7 +38,13 @@ async def test_campaigns_service_list_campaigns_maps_rows():
     repo = DummyCampaignRepo()
     svc = CampaignsService(repo=repo)
 
-    result = await svc.list_campaigns(seat_id=123, status="active", limit=10, offset=5)
+    result = await svc.list_campaigns(
+        seat_id=123,
+        status="active",
+        limit=10,
+        offset=5,
+        buyer_id="buyer-1",
+    )
 
     assert len(result) == 1
     campaign = result[0]
@@ -46,7 +52,7 @@ async def test_campaigns_service_list_campaigns_maps_rows():
     assert campaign.seat_id == 123
     assert campaign.status == "active"
     assert campaign.creative_count == 2
-    assert repo.calls == [("list_campaigns", 123, "active", 10, 5)]
+    assert repo.calls == [("list_campaigns", 123, "active", 10, 5, "buyer-1")]
 
 
 class DummyTrafficRepo:

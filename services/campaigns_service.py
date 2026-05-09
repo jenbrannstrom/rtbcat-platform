@@ -74,10 +74,15 @@ class CampaignsService:
         status: Optional[str] = None,
         limit: int = 100,
         offset: int = 0,
+        buyer_id: Optional[str] = None,
     ) -> list[AICampaign]:
         """List campaigns with optional filtering."""
         rows = await self._repo.list_campaigns(
-            seat_id=seat_id, status=status, limit=limit, offset=offset
+            seat_id=seat_id,
+            status=status,
+            limit=limit,
+            offset=offset,
+            buyer_id=buyer_id,
         )
         return [self._row_to_campaign(r) for r in rows]
 

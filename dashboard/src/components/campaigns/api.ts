@@ -5,7 +5,7 @@
 import type { Campaign, CampaignCreative, AutoClusterResponse } from './types';
 
 export async function fetchCampaigns(buyerId?: string | null): Promise<Campaign[]> {
-  const params = new URLSearchParams();
+  const params = new URLSearchParams({ include_performance: 'false' });
   if (buyerId) params.set('buyer_id', buyerId);
   const query = params.toString();
   const res = await fetch(`/api/campaigns${query ? `?${query}` : ''}`);
