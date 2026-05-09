@@ -81,6 +81,7 @@ async def test_find_existing_campaign_for_creatives_matches_single_destination_i
     assert "single_identity.identified_count = single_identity.total_count" in sql
     assert "single_identity.buyer_count = 1" in sql
     assert "display:" in sql
+    assert sql.count("%s::text IS NULL") == 2
     assert params == (["creative-1", "creative-2"], "buyer-1", "buyer-1", "buyer-1", "buyer-1")
     assert result == "existing-campaign"
 

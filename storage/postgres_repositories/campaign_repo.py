@@ -225,7 +225,7 @@ class CampaignRepository:
                     END AS cluster_identity
                 FROM creatives
                 WHERE id = ANY(%s)
-                  AND (%s IS NULL OR buyer_id = %s)
+                  AND (%s::text IS NULL OR buyer_id = %s)
             ),
             single_identity AS (
                 SELECT
@@ -258,7 +258,7 @@ class CampaignRepository:
                 JOIN creative_campaigns cc ON cc.campaign_id = ac.id
                 JOIN creatives c ON c.id = cc.creative_id
                 WHERE ac.status = 'active'
-                  AND (%s IS NULL OR c.buyer_id = %s)
+                  AND (%s::text IS NULL OR c.buyer_id = %s)
             )
             SELECT candidate_creatives.campaign_id
             FROM candidate_creatives
