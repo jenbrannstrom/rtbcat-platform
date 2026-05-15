@@ -23,8 +23,9 @@ class _StubRepo:
         creative_ids: list[str],
         days: int = 30,
         buyer_id_filter: str | None = None,
+        prefer_clicks: bool = False,
     ) -> dict[str, dict]:
-        del creative_ids, days
+        del creative_ids, days, prefer_clicks
         self.last_buyer_id_filter = buyer_id_filter
         return self.summaries
 
@@ -145,6 +146,18 @@ async def test_batch_performance_applies_buyer_scope_to_repo_and_fallback(
         "get_allowed_buyer_ids",
         AsyncMock(return_value=["buyer-1", "buyer-2"]),
     )
+    monkeypatch.setattr(
+        performance_router,
+        "resolve_buyer_id",
+        AsyncMock(return_value="buyer-1"),
+    )
+    monkeypatch.setattr(
+        performance_router,
+        "PerformanceService",
+        lambda: SimpleNamespace(
+            get_creative_buyer_ids=AsyncMock(return_value=[{"buyer_id": "buyer-1"}])
+        ),
+    )
     monkeypatch.setattr(performance_router, "_get_creative_perf_repo", lambda: repo)
 
     payload = await performance_router.get_batch_performance(
@@ -154,7 +167,7 @@ async def test_batch_performance_applies_buyer_scope_to_repo_and_fallback(
             buyer_id="buyer-1",
         ),
         store=store,
-        user=SimpleNamespace(id="user-1"),
+        user=SimpleNamespace(id="user-1", role="user"),
     )
 
     assert repo.last_buyer_id_filter == "buyer-1"

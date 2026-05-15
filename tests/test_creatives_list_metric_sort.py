@@ -42,6 +42,8 @@ async def test_metric_sort_query_keeps_filters_and_uses_left_join() -> None:
     assert [creative.id for creative in creatives] == ["creative-zero"]
     sql, params = mock_query.call_args[0]
     assert "WITH perf AS" in sql
+    assert "FROM config_creative_daily d" in sql
+    assert "FROM rtb_daily d" not in sql
     assert "LEFT JOIN perf p ON p.creative_id = c.id" in sql
     assert "c.format = %s" in sql
     assert "c.campaign_id = %s" in sql
@@ -70,3 +72,22 @@ async def test_metric_sort_query_supports_not_approved_filter() -> None:
 
     sql, _params = mock_query.call_args[0]
     assert "(c.approval_status IS NULL OR c.approval_status != 'APPROVED')" in sql
+    assert "FROM config_creative_daily d" in sql
+
+
+@pytest.mark.asyncio
+async def test_click_metric_sort_uses_raw_click_source() -> None:
+    with patch(
+        "storage.postgres_store.pg_query",
+        new_callable=AsyncMock,
+        return_value=[],
+    ) as mock_query:
+        store = PostgresStore()
+        await store.list_creatives(
+            buyer_id="buyer-1",
+            sort_by="clicks",
+            sort_days=7,
+        )
+
+    sql, _params = mock_query.call_args[0]
+    assert "FROM rtb_daily d" in sql

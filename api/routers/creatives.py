@@ -155,15 +155,15 @@ async def _get_serving_country_map(
     rows = await pg_query(
         """
         SELECT creative_id,
-               country AS country_code,
+               geography AS country_code,
                COALESCE(SUM(spend_micros), 0) AS spend_micros
-        FROM rtb_daily
+        FROM performance_metrics
         WHERE creative_id = ANY(%s)
-          AND country IS NOT NULL
-          AND country != ''
+          AND geography IS NOT NULL
+          AND geography != ''
           AND metric_date >= CURRENT_DATE - make_interval(days => %s)
-        GROUP BY creative_id, country
-        ORDER BY creative_id, spend_micros DESC, country
+        GROUP BY creative_id, geography
+        ORDER BY creative_id, spend_micros DESC, geography
         """,
         (creative_ids, days),
     )

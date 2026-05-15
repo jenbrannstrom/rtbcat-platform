@@ -259,10 +259,13 @@ async def get_creative_performance(
             if allowed is not None and buyer_id not in allowed:
                 raise HTTPException(status_code=403, detail="You don't have access to this buyer account.")
 
-        # Primary path: rtb_daily (click-capable, buyer-scoped)
+        # Single-creative detail may use the raw click-capable path.
         repo = _get_creative_perf_repo()
         summaries = await repo.get_creative_summaries(
-            [creative_id], days=days, buyer_id_filter=buyer_id,
+            [creative_id],
+            days=days,
+            buyer_id_filter=buyer_id,
+            prefer_clicks=True,
         )
 
         if creative_id in summaries:
@@ -743,9 +746,9 @@ async def get_batch_performance(
 ) -> BatchPerformanceResponse:
     """Get performance summaries for multiple creatives in a single request.
 
-    Uses click-capable creative summaries in a single batch query and preserves
-    source metadata so the UI can distinguish real zero clicks from sources
-    that never provided click metrics.
+    Uses precomputed creative summaries first and preserves source metadata so
+    the UI can distinguish real zero clicks from sources that never provided
+    click metrics.
     """
     try:
         period_days = {
@@ -774,9 +777,10 @@ async def get_batch_performance(
                 if creative_buyer_id and creative_buyer_id not in allowed:
                     raise HTTPException(status_code=403, detail="You don't have access to this buyer account.")
 
-        # Batch query from rtb_daily (click-capable)
+        # Batch query is precompute-first; raw click rows are only a fallback for
+        # creatives that are absent from config_creative_daily.
         repo = _get_creative_perf_repo()
-        rtb_summaries = await repo.get_creative_summaries(
+        summaries = await repo.get_creative_summaries(
             request.creative_ids,
             days=days,
             buyer_id_filter=resolved_buyer_id,
@@ -784,11 +788,11 @@ async def get_batch_performance(
 
         results: dict[str, CreativePerformanceSummary] = {}
 
-        # IDs not found in rtb_daily need legacy fallback
-        missing_ids = [cid for cid in request.creative_ids if cid not in rtb_summaries]
+        # IDs not found in the repository result need legacy fallback.
+        missing_ids = [cid for cid in request.creative_ids if cid not in summaries]
 
-        # Build results from rtb_daily batch
-        for creative_id, s in rtb_summaries.items():
+        # Build results from the repository batch.
+        for creative_id, s in summaries.items():
             has_data = s["total_impressions"] > 0 or s["total_spend_micros"] > 0
             results[creative_id] = CreativePerformanceSummary(
                 creative_id=creative_id,
@@ -804,7 +808,7 @@ async def get_batch_performance(
                 clicks_available=bool(s.get("clicks_available", True)),
             )
 
-        # Fallback for creatives not in rtb_daily
+        # Fallback for creatives not covered by the repository result.
         for creative_id in missing_ids:
             try:
                 summary = await store.get_creative_performance_summary(

@@ -77,13 +77,85 @@ class CreativePerformanceRepository:
         creative_ids: list[str],
         days: int = 30,
         buyer_id_filter: str | None = None,
+        prefer_clicks: bool = False,
     ) -> dict[str, dict[str, Any]]:
         """Get performance summaries for multiple creatives.
 
-        Uses rtb_daily as the primary source so click-capable summaries stay
-        accurate. Falls back to config_creative_daily only when RTB facts are
-        unavailable for a given creative.
+        Uses config_creative_daily as the default batch source. Callers that are
+        explicitly single-creative/click-focused can request the raw click-capable
+        path with prefer_clicks=True.
         """
+        if not creative_ids:
+            return {}
+
+        if prefer_clicks:
+            return await self._get_rtb_daily_summaries(
+                creative_ids,
+                days=days,
+                buyer_id_filter=buyer_id_filter,
+            )
+
+        params: list[Any] = [creative_ids, days]
+        buyer_clause = ""
+        if buyer_id_filter:
+            buyer_clause = "AND buyer_account_id = %s"
+            params.append(buyer_id_filter)
+
+        rows = await pg_query(
+            f"""
+            SELECT
+                creative_id,
+                COALESCE(SUM(impressions), 0) AS total_impressions,
+                COALESCE(SUM(spend_micros), 0) AS total_spend_micros,
+                COUNT(DISTINCT metric_date) AS days_with_data,
+                MIN(metric_date) AS earliest_date,
+                MAX(metric_date) AS latest_date
+            FROM config_creative_daily
+            WHERE creative_id = ANY(%s)
+              AND metric_date >= CURRENT_DATE - make_interval(days => %s)
+              {buyer_clause}
+            GROUP BY creative_id
+            """,
+            tuple(params),
+        )
+
+        result: dict[str, dict[str, Any]] = {}
+        for row in rows:
+            cid = row["creative_id"]
+            imps = int(row["total_impressions"])
+            spend = int(row["total_spend_micros"])
+            avg_cpm = int((spend / imps) * 1000) if imps > 0 and spend > 0 else None
+            result[cid] = {
+                "total_impressions": imps,
+                "total_clicks": 0,
+                "total_spend_micros": spend,
+                "avg_cpm_micros": avg_cpm,
+                "avg_cpc_micros": None,
+                "ctr_percent": None,
+                "days_with_data": int(row["days_with_data"]),
+                "earliest_date": str(row["earliest_date"]) if row["earliest_date"] else None,
+                "latest_date": str(row["latest_date"]) if row["latest_date"] else None,
+                "metric_source": "config_creative_daily",
+                "clicks_available": False,
+            }
+
+        missing_ids = [cid for cid in creative_ids if cid not in result]
+        if missing_ids:
+            result.update(
+                await self._get_rtb_daily_summaries(
+                    missing_ids,
+                    days=days,
+                    buyer_id_filter=buyer_id_filter,
+                )
+            )
+        return result
+
+    async def _get_rtb_daily_summaries(
+        self,
+        creative_ids: list[str],
+        days: int,
+        buyer_id_filter: str | None = None,
+    ) -> dict[str, dict[str, Any]]:
         if not creative_ids:
             return {}
 
@@ -135,43 +207,6 @@ class CreativePerformanceRepository:
                 "clicks_available": True,
             }
 
-        # Fallback: IDs not found in rtb_daily → try config_creative_daily.
-        missing_ids = [cid for cid in creative_ids if cid not in result]
-        if missing_ids:
-            fallback_rows = await pg_query(
-                """
-                SELECT
-                    creative_id,
-                    COALESCE(SUM(impressions), 0) AS total_impressions,
-                    COALESCE(SUM(spend_micros), 0) AS total_spend_micros,
-                    COUNT(DISTINCT metric_date) AS days_with_data,
-                    MIN(metric_date) AS earliest_date,
-                    MAX(metric_date) AS latest_date
-                FROM config_creative_daily
-                WHERE creative_id = ANY(%s)
-                  AND metric_date >= CURRENT_DATE - make_interval(days => %s)
-                GROUP BY creative_id
-                """,
-                (missing_ids, days),
-            )
-            for row in fallback_rows:
-                cid = row["creative_id"]
-                imps = int(row["total_impressions"])
-                spend = int(row["total_spend_micros"])
-                avg_cpm = int((spend / imps) * 1000) if imps > 0 and spend > 0 else None
-                result[cid] = {
-                    "total_impressions": imps,
-                    "total_clicks": 0,
-                    "total_spend_micros": spend,
-                    "avg_cpm_micros": avg_cpm,
-                    "avg_cpc_micros": None,
-                    "ctr_percent": None,
-                    "days_with_data": int(row["days_with_data"]),
-                    "earliest_date": str(row["earliest_date"]) if row["earliest_date"] else None,
-                    "latest_date": str(row["latest_date"]) if row["latest_date"] else None,
-                    "metric_source": "config_creative_daily",
-                    "clicks_available": False,
-                }
         return result
 
     async def get_country_breakdown(
@@ -180,16 +215,16 @@ class CreativePerformanceRepository:
         return await pg_query(
             """
             SELECT
-                country as country_code,
+                geography as country_code,
                 SUM(spend_micros) as spend_micros,
                 SUM(impressions) as impressions,
                 SUM(clicks) as clicks
-            FROM rtb_daily
+            FROM performance_metrics
             WHERE creative_id = %s
-              AND country IS NOT NULL
-              AND country != ''
+              AND geography IS NOT NULL
+              AND geography != ''
               AND metric_date >= CURRENT_DATE - make_interval(days => %s)
-            GROUP BY country
+            GROUP BY geography
             ORDER BY spend_micros DESC
             """,
             (creative_id, days),
