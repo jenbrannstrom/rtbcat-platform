@@ -44,7 +44,7 @@ def test_language_flag_coverage_endpoint_returns_expected_statuses(
                     "last_active": "2026-04-13",
                 }
             ]
-        if "GROUP BY creative_id, country" in sql:
+        if "FROM performance_metrics" in sql and "GROUP BY creative_id, geography" in sql:
             return [
                 {
                     "creative_id": "1987702299778854923",

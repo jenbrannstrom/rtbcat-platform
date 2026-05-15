@@ -377,10 +377,11 @@ class PostgresStore:
 
         if sort_by_metric and buyer_id:
             conditions, params = _build_conditions("c")
+            sort_table = "rtb_daily" if sort_by == "clicks" else "config_creative_daily"
             sql = f"""
                 WITH perf AS (
                     SELECT d.creative_id, COALESCE(SUM(d.{sort_metric}), 0) AS _sort_val
-                    FROM rtb_daily d
+                    FROM {sort_table} d
                     WHERE d.metric_date >= CURRENT_DATE - make_interval(days => %s)
                       AND d.buyer_account_id = %s
                     GROUP BY d.creative_id

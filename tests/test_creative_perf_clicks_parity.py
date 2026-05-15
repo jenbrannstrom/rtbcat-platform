@@ -1,7 +1,8 @@
-"""Tests for creative performance summary clicks parity fix.
+"""Tests for creative performance summary source selection.
 
 Validates that:
-- get_creative_summaries returns real clicks from rtb_daily
+- get_creative_summaries defaults to precomputed config rows for batch speed
+- click-capable callers can explicitly request rtb_daily
 - Derived metrics (CPM, CPC, CTR) are correctly computed
 - Buyer scoping is applied when filter is provided
 - Empty results handled gracefully
@@ -45,7 +46,7 @@ async def test_summaries_with_clicks(repo):
         new_callable=AsyncMock,
         return_value=mock_rows,
     ):
-        result = await repo.get_creative_summaries(["12345"], days=7)
+        result = await repo.get_creative_summaries(["12345"], days=7, prefer_clicks=True)
 
     assert "12345" in result
     s = result["12345"]
@@ -80,7 +81,7 @@ async def test_summaries_with_zero_clicks(repo):
         new_callable=AsyncMock,
         return_value=mock_rows,
     ):
-        result = await repo.get_creative_summaries(["67890"], days=7)
+        result = await repo.get_creative_summaries(["67890"], days=7, prefer_clicks=True)
 
     s = result["67890"]
     assert s["total_clicks"] == 0
@@ -125,12 +126,11 @@ async def test_summaries_no_buyer_filter(repo):
 
 @pytest.mark.asyncio
 async def test_batch_multiple_creatives(repo):
-    """Batch query returns correct mapping for multiple creatives."""
+    """Default batch query returns precomputed mapping for multiple creatives."""
     mock_rows = [
         {
             "creative_id": "aaa",
             "total_impressions": 1000,
-            "total_clicks": 10,
             "total_spend_micros": 1000000,
             "days_with_data": 5,
             "earliest_date": "2026-02-20",
@@ -139,7 +139,6 @@ async def test_batch_multiple_creatives(repo):
         {
             "creative_id": "bbb",
             "total_impressions": 500,
-            "total_clicks": 0,
             "total_spend_micros": 500000,
             "days_with_data": 3,
             "earliest_date": "2026-02-22",
@@ -154,15 +153,17 @@ async def test_batch_multiple_creatives(repo):
     ):
         result = await repo.get_creative_summaries(["aaa", "bbb", "ccc"], days=7)
 
-    assert len(result) == 2  # "ccc" not in rtb_daily
-    assert result["aaa"]["total_clicks"] == 10
+    assert len(result) == 2  # "ccc" not in precompute or rtb_daily fallback
+    assert result["aaa"]["metric_source"] == "config_creative_daily"
+    assert result["aaa"]["clicks_available"] is False
+    assert result["aaa"]["total_clicks"] == 0
     assert result["bbb"]["total_clicks"] == 0
     assert "ccc" not in result
 
 
 @pytest.mark.asyncio
-async def test_summaries_fall_back_to_config_without_clicks(repo):
-    """Creatives missing from rtb_daily fall back to config data without fake clicks."""
+async def test_summaries_fall_back_to_rtb_for_missing_precompute_ids(repo):
+    """Creatives missing from precompute fall back to rtb_daily with real clicks."""
     with patch(
         "storage.postgres_repositories.creative_performance_repo.pg_query",
         new_callable=AsyncMock,
@@ -170,8 +171,9 @@ async def test_summaries_fall_back_to_config_without_clicks(repo):
             [],
             [
                 {
-                    "creative_id": "cfg-only",
+                    "creative_id": "rtb-only",
                     "total_impressions": 2145062,
+                    "total_clicks": 42,
                     "total_spend_micros": 42000000,
                     "days_with_data": 7,
                     "earliest_date": "2026-04-07",
@@ -180,10 +182,10 @@ async def test_summaries_fall_back_to_config_without_clicks(repo):
             ],
         ],
     ):
-        result = await repo.get_creative_summaries(["cfg-only"], days=7)
+        result = await repo.get_creative_summaries(["rtb-only"], days=7)
 
-    summary = result["cfg-only"]
-    assert summary["metric_source"] == "config_creative_daily"
-    assert summary["clicks_available"] is False
-    assert summary["total_clicks"] == 0
-    assert summary["ctr_percent"] is None
+    summary = result["rtb-only"]
+    assert summary["metric_source"] == "rtb_daily"
+    assert summary["clicks_available"] is True
+    assert summary["total_clicks"] == 42
+    assert summary["ctr_percent"] == round((42 / 2145062) * 100, 4)

@@ -25,6 +25,19 @@ from storage.postgres import execute_many, pg_transaction_async
 logger = logging.getLogger(__name__)
 
 
+def _clean_text(value: object) -> str:
+    """Remove characters PostgreSQL cannot store in text fields."""
+    if value is None:
+        return ""
+    return str(value).replace("\x00", "")
+
+
+def _clean_optional_text(value: object) -> Optional[str]:
+    if value is None:
+        return None
+    return _clean_text(value)
+
+
 def _ensure_tables(conn) -> None:
     conn.execute(
         """
@@ -593,9 +606,9 @@ async def refresh_config_breakdowns(
             rows=[
                 (
                     _format_date(row.metric_date),
-                    row.buyer_account_id,
-                    row.billing_id,
-                    row.creative_size,
+                    _clean_text(row.buyer_account_id),
+                    _clean_text(row.billing_id),
+                    _clean_text(row.creative_size),
                     row.reached_queries,
                     row.impressions,
                     row.spend_micros,
@@ -613,9 +626,9 @@ async def refresh_config_breakdowns(
             rows=[
                 (
                     _format_date(row.metric_date),
-                    row.buyer_account_id,
-                    row.billing_id,
-                    row.country,
+                    _clean_text(row.buyer_account_id),
+                    _clean_text(row.billing_id),
+                    _clean_text(row.country),
                     row.reached_queries,
                     row.impressions,
                     row.spend_micros,
@@ -634,10 +647,10 @@ async def refresh_config_breakdowns(
             rows=[
                 (
                     _format_date(row.metric_date),
-                    row.buyer_account_id,
-                    row.billing_id,
-                    row.publisher_id,
-                    row.publisher_name,
+                    _clean_text(row.buyer_account_id),
+                    _clean_text(row.billing_id),
+                    _clean_text(row.publisher_id),
+                    _clean_text(row.publisher_name),
                     row.reached_queries,
                     row.impressions,
                     row.spend_micros,
@@ -690,10 +703,10 @@ async def refresh_config_breakdowns(
             rows=[
                 (
                     _format_date(row.metric_date),
-                    row.buyer_account_id,
-                    row.billing_id,
-                    row.creative_id,
-                    row.creative_size,
+                    _clean_text(row.buyer_account_id),
+                    _clean_text(row.billing_id),
+                    _clean_text(row.creative_id),
+                    _clean_optional_text(row.creative_size),
                     row.reached_queries,
                     row.impressions,
                     row.spend_micros,
@@ -701,6 +714,33 @@ async def refresh_config_breakdowns(
                 for row in creative_rows
             ],
         )
+
+        creative_fallback_cursor = conn.execute(
+            f"""
+            INSERT INTO config_creative_daily
+                (metric_date, buyer_account_id, billing_id, creative_id,
+                 creative_size, reached_queries, impressions, spend_micros)
+            SELECT
+                metric_date,
+                buyer_account_id,
+                billing_id,
+                creative_id,
+                MAX(NULLIF(creative_size, '')),
+                SUM(reached_queries),
+                SUM(impressions),
+                SUM(spend_micros)
+            FROM rtb_daily
+            WHERE metric_date::text = ANY(%s)
+              AND billing_id IS NOT NULL AND billing_id != ''
+              AND buyer_account_id IS NOT NULL AND buyer_account_id != ''
+              AND creative_id IS NOT NULL AND creative_id != ''{fallback_buyer}
+            GROUP BY metric_date, buyer_account_id, billing_id, creative_id
+            ON CONFLICT (metric_date, buyer_account_id, billing_id, creative_id)
+                DO NOTHING
+            """,
+            tuple(fallback_params),
+        )
+        creative_fallback_rows = max(creative_fallback_cursor.rowcount or 0, 0)
 
         _refresh_canonical_reconciliation(
             conn,
@@ -720,7 +760,7 @@ async def refresh_config_breakdowns(
                 "config_size_daily": len(size_rows),
                 "config_geo_daily": len(geo_rows),
                 "config_publisher_daily": len(publisher_rows),
-                "config_creative_daily": len(creative_rows),
+                "config_creative_daily": len(creative_rows) + creative_fallback_rows,
             }
         }
 

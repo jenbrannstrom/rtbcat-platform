@@ -28,6 +28,8 @@ class StubTables:
         self.home_config_daily: dict[tuple[str, str, str], dict[str, Any]] = {}
         # config_publisher_daily: keyed by (metric_date, buyer_account_id, billing_id, publisher_id)
         self.config_publisher_daily: dict[tuple[str, str, str, str], dict[str, Any]] = {}
+        # config_creative_daily: keyed by (metric_date, buyer_account_id, billing_id, creative_id)
+        self.config_creative_daily: dict[tuple[str, str, str, str], dict[str, Any]] = {}
         # rtb_daily: list of row dicts
         self.rtb_daily: list[dict[str, Any]] = []
 
@@ -110,6 +112,49 @@ class StubTables:
                         "auctions_won": 0,
                     }
                     count += 1
+        return count
+
+    # -- Postgres fallback for config_creative_daily --
+
+    def fallback_config_creative(
+        self,
+        date_list: list[str],
+        buyer_account_id: Optional[str] = None,
+    ) -> int:
+        """Simulate the creative INSERT ... ON CONFLICT DO NOTHING fallback."""
+        agg: dict[tuple[str, str, str, str], dict[str, Any]] = {}
+        for row in self.rtb_daily:
+            md = str(row.get("metric_date", ""))
+            if md not in date_list:
+                continue
+            buyer = row.get("buyer_account_id", "")
+            billing = row.get("billing_id", "")
+            creative = row.get("creative_id", "")
+            if not buyer or not billing or not creative:
+                continue
+            if buyer_account_id and buyer != buyer_account_id:
+                continue
+            key = (md, buyer, billing, creative)
+            if key not in agg:
+                agg[key] = {
+                    "metric_date": md,
+                    "buyer_account_id": buyer,
+                    "billing_id": billing,
+                    "creative_id": creative,
+                    "creative_size": row.get("creative_size"),
+                    "reached_queries": 0,
+                    "impressions": 0,
+                    "spend_micros": 0,
+                }
+            agg[key]["reached_queries"] += row.get("reached_queries", 0)
+            agg[key]["impressions"] += row.get("impressions", 0)
+            agg[key]["spend_micros"] += row.get("spend_micros", 0)
+
+        count = 0
+        for key, vals in agg.items():
+            if key not in self.config_creative_daily:
+                self.config_creative_daily[key] = vals
+                count += 1
         return count
 
     # -- Postgres fallback for config_publisher_daily --
@@ -421,3 +466,42 @@ async def test_publisher_fallback_does_not_overwrite_bq_data():
 
     row = tables.config_publisher_daily[("2026-02-10", "buyer-1", "cfg-A", "pub-123")]
     assert row["reached_queries"] == 999  # BQ value, not rtb_daily value
+
+
+@pytest.mark.asyncio
+async def test_creative_fallback_fills_from_rtb_daily():
+    tables = StubTables()
+    tables.rtb_daily.append({
+        "metric_date": "2026-05-13",
+        "buyer_account_id": "6574658621",
+        "billing_id": "cfg-A",
+        "creative_id": "creative-1",
+        "creative_size": "300x250",
+        "reached_queries": 800,
+        "impressions": 200,
+        "spend_micros": 50000,
+    })
+    tables.rtb_daily.append({
+        "metric_date": "2026-05-13",
+        "buyer_account_id": "6574658621",
+        "billing_id": "cfg-A",
+        "creative_id": "creative-1",
+        "creative_size": "300x250",
+        "reached_queries": 400,
+        "impressions": 100,
+        "spend_micros": 25000,
+    })
+
+    filled = tables.fallback_config_creative(["2026-05-13"], buyer_account_id="6574658621")
+
+    key = ("2026-05-13", "6574658621", "cfg-A", "creative-1")
+    assert filled == 1
+    assert tables.config_creative_daily[key]["reached_queries"] == 1200
+    assert tables.config_creative_daily[key]["impressions"] == 300
+    assert tables.config_creative_daily[key]["spend_micros"] == 75000
+
+
+def test_config_precompute_strips_nul_bytes_from_text_fields():
+    from services.config_precompute import _clean_text
+
+    assert _clean_text("pub\x00name") == "pubname"
