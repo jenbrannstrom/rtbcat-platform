@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 import hmac
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Query
 from pydantic import BaseModel
 
 from api.dependencies import get_store, get_config
@@ -28,10 +28,12 @@ class CreativeCacheRefreshResponse(BaseModel):
 @router.post("/creatives/cache/refresh/scheduled", response_model=CreativeCacheRefreshResponse)
 async def refresh_creative_cache_scheduled(
     request: Request,
+    background_tasks: BackgroundTasks,
     days: int = Query(7, ge=1, le=90),
     limit: int = Query(500, ge=1, le=5000),
     include_html_thumbnails: bool = Query(True),
     force_html_thumbnail_retry: bool = Query(False),
+    background: bool = Query(False, description="Queue the refresh and return immediately"),
     store=Depends(get_store),
     config: ConfigManager = Depends(get_config),
 ) -> CreativeCacheRefreshResponse:
@@ -42,17 +44,35 @@ async def refresh_creative_cache_scheduled(
         raise HTTPException(status_code=403, detail="Invalid scheduler secret")
 
     svc = CreativeCacheService(store=store, config=config)
-    result = await svc.refresh_active_creatives(
-        days=days,
-        limit=limit,
-        include_html_thumbnails=include_html_thumbnails,
-        force_html_thumbnail_retry=force_html_thumbnail_retry,
-    )
+    if background:
+        background_tasks.add_task(
+            svc.refresh_active_creatives,
+            days=days,
+            limit=limit,
+            include_html_thumbnails=include_html_thumbnails,
+            force_html_thumbnail_retry=force_html_thumbnail_retry,
+        )
+        result = {
+            "queued": True,
+            "scanned": 0,
+            "refreshed": 0,
+            "failed": 0,
+            "skipped": 0,
+        }
+    else:
+        refresh_result = await svc.refresh_active_creatives(
+            days=days,
+            limit=limit,
+            include_html_thumbnails=include_html_thumbnails,
+            force_html_thumbnail_retry=force_html_thumbnail_retry,
+        )
+        result = refresh_result.to_dict()
+
     return CreativeCacheRefreshResponse(
         success=True,
-        started_at=datetime.utcnow().isoformat(),
+        started_at=datetime.now(timezone.utc).isoformat(),
         days=days,
         limit=limit,
         include_html_thumbnails=include_html_thumbnails,
-        result=result.to_dict(),
+        result=result,
     )

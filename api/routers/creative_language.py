@@ -71,7 +71,7 @@ class ManualLanguageUpdate(BaseModel):
     detected_language_code: str = Field(..., min_length=2, max_length=3, description="ISO 639-1 code (e.g., 'de')")
 
 
-@router.post("/creatives/{creative_id}/analyze-language", response_model=LanguageDetectionResponse)
+@router.post("/creatives/{creative_id:path}/analyze-language", response_model=LanguageDetectionResponse)
 async def analyze_creative_language(
     creative_id: str,
     force: bool = Query(False, description="Force re-analysis even if already analyzed"),
@@ -93,7 +93,7 @@ async def analyze_creative_language(
     return LanguageDetectionResponse(**response)
 
 
-@router.put("/creatives/{creative_id}/language", response_model=LanguageDetectionResponse)
+@router.put("/creatives/{creative_id:path}/language", response_model=LanguageDetectionResponse)
 async def update_creative_language(
     creative_id: str,
     update: ManualLanguageUpdate,
@@ -115,7 +115,7 @@ async def update_creative_language(
     return LanguageDetectionResponse(**response)
 
 
-@router.get("/creatives/{creative_id}/geo-mismatch", response_model=GeoMismatchResponse)
+@router.get("/creatives/{creative_id:path}/geo-mismatch", response_model=GeoMismatchResponse)
 async def get_creative_geo_mismatch(
     creative_id: str,
     days: int = Query(7, ge=1, le=90, description="Days to look back for serving data"),

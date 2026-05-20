@@ -26,6 +26,7 @@ GITHUB_REPO=""
 SYNC_GITHUB_CANARY_SECRET="false"
 GMAIL_SCHEDULE="0 12 * * *"
 PRECOMPUTE_SCHEDULE="30 13 * * *"
+CREATIVE_CACHE_SCHEDULE="45 14 * * *"
 TIME_ZONE="Etc/UTC"
 
 usage() {
@@ -93,6 +94,7 @@ require "--db-instance" "$DB_INSTANCE"
 
 GMAIL_IMPORT_URL="https://${DOMAIN_NAME}/api/gmail/import/scheduled"
 PRECOMPUTE_REFRESH_URL="https://${DOMAIN_NAME}/api/precompute/refresh/scheduled"
+CREATIVE_CACHE_REFRESH_URL="https://${DOMAIN_NAME}/api/creatives/cache/refresh/scheduled?days=7&limit=1000&include_html_thumbnails=false&background=true"
 
 secret_name() {
   local suffix="$1"
@@ -282,6 +284,7 @@ fi
 
 GMAIL_IMPORT_SECRET_VALUE="$(get_secret "$(secret_name gmail-import-secret)")"
 PRECOMPUTE_REFRESH_SECRET_VALUE="$(get_secret "$(secret_name precompute-refresh-secret)")"
+CREATIVE_CACHE_REFRESH_SECRET_VALUE="$(get_secret "$(secret_name creative-cache-refresh-secret)")"
 
 upsert_http_scheduler \
   gmail-import \
@@ -296,5 +299,12 @@ upsert_http_scheduler \
   "$PRECOMPUTE_REFRESH_URL" \
   "X-Precompute-Refresh-Secret=${PRECOMPUTE_REFRESH_SECRET_VALUE}" \
   "Daily precompute refresh after Gmail import"
+
+upsert_http_scheduler \
+  creative-cache-refresh \
+  "$CREATIVE_CACHE_SCHEDULE" \
+  "$CREATIVE_CACHE_REFRESH_URL" \
+  "X-Creative-Cache-Refresh-Secret=${CREATIVE_CACHE_REFRESH_SECRET_VALUE}" \
+  "Daily live metadata refresh for recently active creatives"
 
 echo "Runtime config provisioning complete."
