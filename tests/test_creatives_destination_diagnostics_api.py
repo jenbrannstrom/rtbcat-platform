@@ -28,8 +28,10 @@ def _build_client(store: object) -> SyncASGIClient:
 class _StoreWithCreative:
     def __init__(self, creative: object | None):
         self._creative = creative
+        self.requested_ids: list[str] = []
 
     async def get_creative(self, creative_id: str):
+        self.requested_ids.append(creative_id)
         if not self._creative:
             return None
         return self._creative
@@ -37,7 +39,7 @@ class _StoreWithCreative:
 
 def test_router_registers_destination_diagnostics_endpoint() -> None:
     routes = {route.path for route in creatives_router.router.routes}
-    assert "/creatives/{creative_id}/destination-diagnostics" in routes
+    assert "/creatives/{creative_id:path}/destination-diagnostics" in routes
 
 
 def test_destination_diagnostics_returns_payload(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -91,6 +93,48 @@ def test_destination_diagnostics_returns_payload(monkeypatch: pytest.MonkeyPatch
     assert payload["eligible_count"] == 1
     assert len(payload["candidates"]) == 2
     assert captured["buyer_id"] == "1111111111"
+
+
+def test_destination_diagnostics_accepts_encoded_slash_creative_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    creative_id = "abc/def="
+    creative = SimpleNamespace(
+        id=creative_id,
+        buyer_id="1111111111",
+        final_url="https://example.com/landing",
+        display_url=None,
+        raw_data={},
+    )
+    store = _StoreWithCreative(creative)
+
+    async def _require_buyer_access(*_args, **_kwargs):
+        return None
+
+    def _build_diagnostics(_creative):
+        return {
+            "resolved_destination_url": "https://example.com/landing",
+            "candidate_count": 1,
+            "eligible_count": 1,
+            "candidates": [
+                {
+                    "source": "final_url",
+                    "url": "https://example.com/landing",
+                    "eligible": True,
+                    "reason": None,
+                },
+            ],
+        }
+
+    monkeypatch.setattr(creatives_router, "require_buyer_access", _require_buyer_access)
+    monkeypatch.setattr(creatives_router, "build_creative_destination_diagnostics", _build_diagnostics)
+
+    client = _build_client(store)
+    response = client.get("/api/creatives/abc%2Fdef%3D/destination-diagnostics")
+
+    assert response.status_code == 200
+    assert store.requested_ids == [creative_id]
+    assert response.json()["creative_id"] == creative_id
 
 
 def test_destination_diagnostics_returns_404_for_missing_creative() -> None:

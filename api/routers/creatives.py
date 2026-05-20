@@ -942,6 +942,7 @@ async def refresh_creative_language_flag_coverage(
     )
 
 
+@router.get("/creatives/detail/{creative_id:path}", response_model=CreativeResponse)
 @router.get("/creatives/{creative_id}", response_model=CreativeResponse)
 async def get_creative(
     creative_id: str,
@@ -968,7 +969,7 @@ async def get_creative(
 
 
 @router.get(
-    "/creatives/{creative_id}/destination-diagnostics",
+    "/creatives/{creative_id:path}/destination-diagnostics",
     response_model=CreativeDestinationDiagnosticsResponse,
 )
 async def get_creative_destination_diagnostics(
@@ -991,6 +992,7 @@ async def get_creative_destination_diagnostics(
     )
 
 
+@router.delete("/creatives/detail/{creative_id:path}")
 @router.delete("/creatives/{creative_id}")
 async def delete_creative(
     creative_id: str,
@@ -1023,7 +1025,7 @@ async def assign_cluster(
     return {"status": "updated", "creative_id": assignment.creative_id}
 
 
-@router.delete("/creatives/{creative_id}/campaign")
+@router.delete("/creatives/{creative_id:path}/campaign")
 async def remove_from_campaign(
     creative_id: str,
     store=Depends(get_store),
@@ -1040,7 +1042,7 @@ async def remove_from_campaign(
     return {"status": "removed", "creative_id": creative_id}
 
 
-@router.get("/creatives/{creative_id}/countries", response_model=CreativeCountryBreakdownResponse)
+@router.get("/creatives/{creative_id:path}/countries", response_model=CreativeCountryBreakdownResponse)
 async def get_creative_countries(
     creative_id: str,
     days: int = Query(7, ge=1, le=90, description="Days to look back"),

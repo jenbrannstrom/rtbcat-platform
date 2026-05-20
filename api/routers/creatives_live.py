@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
@@ -34,7 +34,8 @@ def _error_type_from_exception(exc: Exception) -> str:
     return "exception"
 
 
-@router.get("/creatives/{creative_id}/live", response_model=CreativeLiveResponse)
+@router.get("/creatives/live/{creative_id:path}", response_model=CreativeLiveResponse)
+@router.get("/creatives/{creative_id:path}/live", response_model=CreativeLiveResponse)
 async def get_creative_live(
     creative_id: str,
     days: int = Query(7, ge=1, le=365, description="Timeframe for waste detection"),
@@ -58,7 +59,7 @@ async def get_creative_live(
 
     ctx = await creatives_service.get_list_context(store, [creative_id], days)
     cache_service = CreativeCacheService(store=store, config=config)
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
 
     try:
         client = await cache_service.resolve_live_client(creative)

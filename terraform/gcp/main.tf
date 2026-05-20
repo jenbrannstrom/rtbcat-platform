@@ -23,8 +23,9 @@ provider "google" {
 }
 
 locals {
-  gmail_import_url       = (var.enable_https && var.domain_name != "") ? "https://${var.domain_name}/api/gmail/import/scheduled" : "http://${google_compute_address.catscan.address}/api/gmail/import/scheduled"
-  precompute_refresh_url = (var.enable_https && var.domain_name != "") ? "https://${var.domain_name}/api/precompute/refresh/scheduled" : "http://${google_compute_address.catscan.address}/api/precompute/refresh/scheduled"
+  gmail_import_url           = (var.enable_https && var.domain_name != "") ? "https://${var.domain_name}/api/gmail/import/scheduled" : "http://${google_compute_address.catscan.address}/api/gmail/import/scheduled"
+  precompute_refresh_url     = (var.enable_https && var.domain_name != "") ? "https://${var.domain_name}/api/precompute/refresh/scheduled" : "http://${google_compute_address.catscan.address}/api/precompute/refresh/scheduled"
+  creative_cache_refresh_url = (var.enable_https && var.domain_name != "") ? "https://${var.domain_name}/api/creatives/cache/refresh/scheduled?days=7&limit=1000&include_html_thumbnails=false&background=true" : "http://${google_compute_address.catscan.address}/api/creatives/cache/refresh/scheduled?days=7&limit=1000&include_html_thumbnails=false&background=true"
 }
 
 # =============================================================================
@@ -671,6 +672,38 @@ resource "google_cloud_scheduler_job" "gmail_import" {
   http_target {
     http_method = "POST"
     uri         = local.gmail_import_url
+  }
+
+  retry_config {
+    retry_count          = 3
+    min_backoff_duration = "60s"
+    max_backoff_duration = "600s"
+  }
+
+  depends_on = [google_project_service.cloudscheduler]
+
+  lifecycle {
+    ignore_changes = [
+      http_target[0].headers,
+      http_target[0].uri,
+    ]
+  }
+}
+
+# =============================================================================
+# CLOUD SCHEDULER - Creative Cache Refresh
+# =============================================================================
+
+resource "google_cloud_scheduler_job" "creative_cache_refresh" {
+  name        = "creative-cache-refresh"
+  description = "Daily live metadata refresh for recently active creatives"
+  schedule    = "45 14 * * *"
+  time_zone   = "Etc/UTC"
+  region      = var.gcp_region
+
+  http_target {
+    http_method = "POST"
+    uri         = local.creative_cache_refresh_url
   }
 
   retry_config {

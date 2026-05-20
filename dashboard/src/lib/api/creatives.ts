@@ -76,7 +76,7 @@ export async function getCreativesPaginated(params?: {
 }
 
 export async function getCreative(id: string): Promise<Creative> {
-  return fetchApi<Creative>(`/creatives/${encodeURIComponent(id)}`);
+  return fetchApi<Creative>(`/creatives/detail/${encodeURIComponent(id)}`);
 }
 
 export async function getCreativeLive(
@@ -95,7 +95,7 @@ export async function getCreativeLive(
   }
   const query = searchParams.toString();
   return fetchApi<CreativeLiveResponse>(
-    `/creatives/${encodeURIComponent(id)}/live${query ? `?${query}` : ""}`
+    `/creatives/live/${encodeURIComponent(id)}${query ? `?${query}` : ""}`
   );
 }
 
@@ -188,7 +188,7 @@ export async function getCreativeCountries(
 }
 
 export async function deleteCreative(id: string): Promise<void> {
-  await fetchApi(`/creatives/${encodeURIComponent(id)}`, { method: "DELETE" });
+  await fetchApi(`/creatives/detail/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
 
 export async function removeCreativeFromCampaign(id: string): Promise<void> {

@@ -56,7 +56,7 @@ class GeoLinguisticReportResponse(BaseModel):
 
 
 @router.post(
-    "/creatives/{creative_id}/analyze-geo-linguistic",
+    "/creatives/{creative_id:path}/analyze-geo-linguistic",
     response_model=GeoLinguisticReportResponse,
 )
 async def analyze_geo_linguistic(
@@ -84,7 +84,7 @@ async def analyze_geo_linguistic(
 
 
 @router.get(
-    "/creatives/{creative_id}/geo-linguistic-report",
+    "/creatives/{creative_id:path}/geo-linguistic-report",
     response_model=GeoLinguisticReportResponse,
 )
 async def get_geo_linguistic_report(
