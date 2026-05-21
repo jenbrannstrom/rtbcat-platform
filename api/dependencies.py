@@ -226,6 +226,21 @@ async def require_buyer_admin_access(
     await require_buyer_access_level(buyer_id, "admin", user)
 
 
+async def require_creative_mutation_access(
+    buyer_id: Optional[str],
+    user: User,
+) -> None:
+    """Require admin privileges before mutating creative metadata.
+
+    Buyer-scoped creatives require admin access to that buyer seat. Unscoped
+    creatives require global sudo because there is no seat boundary to enforce.
+    """
+    if buyer_id:
+        await require_buyer_access_level(buyer_id, "admin", user)
+        return
+    await require_admin(user)
+
+
 async def require_seat_admin_or_sudo(
     user: User = Depends(get_current_user),
 ) -> User:

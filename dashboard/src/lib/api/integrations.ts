@@ -69,6 +69,16 @@ export interface GmailImportHistoryItem {
   files_imported: number;
   emails_processed: number;
   error: string | null;
+  file_failures?: GmailFileFailure[];
+  file_failure_count?: number;
+}
+
+export interface GmailFileFailure {
+  message_id?: string;
+  filename: string;
+  seat_id?: string;
+  report_kind?: string;
+  error: string;
 }
 
 export interface GmailStatus {
@@ -82,6 +92,8 @@ export interface GmailStatus {
   running?: boolean;
   current_job_id?: string | null;
   last_unread_report_emails?: number;
+  last_file_failures?: GmailFileFailure[];
+  last_file_failure_count?: number;
 }
 
 export interface GmailImportResult {

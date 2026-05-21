@@ -103,12 +103,19 @@ def compute_row_hash(row_data: Dict, keys: List[str]) -> str:
     return hashlib.md5(hash_input.encode()).hexdigest()
 
 
+def sanitize_csv_text(value: Any) -> str:
+    """Normalize CSV text before it reaches Postgres text fields."""
+    if value is None:
+        return ""
+    return str(value).replace("\x00", "").strip()
+
+
 def get_value(row: Dict, mapping: MappingResult, db_field: str, default: str = "") -> str:
     """Get value from row using mapping, or return default."""
     csv_col = mapping.get_csv_column(db_field)
     if csv_col and csv_col in row:
-        return row[csv_col].strip()
-    return default
+        return sanitize_csv_text(row[csv_col])
+    return sanitize_csv_text(default)
 
 
 def get_optional_int(row: Dict, mapping: MappingResult, db_field: str) -> Optional[int]:

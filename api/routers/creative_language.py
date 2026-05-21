@@ -8,7 +8,12 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from api.dependencies import get_store, get_current_user, require_buyer_access
+from api.dependencies import (
+    get_store,
+    get_current_user,
+    require_buyer_access,
+    require_creative_mutation_access,
+)
 from services.auth_service import User
 from services.creative_language_service import CreativeLanguageService
 
@@ -104,8 +109,7 @@ async def update_creative_language(
     creative = await store.get_creative(creative_id)
     if not creative:
         raise HTTPException(status_code=404, detail="Creative not found")
-    if creative.buyer_id:
-        await require_buyer_access(creative.buyer_id, store=store, user=user)
+    await require_creative_mutation_access(creative.buyer_id, user=user)
 
     response = await language_service.update_manual_language(
         creative=creative,

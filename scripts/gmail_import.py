@@ -171,6 +171,8 @@ def load_status() -> Dict[str, Any]:
         "running": False,
         "current_job_id": None,
         "last_unread_report_emails": 0,
+        "last_file_failures": [],
+        "last_file_failure_count": 0,
     }
 
 
@@ -199,6 +201,7 @@ def update_status(
     latest_metric_date: Optional[str] = None,
     rows_on_latest_metric_date: int = 0,
     unread_report_emails: Optional[int] = None,
+    file_failures: Optional[List[Dict[str, str]]] = None,
 ):
     """Update the import status after a run."""
     status = load_status()
@@ -219,6 +222,9 @@ def update_status(
     status["rows_on_latest_metric_date"] = rows_on_latest_metric_date
     if unread_report_emails is not None:
         status["last_unread_report_emails"] = int(unread_report_emails)
+    if file_failures is not None:
+        status["last_file_failures"] = file_failures
+        status["last_file_failure_count"] = len(file_failures)
 
     # Keep last 50 history entries
     status["history"].insert(0, {
@@ -231,6 +237,8 @@ def update_status(
         "latest_metric_date": latest_metric_date,
         "rows_on_latest_metric_date": rows_on_latest_metric_date,
         "unread_report_emails": unread_report_emails,
+        "file_failures": file_failures or [],
+        "file_failure_count": len(file_failures or []),
     })
     status["history"] = status["history"][:50]
 
@@ -255,6 +263,8 @@ def get_status() -> Dict[str, Any]:
         "latest_metric_date": status.get("latest_metric_date"),
         "rows_on_latest_metric_date": int(status.get("rows_on_latest_metric_date") or 0),
         "last_unread_report_emails": int(status.get("last_unread_report_emails") or 0),
+        "last_file_failures": status.get("last_file_failures", []),
+        "last_file_failure_count": int(status.get("last_file_failure_count") or 0),
     }
 
 
@@ -1296,6 +1306,8 @@ def run_import(
         "success": False,
         "emails_processed": 0,
         "files_imported": 0,
+        "file_failures": [],
+        "file_failure_count": 0,
         "unread_report_emails": 0,
         "emails_skipped": 0,
         "skipped_seat_ids": [],
@@ -1318,7 +1330,13 @@ def run_import(
         import_trigger = "gmail-manual"
 
     scheduler_run_id = start_scheduler_ingestion_run(job_id, import_trigger)
-    update_status(False, running=True, current_job_id=job_id, reason="running")
+    update_status(
+        False,
+        running=True,
+        current_job_id=job_id,
+        reason="running",
+        file_failures=[],
+    )
 
     _finalized = False
 
@@ -1356,6 +1374,7 @@ def run_import(
             latest_metric_date=result["latest_metric_date"],
             rows_on_latest_metric_date=result["rows_on_latest_metric_date"],
             unread_report_emails=result.get("unread_report_emails"),
+            file_failures=result.get("file_failures", []),
         )
         finish_scheduler_ingestion_run(
             scheduler_run_id,
@@ -1485,6 +1504,14 @@ def run_import(
                         pipeline_ok = run_pipeline_for_file(filepath, seat_id, verbose=verbose)
                         if not pipeline_ok:
                             message_fully_processed = False
+                            failure = {
+                                "message_id": message_id,
+                                "filename": filepath.name,
+                                "seat_id": seat_id or "",
+                                "report_kind": report_kind,
+                                "error": "pipeline_failed",
+                            }
+                            result["file_failures"].append(failure)
                             result["errors"].append(
                                 f"Pipeline failed for {filepath.name} (message {message_id})"
                             )
@@ -1492,6 +1519,18 @@ def run_import(
                                 print(f"  Pipeline failed: {filepath.name}")
                     else:
                         message_fully_processed = False
+                        failure = {
+                            "message_id": message_id,
+                            "filename": filepath.name,
+                            "seat_id": seat_id or "",
+                            "report_kind": report_kind,
+                            "error": imp.error or "import_failed",
+                        }
+                        result["file_failures"].append(failure)
+                        result["errors"].append(
+                            f"Import failed for {filepath.name} (message {message_id}): "
+                            f"{failure['error']}"
+                        )
 
                 if message_fully_processed:
                     mark_as_read(service, message_id)
@@ -1511,6 +1550,7 @@ def run_import(
                 print()
 
         result["success"] = True
+        result["file_failure_count"] = len(result["file_failures"])
 
         if verbose:
             print("=" * 60)
@@ -1520,7 +1560,11 @@ def run_import(
         finalize(
             success=True,
             files_imported=total_imported,
-            reason="import_completed",
+            reason=(
+                "import_completed_with_failures"
+                if result["file_failures"]
+                else "import_completed"
+            ),
         )
 
         if result["skipped_seat_ids"]:

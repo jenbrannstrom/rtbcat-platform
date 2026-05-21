@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useCallback, useState, useEffect } from "react";
 import { Globe, Loader2, RefreshCw, Edit2, AlertTriangle, ChevronDown, ChevronUp } from "lucide-react";
 import type { Creative, CreativeCountryBreakdown, GeoMismatchResponse } from "@/types/api";
 import { analyzeCreativeLanguage, updateCreativeLanguage, getCreativeCountries, getCreativeGeoMismatch } from "@/lib/api";
@@ -47,7 +47,7 @@ export function LanguageSection({
   const [geoMismatch, setGeoMismatch] = useState<GeoMismatchResponse | null>(null);
   const [isLoadingSignals, setIsLoadingSignals] = useState(false);
 
-  const refreshSignals = async () => {
+  const refreshSignals = useCallback(async () => {
     setIsLoadingCountries(true);
     setIsLoadingSignals(true);
 
@@ -70,11 +70,11 @@ export function LanguageSection({
 
     setIsLoadingCountries(false);
     setIsLoadingSignals(false);
-  };
+  }, [creative.id]);
 
   useEffect(() => {
     void refreshSignals();
-  }, [creative.id]);
+  }, [refreshSignals]);
 
   const handleRescan = async () => {
     setIsAnalyzing(true);
