@@ -10,10 +10,12 @@ from unittest.mock import MagicMock
 from importers.unified_importer import (
     canonicalize_size_string,
     check_date_continuity,
+    get_value,
     _apply_date_continuity,
     UnifiedImportResult,
     sync_performance_metrics_from_rtb_daily_batch,
 )
+from importers.flexible_mapper import ColumnMapping, MappingResult
 
 
 # =========================================================================
@@ -71,6 +73,26 @@ class TestCanonicalizeSizeString:
     def test_unicode_multiplication_sign(self):
         # × (U+00D7) multiplication sign
         assert canonicalize_size_string("320×50") == "320x50 (Mobile Banner)"
+
+
+class TestCsvValueSanitization:
+    """Verify malformed report text is normalized before Postgres insert."""
+
+    def test_get_value_strips_nul_bytes(self):
+        mapping = MappingResult(
+            mapped={
+                "creative_id": ColumnMapping(
+                    csv_column="Creative ID",
+                    db_field="creative_id",
+                    match_type="exact",
+                    confidence=1.0,
+                )
+            }
+        )
+
+        row = {"Creative ID": "\x00S6lVKXVCGmvx\x0005mkYsie5y0aXJ5QWb\x00WUq"}
+
+        assert get_value(row, mapping, "creative_id") == "S6lVKXVCGmvx05mkYsie5y0aXJ5QWbWUq"
 
 
 # =========================================================================

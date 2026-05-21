@@ -12,6 +12,7 @@ from api.dependencies import (
     get_current_user,
     get_store,
     require_buyer_access,
+    require_creative_mutation_access,
     resolve_buyer_id,
 )
 from api.schemas.common import PaginationMeta
@@ -1001,8 +1002,8 @@ async def delete_creative(
 ) -> dict[str, str]:
     """Delete a creative by ID."""
     creative = await store.get_creative(creative_id)
-    if creative and creative.buyer_id:
-        await require_buyer_access(creative.buyer_id, store=store, user=user)
+    if creative:
+        await require_creative_mutation_access(creative.buyer_id, user=user)
     deleted = await store.delete_creative(creative_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Creative not found")
@@ -1019,8 +1020,7 @@ async def assign_cluster(
     creative = await store.get_creative(assignment.creative_id)
     if not creative:
         raise HTTPException(status_code=404, detail="Creative not found")
-    if creative.buyer_id:
-        await require_buyer_access(creative.buyer_id, store=store, user=user)
+    await require_creative_mutation_access(creative.buyer_id, user=user)
     await store.update_creative_cluster(assignment.creative_id, assignment.cluster_id)
     return {"status": "updated", "creative_id": assignment.creative_id}
 
@@ -1035,8 +1035,7 @@ async def remove_from_campaign(
     creative = await store.get_creative(creative_id)
     if not creative:
         raise HTTPException(status_code=404, detail="Creative not found")
-    if creative.buyer_id:
-        await require_buyer_access(creative.buyer_id, store=store, user=user)
+    await require_creative_mutation_access(creative.buyer_id, user=user)
 
     await store.update_creative_campaign(creative_id, None)
     return {"status": "removed", "creative_id": creative_id}

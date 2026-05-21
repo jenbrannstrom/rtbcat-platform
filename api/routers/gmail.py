@@ -45,6 +45,13 @@ class GmailStatusResponse(BaseModel):
     last_unread_report_emails: int = Field(
         0, description="Unread report emails seen on the last Gmail import scan"
     )
+    last_file_failures: list[dict] = Field(
+        default_factory=list,
+        description="File-level import failures from the last Gmail import run",
+    )
+    last_file_failure_count: int = Field(
+        0, description="Number of file-level import failures from the last Gmail import run"
+    )
 
 
 class GmailImportResponse(BaseModel):

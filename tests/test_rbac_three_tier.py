@@ -16,6 +16,7 @@ from api.dependencies import (
     is_sudo,
     require_buyer_access_level,
     require_buyer_admin_access,
+    require_creative_mutation_access,
     require_seat_admin_or_sudo,
 )
 from services.auth_service import User, UserBuyerSeatPermission
@@ -152,6 +153,35 @@ async def test_require_buyer_admin_access_readonly_denied():
         with pytest.raises(HTTPException) as exc_info:
             await require_buyer_admin_access("2222222222", _readonly_user())
         assert exc_info.value.status_code == 403
+
+
+# ==================== require_creative_mutation_access ====================
+
+
+@pytest.mark.asyncio
+async def test_creative_mutation_requires_admin_for_buyer_scoped_creative():
+    with patch("api.dependencies.get_auth_service", return_value=_mock_auth_svc([_pilot_read_perm()])):
+        with pytest.raises(HTTPException) as exc_info:
+            await require_creative_mutation_access("2222222222", _readonly_user())
+        assert exc_info.value.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_creative_mutation_allows_seat_admin_for_buyer_scoped_creative():
+    with patch("api.dependencies.get_auth_service", return_value=_mock_auth_svc([_pilot_admin_perm()])):
+        await require_creative_mutation_access("2222222222", _local_admin_user())
+
+
+@pytest.mark.asyncio
+async def test_creative_mutation_requires_sudo_for_unscoped_creative():
+    with pytest.raises(HTTPException) as exc_info:
+        await require_creative_mutation_access(None, _readonly_user())
+    assert exc_info.value.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_creative_mutation_allows_sudo_for_unscoped_creative():
+    await require_creative_mutation_access(None, _sudo_user())
 
 
 # ==================== require_seat_admin_or_sudo ====================
