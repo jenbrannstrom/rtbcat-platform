@@ -465,129 +465,13 @@ systemctl start cloud-sql-proxy
 # -----------------------------------------------------------------------------
 echo ">>> Configuring nginx..."
 
-cat > /etc/nginx/sites-available/catscan << 'NGINXEOF'
-# Cat-Scan Nginx Configuration
-# SECURITY: OAuth2 Proxy handles authentication before any request reaches the app
-
-server {
-    listen 80;
-    server_name DOMAIN_PLACEHOLDER;
-
-    # Allow large CSV uploads for imports (avoid 413)
-    client_max_body_size 200m;
-
-    # OAuth2 Proxy endpoints (handles Google login flow)
-    location /oauth2/ {
-        proxy_pass http://127.0.0.1:4180;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_set_header X-Auth-Request-Redirect $request_uri;
-    }
-
-    # OAuth2 Proxy auth check (internal)
-    location = /oauth2/auth {
-        proxy_pass http://127.0.0.1:4180;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_set_header Content-Length "";
-        proxy_pass_request_body off;
-    }
-
-    # Health check (no auth required - for load balancers/monitoring)
-    location /health {
-        proxy_pass http://127.0.0.1:8000/health;
-        proxy_set_header Host $host;
-    }
-
-    # Precompute endpoints - allow scheduler/monitoring with secret headers
-    location = /api/precompute/refresh/scheduled {
-        proxy_pass http://127.0.0.1:8000/precompute/refresh/scheduled;
-        proxy_set_header Host $host;
-    }
-
-    location = /api/precompute/health {
-        proxy_pass http://127.0.0.1:8000/precompute/health;
-        proxy_set_header Host $host;
-    }
-
-    # Gmail import scheduler endpoint - allow scheduler with secret header
-    location = /api/gmail/import/scheduled {
-        proxy_pass http://127.0.0.1:8000/gmail/import/scheduled;
-        proxy_set_header Host $host;
-    }
-
-    # API routes - require Google authentication
-    location /api/ {
-        auth_request /oauth2/auth;
-        error_page 401 = /oauth2/sign_in;
-
-        # Pass authenticated user info to backend
-        auth_request_set $user $upstream_http_x_auth_request_user;
-        auth_request_set $email $upstream_http_x_auth_request_email;
-        proxy_set_header X-User $user;
-        proxy_set_header X-Email $email;
-
-        proxy_pass http://127.0.0.1:8000/;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_set_header Cookie $http_cookie;
-        proxy_pass_header Set-Cookie;
-
-        # Timeouts for long operations
-        proxy_read_timeout 300s;
-        proxy_connect_timeout 75s;
-    }
-
-    # Dashboard - require Google authentication
-    location / {
-        auth_request /oauth2/auth;
-        error_page 401 = /oauth2/sign_in;
-
-        # Pass authenticated user info to frontend
-        auth_request_set $user $upstream_http_x_auth_request_user;
-        auth_request_set $email $upstream_http_x_auth_request_email;
-        proxy_set_header X-User $user;
-        proxy_set_header X-Email $email;
-
-        proxy_pass http://127.0.0.1:3000;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-
-    # Security headers
-    add_header X-Frame-Options "SAMEORIGIN" always;
-    add_header X-Content-Type-Options "nosniff" always;
-    add_header X-XSS-Protection "1; mode=block" always;
-    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
-}
-NGINXEOF
-
-# Replace domain placeholder (avoiding variable expansion issues)
-sed -i "s/DOMAIN_PLACEHOLDER/$DOMAIN_NAME/g" /etc/nginx/sites-available/catscan
-
-# Enable site
-ln -sf /etc/nginx/sites-available/catscan /etc/nginx/sites-enabled/
-rm -f /etc/nginx/sites-enabled/default
-
 # Start OAuth2 Proxy (must be running before nginx uses auth_request)
 echo ">>> Starting OAuth2 Proxy..."
 systemctl start oauth2-proxy
 sleep 2  # Wait for OAuth2 Proxy to be ready
 
-# Test and reload nginx
-nginx -t && systemctl reload nginx
+# Apply repo-owned nginx edge auth contract, then test and reload nginx.
+DOMAIN_NAME="$DOMAIN_NAME" bash "$APP_DIR/scripts/apply_gcp_nginx_auth_contract.sh"
 
 # -----------------------------------------------------------------------------
 # 6. SSL Certificate (if domain configured)

@@ -25,7 +25,11 @@ Note: `buyer_account_id` has composite indexes, `buyer_id` does not. Use `buyer_
 
 ## Auth: Webhook endpoints must be public
 
-Conversion postback endpoints (`/conversions/*/postback`, `/conversions/pixel`) are server-to-server webhooks. They must be listed in `PUBLIC_PREFIXES` in both `session_middleware.py` and `auth.py`. They have their own webhook secret/HMAC verification.
+Conversion postback endpoints (`/conversions/*/postback`, `/conversions/pixel`) are server-to-server webhooks. They must be listed in `PUBLIC_PREFIXES` in `api/auth_public_paths.py`. They have their own webhook secret/HMAC verification.
+
+The source of truth for public auth, scheduler, and webhook paths is
+`api/auth_public_paths.py`. Do not add these paths separately to individual
+middleware files.
 
 ## Deployment
 

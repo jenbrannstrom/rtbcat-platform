@@ -20,6 +20,7 @@ from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
 
+from api.auth_public_paths import is_public_path
 from api.auth_bootstrap import (
     is_bootstrap_token_required,
     is_bootstrap_completed,
@@ -42,45 +43,6 @@ API_KEY_USER = User(
     display_name="API Key Automation",
     role="sudo",
 )
-
-# Paths that don't require authentication
-PUBLIC_PATHS = {
-    "/health",
-    "/auth/check",
-    "/auth/me",
-    "/auth/providers",
-    "/auth/bootstrap",  # First admin provisioning (token-gated)
-    "/auth/login",  # Password login
-    "/auth/register",  # First user registration
-    "/auth/authing/login",  # Authing OIDC login redirect
-    "/auth/authing/callback",  # Authing OIDC callback
-    "/gmail/import/scheduled",  # Cloud Scheduler (uses secret header)
-    "/precompute/refresh/scheduled",  # Cloud Scheduler (uses secret header)
-    "/precompute/health",  # Monitoring (uses secret header)
-    "/creatives/cache/refresh/scheduled",  # Cloud Scheduler (uses secret header)
-}
-
-# Path prefixes that are public
-PUBLIC_PREFIXES: list[str] = [
-    "/conversions/appsflyer/postback",   # Webhook (secret-gated)
-    "/conversions/generic/postback",     # Webhook (secret-gated)
-    "/conversions/redtrack/postback",    # Webhook (secret-gated)
-    "/conversions/voluum/postback",      # Webhook (secret-gated)
-    "/conversions/pixel",                # Pixel tracking
-]
-
-
-def is_public_path(path: str) -> bool:
-    """Check if the path is public (no auth required)."""
-    if path in PUBLIC_PATHS:
-        return True
-
-    for prefix in PUBLIC_PREFIXES:
-        if path.startswith(prefix):
-            return True
-
-    return False
-
 
 # Singleton AuthService instance
 _auth_service: Optional[AuthService] = None
