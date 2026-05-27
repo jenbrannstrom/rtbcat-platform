@@ -1,13 +1,13 @@
 """API-key automation should have an authenticated service user context."""
 
 from fastapi import Depends, FastAPI
-from fastapi.testclient import TestClient
 
 from api.auth import APIKeyAuthMiddleware
 from api.dependencies import require_admin
 from api.session_middleware import SessionAuthMiddleware
 from services.auth_service import User
 from services.secrets_manager import get_secrets_manager
+from tests.support.asgi_client import SyncASGIClient
 
 
 def _app_with_auth(monkeypatch) -> FastAPI:
@@ -33,13 +33,17 @@ def _app_with_auth(monkeypatch) -> FastAPI:
     async def precompute_health() -> dict[str, str]:
         return {"ok": "true"}
 
+    @app.post("/auth/login")
+    async def auth_login() -> dict[str, str]:
+        return {"ok": "true"}
+
     app.add_middleware(APIKeyAuthMiddleware)
     app.add_middleware(SessionAuthMiddleware)
     return app
 
 
 def test_api_key_auth_attaches_sudo_service_user(monkeypatch) -> None:
-    client = TestClient(_app_with_auth(monkeypatch))
+    client = SyncASGIClient(_app_with_auth(monkeypatch))
 
     response = client.get(
         "/admin-only",
@@ -54,7 +58,7 @@ def test_api_key_auth_attaches_sudo_service_user(monkeypatch) -> None:
 
 
 def test_invalid_api_key_still_rejected(monkeypatch) -> None:
-    client = TestClient(_app_with_auth(monkeypatch))
+    client = SyncASGIClient(_app_with_auth(monkeypatch))
 
     response = client.get(
         "/admin-only",
@@ -65,9 +69,18 @@ def test_invalid_api_key_still_rejected(monkeypatch) -> None:
 
 
 def test_secret_gated_scheduler_paths_bypass_api_key_middleware(monkeypatch) -> None:
-    client = TestClient(_app_with_auth(monkeypatch))
+    client = SyncASGIClient(_app_with_auth(monkeypatch))
 
     response = client.get("/precompute/health")
+
+    assert response.status_code == 200
+    assert response.json() == {"ok": "true"}
+
+
+def test_password_login_path_bypasses_api_key_middleware(monkeypatch) -> None:
+    client = SyncASGIClient(_app_with_auth(monkeypatch))
+
+    response = client.post("/auth/login")
 
     assert response.status_code == 200
     assert response.json() == {"ok": "true"}

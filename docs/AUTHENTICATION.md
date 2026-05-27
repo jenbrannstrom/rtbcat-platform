@@ -12,6 +12,11 @@ Cat-Scan supports three login methods. All three produce the same session cookie
 
 The login page at `/login` discovers enabled providers from `GET /api/auth/providers` at runtime and shows only valid options.
 
+Edge proxy behavior is governed by [EDGE_AUTH_CONTRACT.md](EDGE_AUTH_CONTRACT.md).
+In short: `/login` and `/api/auth/*` must reach the app, and OAuth2 Proxy is an
+optional identity source that may inject `X-Email`, not a mandatory gate in
+front of every route.
+
 ## Who can log in?
 
 - **Email/Password** -- only users who have been registered (see below).
@@ -120,13 +125,14 @@ Browser
   v
 Nginx (TLS termination)
   |-- /login, /            --> Dashboard (Next.js :3000)
-  |-- /api/auth/*           --> API :8000 (public, no auth layer)
-  |-- /api/*                --> API :8000 (session cookie validated by app)
+  |-- /api/auth/*           --> API :8000 (public login entrypoints)
+  |-- /api/*                --> API :8000 (session/API-key validated by app)
   |-- /oauth2/*             --> OAuth2 Proxy :4180 (Google SSO)
   |-- /health               --> API :8000 (public)
   v
 API (FastAPI)
   |-- session_middleware.py   validates rtbcat_session cookie
+  |-- auth_public_paths.py    shared public path contract
   |-- auth_password.py        email/password login + registration
   |-- auth_authing.py         Authing OIDC flow
   |-- auth_oauth_proxy.py     Google via OAuth2 Proxy headers

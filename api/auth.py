@@ -17,19 +17,8 @@ from typing import Optional
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
+from api.auth_public_paths import is_public_path
 from services.secrets_manager import get_secrets_manager
-
-# Paths that don't require authentication
-PUBLIC_PATHS = {
-    "/health",
-    "/auth/providers",
-    "/auth/check",
-    "/auth/me",
-    "/gmail/import/scheduled",
-    "/precompute/refresh/scheduled",
-    "/precompute/health",
-    "/creatives/cache/refresh/scheduled",
-}
 
 
 def get_api_key() -> Optional[str]:
@@ -40,22 +29,6 @@ def get_api_key() -> Optional[str]:
 def generate_api_key() -> str:
     """Generate a secure random API key."""
     return secrets.token_urlsafe(32)
-
-
-_PUBLIC_PREFIXES = (
-    "/conversions/appsflyer/postback",
-    "/conversions/generic/postback",
-    "/conversions/redtrack/postback",
-    "/conversions/voluum/postback",
-    "/conversions/pixel",
-)
-
-
-def is_public_path(path: str) -> bool:
-    """Check if the path is public (no auth required)."""
-    if path in PUBLIC_PATHS:
-        return True
-    return any(path.startswith(p) for p in _PUBLIC_PREFIXES)
 
 
 class APIKeyAuthMiddleware(BaseHTTPMiddleware):

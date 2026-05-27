@@ -238,6 +238,11 @@ jobs:
                 --no-recreate-api
               echo '✓ Runtime env refreshed from GSM'
 
+              # Reapply the repo-owned edge auth contract on every deploy.
+              # Startup-script edits alone do not update existing VMs.
+              sudo bash scripts/apply_gcp_nginx_auth_contract.sh
+              echo '✓ Nginx edge auth contract applied'
+
               # Start containers with new images
               sudo -E docker compose -f docker-compose.gcp.yml up -d --force-recreate
 
