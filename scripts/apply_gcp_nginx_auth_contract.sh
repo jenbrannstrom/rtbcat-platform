@@ -12,6 +12,7 @@ USAGE
 
 DOMAIN_NAME="${DOMAIN_NAME:-}"
 RELOAD_NGINX=1
+AGENT_API_HTPASSWD="${CATSCAN_AGENT_API_HTPASSWD:-}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -49,6 +50,53 @@ if [[ -z "${DOMAIN_NAME}" ]]; then
 fi
 
 install -d -m 0755 /etc/nginx/sites-available /etc/nginx/sites-enabled
+
+read_env_value() {
+  local key="$1"
+  local file="$2"
+  python3 - "$key" "$file" <<'PY'
+from pathlib import Path
+import sys
+
+key = sys.argv[1]
+path = Path(sys.argv[2])
+try:
+    lines = path.read_text().splitlines()
+except FileNotFoundError:
+    raise SystemExit(0)
+
+for line in lines:
+    stripped = line.strip()
+    if not stripped or stripped.startswith("#") or "=" not in stripped:
+        continue
+    name, value = stripped.split("=", 1)
+    if name.strip() != key:
+        continue
+    value = value.strip()
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+        value = value[1:-1]
+    print(value)
+    break
+PY
+}
+
+if [[ -z "${AGENT_API_HTPASSWD}" && -f /etc/catscan.env ]]; then
+  AGENT_API_HTPASSWD="$(read_env_value CATSCAN_AGENT_API_HTPASSWD /etc/catscan.env)"
+fi
+
+AGENT_API_AUTH_DIRECTIVES="        # Optional edge Basic Auth disabled; FastAPI still requires a cat_agent_ bearer token."
+if [[ -n "${AGENT_API_HTPASSWD}" ]]; then
+  printf '%s\n' "${AGENT_API_HTPASSWD}" > /etc/nginx/catscan-agent-api.htpasswd
+  if getent group www-data >/dev/null 2>&1; then
+    chown root:www-data /etc/nginx/catscan-agent-api.htpasswd
+    chmod 0640 /etc/nginx/catscan-agent-api.htpasswd
+  else
+    chown root:root /etc/nginx/catscan-agent-api.htpasswd
+    chmod 0644 /etc/nginx/catscan-agent-api.htpasswd
+  fi
+  AGENT_API_AUTH_DIRECTIVES='        auth_basic "Cat-Scan Agent API";
+        auth_basic_user_file /etc/nginx/catscan-agent-api.htpasswd;'
+fi
 
 cat > /etc/nginx/sites-available/catscan <<'NGINXEOF'
 # Cat-Scan Nginx Configuration
@@ -108,6 +156,22 @@ server {
     location = /api/gmail/import/scheduled {
         proxy_pass http://127.0.0.1:8000/gmail/import/scheduled;
         proxy_set_header Host $host;
+    }
+
+    # Outside-agent API. Optional Basic Auth is evaluated at the edge before
+    # FastAPI validates the hashed, buyer-scoped cat_agent_ bearer token.
+    location ^~ /api/agent/v1/ {
+AGENT_API_AUTH_DIRECTIVES_PLACEHOLDER
+
+        rewrite ^/api/(.*)$ /$1 break;
+        proxy_pass http://127.0.0.1:8000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 75s;
+        proxy_connect_timeout 10s;
     }
 
     # API routes.
@@ -176,13 +240,21 @@ server {
 }
 NGINXEOF
 
+export AGENT_API_AUTH_DIRECTIVES
 python3 - "$DOMAIN_NAME" <<'PY'
 from pathlib import Path
+import os
 import sys
 
 domain = sys.argv[1]
 path = Path("/etc/nginx/sites-available/catscan")
-path.write_text(path.read_text().replace("DOMAIN_PLACEHOLDER", domain))
+text = path.read_text()
+text = text.replace("DOMAIN_PLACEHOLDER", domain)
+text = text.replace(
+    "AGENT_API_AUTH_DIRECTIVES_PLACEHOLDER",
+    os.environ["AGENT_API_AUTH_DIRECTIVES"],
+)
+path.write_text(text)
 PY
 
 ln -sf /etc/nginx/sites-available/catscan /etc/nginx/sites-enabled/

@@ -14,6 +14,7 @@ import os
 import secrets
 import sys
 import uuid
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Iterable
 
@@ -35,6 +36,7 @@ except ImportError:
 
 
 _PREHASHED_BCRYPT_PREFIX = "$catscan-sha256$"
+_AGENT_TOKEN_PREFIX = "cat_agent_"
 
 
 def _prehash_password(password: str) -> str:
@@ -58,6 +60,14 @@ def _generate_secret() -> str:
     return secrets.token_urlsafe(32)
 
 
+def _generate_agent_token() -> str:
+    return f"{_AGENT_TOKEN_PREFIX}{secrets.token_urlsafe(32)}"
+
+
+def _hash_agent_token(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
 def _normalize_buyer_ids(values: Iterable[str]) -> list[str]:
     seen: set[str] = set()
     normalized: list[str] = []
@@ -77,11 +87,31 @@ def _schema_exists(conn: psycopg.Connection, schema_name: str) -> bool:
     ).fetchone() is not None
 
 
+def _table_exists(conn: psycopg.Connection, table_name: str) -> bool:
+    return conn.execute(
+        """
+        SELECT 1
+        FROM information_schema.tables
+        WHERE table_schema = 'public'
+          AND table_name = %s
+        """,
+        (table_name,),
+    ).fetchone() is not None
+
+
 def _ensure_agent_read_schema(conn: psycopg.Connection) -> None:
     if not _schema_exists(conn, "agent_read") or not _schema_exists(conn, "agent_private"):
         raise SystemExit(
             "agent_read schema is not installed. Run Postgres migrations first "
             "(storage/postgres_migrations/066_agent_read_views.sql)."
+        )
+
+
+def _ensure_agent_tokens_table(conn: psycopg.Connection) -> None:
+    if not _table_exists(conn, "agent_api_tokens"):
+        raise SystemExit(
+            "agent_api_tokens is not installed. Run Postgres migrations first "
+            "(storage/postgres_migrations/068_agent_api_tokens.sql)."
         )
 
 
@@ -274,6 +304,38 @@ def _grant_db_buyer_read(
         )
 
 
+def _create_agent_api_token(
+    conn: psycopg.Connection,
+    *,
+    user_id: str,
+    name: str,
+    buyer_id: str | None,
+    expires_in_days: int,
+) -> str:
+    token = _generate_agent_token()
+    expires_at = datetime.now(UTC) + timedelta(days=max(1, min(expires_in_days, 366)))
+    conn.execute(
+        """
+        INSERT INTO agent_api_tokens (
+            id, name, token_hash, token_prefix, user_id, buyer_id,
+            scopes, expires_at, created_by
+        )
+        VALUES (%s, %s, %s, %s, %s, %s, 'agent:stats:read', %s, %s)
+        """,
+        (
+            str(uuid.uuid4()),
+            name,
+            _hash_agent_token(token),
+            token[:22],
+            user_id,
+            buyer_id,
+            expires_at,
+            user_id,
+        ),
+    )
+    return token
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Provision read-only DB and app access for creative audit agents."
@@ -326,6 +388,29 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Grant app read access to all active buyer seats.",
     )
+    parser.add_argument(
+        "--create-api-token",
+        action="store_true",
+        help="Create a hashed bearer token for /api/agent/v1 stats access.",
+    )
+    parser.add_argument(
+        "--api-token-name",
+        default="Creative Audit Agent API",
+        help="Display name for --create-api-token.",
+    )
+    parser.add_argument(
+        "--api-token-buyer-id",
+        help=(
+            "Optional hard buyer scope for --create-api-token. Defaults to the "
+            "single app buyer grant when exactly one buyer is granted."
+        ),
+    )
+    parser.add_argument(
+        "--api-token-expires-days",
+        type=int,
+        default=90,
+        help="Token lifetime in days for --create-api-token (1..366, default 90).",
+    )
     return parser.parse_args()
 
 
@@ -333,10 +418,15 @@ def main() -> int:
     args = parse_args()
     db_password = args.db_password or _generate_secret()
     app_password = args.app_password or _generate_secret()
+    api_token: str | None = None
 
     with psycopg.connect(_get_dsn(), row_factory=dict_row) as conn:
         if not args.skip_db_role:
             _ensure_agent_read_schema(conn)
+        if args.create_api_token:
+            _ensure_agent_tokens_table(conn)
+            if args.skip_app_user:
+                raise SystemExit("--create-api-token requires an app user; remove --skip-app-user.")
 
         active_buyer_ids = _active_buyer_ids(conn) if args.all_active_buyers else []
         app_buyer_ids = _normalize_buyer_ids([*args.buyer_id, *active_buyer_ids])
@@ -370,6 +460,27 @@ def main() -> int:
             )
             if app_buyer_ids:
                 _grant_buyer_read(conn, user_id=app_user_id, buyer_ids=app_buyer_ids)
+            if args.create_api_token:
+                hard_scope_buyer_id = args.api_token_buyer_id
+                if not hard_scope_buyer_id and len(app_buyer_ids) == 1:
+                    hard_scope_buyer_id = app_buyer_ids[0]
+                if not hard_scope_buyer_id:
+                    raise SystemExit(
+                        "--create-api-token requires a buyer hard-scope. Provide exactly one "
+                        "--buyer-id or pass --api-token-buyer-id."
+                    )
+                if hard_scope_buyer_id and hard_scope_buyer_id not in app_buyer_ids:
+                    raise SystemExit(
+                        "--api-token-buyer-id must also be granted to the app user via --buyer-id "
+                        "or --all-active-buyers."
+                    )
+                api_token = _create_agent_api_token(
+                    conn,
+                    user_id=app_user_id,
+                    name=args.api_token_name,
+                    buyer_id=hard_scope_buyer_id,
+                    expires_in_days=args.api_token_expires_days,
+                )
 
         conn.commit()
 
@@ -394,6 +505,9 @@ def main() -> int:
                 "WARNING: app user has no buyer seat grants; grant --buyer-id or rerun with --all-active-buyers.",
                 file=sys.stderr,
             )
+    if api_token:
+        print(f"Agent API token: {api_token}")
+        print("Agent API token scope: agent:stats:read")
     return 0
 
 

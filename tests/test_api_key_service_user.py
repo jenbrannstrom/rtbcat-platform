@@ -37,6 +37,10 @@ def _app_with_auth(monkeypatch) -> FastAPI:
     async def auth_login() -> dict[str, str]:
         return {"ok": "true"}
 
+    @app.get("/agent/v1/probe")
+    async def agent_probe() -> dict[str, str]:
+        return {"ok": "true"}
+
     app.add_middleware(APIKeyAuthMiddleware)
     app.add_middleware(SessionAuthMiddleware)
     return app
@@ -81,6 +85,18 @@ def test_password_login_path_bypasses_api_key_middleware(monkeypatch) -> None:
     client = SyncASGIClient(_app_with_auth(monkeypatch))
 
     response = client.post("/auth/login")
+
+    assert response.status_code == 200
+    assert response.json() == {"ok": "true"}
+
+
+def test_agent_api_prefix_bypasses_global_api_key_middleware(monkeypatch) -> None:
+    client = SyncASGIClient(_app_with_auth(monkeypatch))
+
+    response = client.get(
+        "/agent/v1/probe",
+        headers={"Authorization": "Bearer cat_agent_not_global_api_key"},
+    )
 
     assert response.status_code == 200
     assert response.json() == {"ok": "true"}
