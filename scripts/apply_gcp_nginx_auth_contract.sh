@@ -41,15 +41,64 @@ if [[ "${EUID}" -ne 0 ]]; then
   exit 1
 fi
 
-if [[ -z "${DOMAIN_NAME}" && -f /etc/nginx/sites-enabled/catscan ]]; then
-  DOMAIN_NAME="$(awk '/server_name/ {print $2; exit}' /etc/nginx/sites-enabled/catscan | tr -d ';')"
+detect_domain_from_site() {
+  local site_path="$1"
+  awk '
+    /server_name/ {
+      for (i = 2; i <= NF; i++) {
+        gsub(";", "", $i)
+        if ($i != "_" && $i != "") {
+          print $i
+          exit
+        }
+      }
+    }
+  ' "$site_path"
+}
+
+if [[ -z "${DOMAIN_NAME}" ]]; then
+  for site_path in \
+    /etc/nginx/sites-enabled/catscan.conf \
+    /etc/nginx/sites-enabled/catscan \
+    /etc/nginx/sites-available/catscan.conf; do
+    if [[ -f "${site_path}" ]]; then
+      DOMAIN_NAME="$(detect_domain_from_site "${site_path}")"
+      if [[ -n "${DOMAIN_NAME}" ]]; then
+        break
+      fi
+    fi
+  done
+fi
+
+if [[ -z "${DOMAIN_NAME}" && -d /etc/letsencrypt/live ]]; then
+  for cert_dir in /etc/letsencrypt/live/*; do
+    if [[ -f "${cert_dir}/fullchain.pem" && -f "${cert_dir}/privkey.pem" ]]; then
+      DOMAIN_NAME="$(basename "${cert_dir}")"
+      break
+    fi
+  done
 fi
 
 if [[ -z "${DOMAIN_NAME}" ]]; then
   DOMAIN_NAME="_"
 fi
 
-install -d -m 0755 /etc/nginx/sites-available /etc/nginx/sites-enabled
+install -d -m 0755 /etc/nginx/sites-available /etc/nginx/sites-enabled /etc/nginx/snippets
+
+TLS_CERT="/etc/letsencrypt/live/${DOMAIN_NAME}/fullchain.pem"
+TLS_KEY="/etc/letsencrypt/live/${DOMAIN_NAME}/privkey.pem"
+TLS_OPTIONS_DIRECTIVE="        # Certbot SSL options file not present."
+TLS_DHPARAM_DIRECTIVE="        # Certbot SSL dhparam file not present."
+ENABLE_TLS=0
+if [[ "${DOMAIN_NAME}" != "_" && -f "${TLS_CERT}" && -f "${TLS_KEY}" ]]; then
+  ENABLE_TLS=1
+  if [[ -f /etc/letsencrypt/options-ssl-nginx.conf ]]; then
+    TLS_OPTIONS_DIRECTIVE="        include /etc/letsencrypt/options-ssl-nginx.conf;"
+  fi
+  if [[ -f /etc/letsencrypt/ssl-dhparams.pem ]]; then
+    TLS_DHPARAM_DIRECTIVE="        ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;"
+  fi
+fi
 
 read_env_value() {
   local key="$1"
@@ -98,22 +147,7 @@ if [[ -n "${AGENT_API_HTPASSWD}" ]]; then
         auth_basic_user_file /etc/nginx/catscan-agent-api.htpasswd;'
 fi
 
-cat > /etc/nginx/sites-available/catscan <<'NGINXEOF'
-# Cat-Scan Nginx Configuration
-# Source of truth: scripts/apply_gcp_nginx_auth_contract.sh
-# Auth contract:
-# - /login reaches Next.js
-# - /api/auth/* reaches FastAPI
-# - /api/* reaches FastAPI, which owns session/API-key/webhook auth
-# - OAuth2 Proxy may inject X-Email but is not the only auth gate
-
-server {
-    listen 80;
-    server_name DOMAIN_PLACEHOLDER;
-
-    # Allow large CSV uploads for imports (avoid 413)
-    client_max_body_size 200m;
-
+cat > /etc/nginx/snippets/catscan-app-locations.conf <<'NGINXEOF'
     # OAuth2 Proxy endpoints (handles Google login flow)
     location /oauth2/ {
         proxy_pass http://127.0.0.1:4180;
@@ -237,28 +271,93 @@ AGENT_API_AUTH_DIRECTIVES_PLACEHOLDER
     add_header X-Content-Type-Options "nosniff" always;
     add_header X-XSS-Protection "1; mode=block" always;
     add_header Referrer-Policy "strict-origin-when-cross-origin" always;
-}
 NGINXEOF
 
+if [[ "${ENABLE_TLS}" -eq 1 ]]; then
+  cat > /etc/nginx/sites-available/catscan <<'NGINXEOF'
+# Cat-Scan Nginx Configuration
+# Source of truth: scripts/apply_gcp_nginx_auth_contract.sh
+# Auth contract:
+# - /login reaches Next.js
+# - /api/auth/* reaches FastAPI
+# - /api/* reaches FastAPI, which owns session/API-key/webhook auth
+# - OAuth2 Proxy may inject X-Email but is not the only auth gate
+
+server {
+    listen 80;
+    server_name DOMAIN_PLACEHOLDER;
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    server_name DOMAIN_PLACEHOLDER;
+
+    ssl_certificate TLS_CERT_PLACEHOLDER;
+    ssl_certificate_key TLS_KEY_PLACEHOLDER;
+TLS_OPTIONS_DIRECTIVE_PLACEHOLDER
+TLS_DHPARAM_DIRECTIVE_PLACEHOLDER
+
+    # Allow large CSV uploads for imports (avoid 413)
+    client_max_body_size 200m;
+
+    include /etc/nginx/snippets/catscan-app-locations.conf;
+}
+NGINXEOF
+else
+  cat > /etc/nginx/sites-available/catscan <<'NGINXEOF'
+# Cat-Scan Nginx Configuration
+# Source of truth: scripts/apply_gcp_nginx_auth_contract.sh
+# Auth contract:
+# - /login reaches Next.js
+# - /api/auth/* reaches FastAPI
+# - /api/* reaches FastAPI, which owns session/API-key/webhook auth
+# - OAuth2 Proxy may inject X-Email but is not the only auth gate
+
+server {
+    listen 80;
+    server_name DOMAIN_PLACEHOLDER;
+
+    # Allow large CSV uploads for imports (avoid 413)
+    client_max_body_size 200m;
+
+    include /etc/nginx/snippets/catscan-app-locations.conf;
+}
+NGINXEOF
+fi
+
 export AGENT_API_AUTH_DIRECTIVES
+export TLS_CERT TLS_KEY TLS_OPTIONS_DIRECTIVE TLS_DHPARAM_DIRECTIVE
 python3 - "$DOMAIN_NAME" <<'PY'
 from pathlib import Path
 import os
 import sys
 
 domain = sys.argv[1]
-path = Path("/etc/nginx/sites-available/catscan")
-text = path.read_text()
-text = text.replace("DOMAIN_PLACEHOLDER", domain)
-text = text.replace(
-    "AGENT_API_AUTH_DIRECTIVES_PLACEHOLDER",
-    os.environ["AGENT_API_AUTH_DIRECTIVES"],
-)
-path.write_text(text)
+for path in (
+    Path("/etc/nginx/sites-available/catscan"),
+    Path("/etc/nginx/snippets/catscan-app-locations.conf"),
+):
+    text = path.read_text()
+    text = text.replace("DOMAIN_PLACEHOLDER", domain)
+    text = text.replace("TLS_CERT_PLACEHOLDER", os.environ["TLS_CERT"])
+    text = text.replace("TLS_KEY_PLACEHOLDER", os.environ["TLS_KEY"])
+    text = text.replace("TLS_OPTIONS_DIRECTIVE_PLACEHOLDER", os.environ["TLS_OPTIONS_DIRECTIVE"])
+    text = text.replace("TLS_DHPARAM_DIRECTIVE_PLACEHOLDER", os.environ["TLS_DHPARAM_DIRECTIVE"])
+    text = text.replace(
+        "AGENT_API_AUTH_DIRECTIVES_PLACEHOLDER",
+        os.environ["AGENT_API_AUTH_DIRECTIVES"],
+    )
+    path.write_text(text)
 PY
 
 ln -sf /etc/nginx/sites-available/catscan /etc/nginx/sites-enabled/
 rm -f /etc/nginx/sites-enabled/default
+if [[ -e /etc/nginx/sites-enabled/catscan.conf ]]; then
+  disabled_path="/etc/nginx/sites-available/catscan.conf.disabled.$(date -u +%Y%m%d%H%M%S)"
+  mv /etc/nginx/sites-enabled/catscan.conf "${disabled_path}"
+  echo "Disabled stale nginx site /etc/nginx/sites-enabled/catscan.conf -> ${disabled_path}"
+fi
 
 nginx -t
 
@@ -266,4 +365,4 @@ if [[ "${RELOAD_NGINX}" -eq 1 ]]; then
   systemctl reload nginx
 fi
 
-echo "Applied Cat-Scan nginx edge auth contract for server_name=${DOMAIN_NAME}"
+echo "Applied Cat-Scan nginx edge auth contract for server_name=${DOMAIN_NAME} tls=${ENABLE_TLS}"

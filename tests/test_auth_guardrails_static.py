@@ -99,6 +99,17 @@ def test_gcp_nginx_can_edge_gate_agent_api() -> None:
     assert "auth_basic_user_file /etc/nginx/catscan-agent-api.htpasswd;" in source
 
 
+def test_gcp_nginx_contract_owns_tls_site_and_disables_stale_site() -> None:
+    source = (REPO_ROOT / "scripts" / "apply_gcp_nginx_auth_contract.sh").read_text(
+        encoding="utf-8"
+    )
+
+    assert "listen 443 ssl;" in source
+    assert "include /etc/nginx/snippets/catscan-app-locations.conf;" in source
+    assert "/etc/nginx/sites-enabled/catscan.conf" in source
+    assert "catscan.conf.disabled." in source
+
+
 def test_gcp_deploy_paths_apply_repo_owned_nginx_contract() -> None:
     startup_source = (REPO_ROOT / "terraform" / "gcp" / "startup.sh").read_text(
         encoding="utf-8"

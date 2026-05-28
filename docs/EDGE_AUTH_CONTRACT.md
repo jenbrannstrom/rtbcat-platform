@@ -32,7 +32,10 @@ public route lists into individual middleware files.
 
 The GCP nginx site is written by `scripts/apply_gcp_nginx_auth_contract.sh`.
 The startup script and deploy workflow both use that script so existing VMs and
-newly provisioned VMs receive the same edge behavior.
+newly provisioned VMs receive the same edge behavior. On hosts with Certbot
+certificates for the configured domain, the script owns the HTTPS server block
+and disables stale `/etc/nginx/sites-enabled/catscan.conf` files with a backup
+so TLS traffic cannot bypass the repo-owned contract.
 
 The outside-agent API has an optional extra edge gate. If
 `CATSCAN_AGENT_API_HTPASSWD` is present in the runtime environment or
@@ -57,4 +60,5 @@ The guardrails assert that:
 - both FastAPI auth middlewares use the shared public route contract;
 - GCP nginx treats OAuth2 Proxy as an optional identity source;
 - GCP nginx can add Basic Auth in front of the outside-agent API;
+- GCP nginx owns the TLS site and disables stale alternate site files;
 - Caddy leaves auth decisions to FastAPI.
