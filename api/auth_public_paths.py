@@ -22,6 +22,8 @@ PUBLIC_PATHS = {
 }
 
 PUBLIC_PREFIXES = (
+    "/agent/v1/",
+    "/api/agent/v1/",
     "/conversions/appsflyer/postback",
     "/conversions/generic/postback",
     "/conversions/redtrack/postback",

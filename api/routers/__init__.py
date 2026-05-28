@@ -36,6 +36,7 @@ _ROUTER_EXPORTS = {
     "optimizer_workflows_router": ("api.routers.optimizer_workflows", "router"),
     "admin_router": ("api.routers.admin", "router"),
     "seat_admin_router": ("api.routers.seat_admin", "router"),
+    "agent_router": ("api.routers.agent", "router"),
     "waste_router": ("api.routers.analytics.waste", "router"),
     "rtb_bidstream_router": ("api.routers.analytics.rtb_bidstream", "router"),
     "analytics_qps_router": ("api.routers.analytics.qps", "router"),

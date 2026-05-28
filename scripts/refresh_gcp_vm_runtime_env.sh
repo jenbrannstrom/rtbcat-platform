@@ -52,6 +52,15 @@ get_secret() {
     --project="$PROJECT_ID"
 }
 
+get_optional_secret() {
+  local secret_id="$1"
+  if gcloud secrets describe "$secret_id" --project="$PROJECT_ID" >/dev/null 2>&1; then
+    gcloud secrets versions access latest \
+      --secret="$secret_id" \
+      --project="$PROJECT_ID"
+  fi
+}
+
 upsert_env_line() {
   local file="$1"
   local key="$2"
@@ -71,6 +80,7 @@ GMAIL_IMPORT_SECRET="$(get_secret "${APP_NAME}-gmail-import-secret")"
 PRECOMPUTE_REFRESH_SECRET="$(get_secret "${APP_NAME}-precompute-refresh-secret")"
 PRECOMPUTE_MONITOR_SECRET="$(get_secret "${APP_NAME}-precompute-monitor-secret")"
 CREATIVE_CACHE_REFRESH_SECRET="$(get_secret "${APP_NAME}-creative-cache-refresh-secret")"
+AGENT_API_HTPASSWD="$(get_optional_secret "${APP_NAME}-agent-api-htpasswd")"
 
 for env_file in /etc/catscan.env "${APP_DIR}/.env"; do
   upsert_env_line "$env_file" CATSCAN_API_KEY "$API_KEY"
@@ -78,6 +88,9 @@ for env_file in /etc/catscan.env "${APP_DIR}/.env"; do
   upsert_env_line "$env_file" PRECOMPUTE_REFRESH_SECRET "$PRECOMPUTE_REFRESH_SECRET"
   upsert_env_line "$env_file" PRECOMPUTE_MONITOR_SECRET "$PRECOMPUTE_MONITOR_SECRET"
   upsert_env_line "$env_file" CREATIVE_CACHE_REFRESH_SECRET "$CREATIVE_CACHE_REFRESH_SECRET"
+  if [ -n "$AGENT_API_HTPASSWD" ]; then
+    upsert_env_line "$env_file" CATSCAN_AGENT_API_HTPASSWD "$AGENT_API_HTPASSWD"
+  fi
 done
 
 if id catscan >/dev/null 2>&1 && [ -f "${APP_DIR}/.env" ]; then

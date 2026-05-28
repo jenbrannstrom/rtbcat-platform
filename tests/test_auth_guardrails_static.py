@@ -13,7 +13,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
-def _literal_set_values(module_path: Path, target_name: str) -> set[str]:
+def _literal_sequence_values(module_path: Path, target_name: str) -> set[str]:
     source = module_path.read_text(encoding="utf-8")
     tree = ast.parse(source)
     for node in tree.body:
@@ -21,7 +21,7 @@ def _literal_set_values(module_path: Path, target_name: str) -> set[str]:
             continue
         for target in node.targets:
             if isinstance(target, ast.Name) and target.id == target_name:
-                if not isinstance(node.value, ast.Set):
+                if not isinstance(node.value, (ast.Set, ast.Tuple, ast.List)):
                     return set()
                 values: set[str] = set()
                 for elt in node.value.elts:
@@ -29,6 +29,10 @@ def _literal_set_values(module_path: Path, target_name: str) -> set[str]:
                         values.add(elt.value)
                 return values
     return set()
+
+
+def _literal_set_values(module_path: Path, target_name: str) -> set[str]:
+    return _literal_sequence_values(module_path, target_name)
 
 
 def test_api_key_middleware_keeps_auth_check_and_me_public() -> None:
@@ -58,6 +62,19 @@ def test_auth_middlewares_share_public_route_contract() -> None:
     assert "PUBLIC_PATHS = {" not in session_source
 
 
+def test_agent_api_prefixes_bypass_generic_middleware_contract() -> None:
+    public_prefixes = _literal_sequence_values(
+        REPO_ROOT / "api" / "auth_public_paths.py",
+        "PUBLIC_PREFIXES",
+    )
+    session_source = (REPO_ROOT / "api" / "session_middleware.py").read_text(encoding="utf-8")
+
+    assert "/agent/v1/" in public_prefixes
+    assert "/api/agent/v1/" in public_prefixes
+    assert "AGENT_API_PREFIXES" not in session_source
+    assert "AgentTokenService().authenticate_request(request)" not in session_source
+
+
 def test_gcp_nginx_uses_oauth_as_optional_identity_source() -> None:
     source = (REPO_ROOT / "scripts" / "apply_gcp_nginx_auth_contract.sh").read_text(
         encoding="utf-8"
@@ -69,6 +86,17 @@ def test_gcp_nginx_uses_oauth_as_optional_identity_source() -> None:
     assert "error_page 401 403 = @api_without_oauth;" in source
     assert "location @api_without_oauth" in source
     assert "error_page 401 = /oauth2/sign_in;" not in source
+
+
+def test_gcp_nginx_can_edge_gate_agent_api() -> None:
+    source = (REPO_ROOT / "scripts" / "apply_gcp_nginx_auth_contract.sh").read_text(
+        encoding="utf-8"
+    )
+
+    assert "location ^~ /api/agent/v1/" in source
+    assert "CATSCAN_AGENT_API_HTPASSWD" in source
+    assert "auth_basic \"Cat-Scan Agent API\";" in source
+    assert "auth_basic_user_file /etc/nginx/catscan-agent-api.htpasswd;" in source
 
 
 def test_gcp_deploy_paths_apply_repo_owned_nginx_contract() -> None:

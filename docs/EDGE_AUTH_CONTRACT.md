@@ -34,6 +34,12 @@ The GCP nginx site is written by `scripts/apply_gcp_nginx_auth_contract.sh`.
 The startup script and deploy workflow both use that script so existing VMs and
 newly provisioned VMs receive the same edge behavior.
 
+The outside-agent API has an optional extra edge gate. If
+`CATSCAN_AGENT_API_HTPASSWD` is present in the runtime environment or
+`/etc/catscan.env`, nginx adds Basic Auth to `/api/agent/v1/*` before the
+request reaches FastAPI. FastAPI still requires the buyer-scoped
+`cat_agent_...` bearer token.
+
 ## Guardrails
 
 Run these before deploying edge/auth changes:
@@ -50,4 +56,5 @@ The guardrails assert that:
 - password/bootstrap/OIDC login entrypoints bypass the generic API-key gate;
 - both FastAPI auth middlewares use the shared public route contract;
 - GCP nginx treats OAuth2 Proxy as an optional identity source;
+- GCP nginx can add Basic Auth in front of the outside-agent API;
 - Caddy leaves auth decisions to FastAPI.

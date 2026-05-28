@@ -12,6 +12,7 @@ Do not make prompts, skills, or agent instructions the security boundary.
 Use:
 
 - `agent_read` SQL views for high-volume analytical reads
+- `/api/agent/v1` for outside HTTP agents that need precomputed report data
 - authenticated APIs for refreshes, scans, and mutations
 - `SKILL.md`-style instructions for workflow guidance only
 
@@ -56,6 +57,20 @@ Initial views:
 
 Raw-table access is reserved for trusted internal debugging or one-off data
 engineering work.
+
+## HTTP Agent Contract
+
+Outside agents that cannot use direct Postgres should use the versioned Agent
+API documented in [AGENT_API.md](AGENT_API.md).
+
+| Need | Contract |
+|------|----------|
+| Validate token | `GET /api/agent/v1/me` |
+| Pull email-ready stats | `GET /api/agent/v1/stats-summary` |
+| Create/revoke tokens | `POST/DELETE /api/agent/v1/tokens` as sudo |
+
+Agent bearer tokens are stored hashed, are revocable, carry scopes, and remain
+bound to normal Cat-Scan users and buyer-seat grants.
 
 ## Action Contract
 

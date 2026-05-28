@@ -11,6 +11,7 @@ Provision two separate credentials:
 |------------|---------|-----------|
 | Postgres role | Direct SQL reads for audit/reporting | `SELECT` only on buyer-scoped `agent_read` views |
 | Cat-Scan app user | Calls refresh and language-scan API endpoints | `read` role plus explicit buyer-seat read grants |
+| Agent API token | Pulls precomputed HTTP stats for email summaries | `agent:stats:read`, bound to the app user and optional buyer hard-scope |
 
 Do not use the Postgres read-only role to trigger refreshes. Refreshes and
 language scans write cache/analysis rows, so they should run through the app
@@ -75,6 +76,31 @@ CATSCAN_CREATIVE_AUDIT_APP_PASSWORD=...
 
 Rerunning without those variables generates new passwords and rotates both
 credentials.
+
+For an HTTP-only external agent, also create a bearer token:
+
+```bash
+python scripts/provision_creative_audit_agent.py \
+  --skip-db-role \
+  --app-email creative-audit-agent-1487810529@example.com \
+  --buyer-id 1487810529 \
+  --create-api-token
+```
+
+The token can call:
+
+```bash
+curl "https://YOUR_HOST/api/agent/v1/stats-summary?buyer_id=1487810529&days=7" \
+  -H "Authorization: Bearer ${CATSCAN_AGENT_TOKEN}"
+```
+
+If NGINX Basic Auth is enabled for `/api/agent/v1/*`, use:
+
+```bash
+curl -u "agent:${CATSCAN_AGENT_BASIC_PASSWORD}" \
+  -H "X-CatScan-Agent-Token: ${CATSCAN_AGENT_TOKEN}" \
+  "https://YOUR_HOST/api/agent/v1/stats-summary?buyer_id=1487810529&days=7"
+```
 
 For one app user per buyer, run the script once per buyer with a buyer-specific
 email:
