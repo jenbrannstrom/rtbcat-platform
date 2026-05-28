@@ -54,11 +54,9 @@ get_secret() {
 
 get_optional_secret() {
   local secret_id="$1"
-  if gcloud secrets describe "$secret_id" --project="$PROJECT_ID" >/dev/null 2>&1; then
-    gcloud secrets versions access latest \
-      --secret="$secret_id" \
-      --project="$PROJECT_ID"
-  fi
+  gcloud secrets versions access latest \
+    --secret="$secret_id" \
+    --project="$PROJECT_ID" 2>/dev/null || true
 }
 
 upsert_env_line() {
