@@ -110,6 +110,16 @@ def test_gcp_nginx_contract_owns_tls_site_and_disables_stale_site() -> None:
     assert "catscan.conf.disabled." in source
 
 
+def test_runtime_env_refresh_can_read_optional_agent_secret_with_accessor_only() -> None:
+    source = (REPO_ROOT / "scripts" / "refresh_gcp_vm_runtime_env.sh").read_text(
+        encoding="utf-8"
+    )
+
+    assert "${APP_NAME}-agent-api-htpasswd" in source
+    assert "gcloud secrets describe \"$secret_id\"" not in source
+    assert "2>/dev/null || true" in source
+
+
 def test_gcp_deploy_paths_apply_repo_owned_nginx_contract() -> None:
     startup_source = (REPO_ROOT / "terraform" / "gcp" / "startup.sh").read_text(
         encoding="utf-8"
