@@ -1,6 +1,6 @@
 # RTBcat Creative Intelligence - Multi-stage Docker Build
 # Stage 1: Builder
-FROM python:3.11-slim as builder
+FROM python:3.11-slim-bookworm AS builder
 
 WORKDIR /app
 
@@ -27,7 +27,7 @@ RUN mkdir -p /ms-playwright && \
     fi
 
 # Stage 2: Runtime
-FROM python:3.11-slim as runtime
+FROM python:3.11-slim-bookworm AS runtime
 
 WORKDIR /app
 
