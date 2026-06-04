@@ -1,0 +1,123 @@
+name: Creative Language Refresh
+
+on:
+  workflow_dispatch:
+    inputs:
+      api_base_url:
+        description: "API base URL including /api"
+        required: true
+        default: "https://scan.rtb.cat/api"
+      buyer_id:
+        description: "Buyer seat ID. If omitted, seat_name is used."
+        required: false
+        default: ""
+      seat_name:
+        description: "Case-insensitive display-name match when buyer_id is omitted."
+        required: false
+        default: ""
+      refresh_limit:
+        description: "Maximum creatives to queue in this batch."
+        required: true
+        default: "250"
+      force:
+        description: "Force-refresh existing language and geo analyses."
+        required: true
+        type: choice
+        default: "true"
+        options:
+          - "true"
+          - "false"
+      days:
+        description: "Serving-country lookback window."
+        required: true
+        default: "7"
+
+permissions:
+  contents: read
+
+jobs:
+  refresh:
+    name: Queue refresh batch
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      API_BASE_URL: ${{ inputs.api_base_url }}
+      BUYER_ID_INPUT: ${{ inputs.buyer_id }}
+      SEAT_NAME_INPUT: ${{ inputs.seat_name }}
+      REFRESH_LIMIT: ${{ inputs.refresh_limit }}
+      FORCE: ${{ inputs.force }}
+      DAYS: ${{ inputs.days }}
+      CATSCAN_BEARER_TOKEN: ${{ secrets.CATSCAN_CANARY_BEARER_TOKEN }}
+      CATSCAN_SESSION_COOKIE: ${{ secrets.CATSCAN_CANARY_SESSION_COOKIE }}
+    steps:
+      - name: Validate inputs
+        run: |
+          set -euo pipefail
+          if [[ -z "${CATSCAN_BEARER_TOKEN:-}" && -z "${CATSCAN_SESSION_COOKIE:-}" ]]; then
+            echo "Set CATSCAN_CANARY_BEARER_TOKEN or CATSCAN_CANARY_SESSION_COOKIE in repository secrets." >&2
+            exit 1
+          fi
+          if [[ -z "${BUYER_ID_INPUT:-}" && -z "${SEAT_NAME_INPUT:-}" ]]; then
+            echo "Provide buyer_id or seat_name." >&2
+            exit 1
+          fi
+          if ! [[ "${REFRESH_LIMIT}" =~ ^[0-9]+$ ]] || (( REFRESH_LIMIT < 1 || REFRESH_LIMIT > 2000 )); then
+            echo "refresh_limit must be between 1 and 2000." >&2
+            exit 1
+          fi
+          if ! [[ "${DAYS}" =~ ^[0-9]+$ ]] || (( DAYS < 1 || DAYS > 90 )); then
+            echo "days must be between 1 and 90." >&2
+            exit 1
+          fi
+
+      - name: Resolve buyer seat
+        id: seat
+        shell: bash
+        run: |
+          set -euo pipefail
+          auth_args=()
+          if [[ -n "${CATSCAN_BEARER_TOKEN:-}" ]]; then
+            auth_args=(-H "Authorization: Bearer ${CATSCAN_BEARER_TOKEN}")
+          else
+            auth_args=(-H "Cookie: ${CATSCAN_SESSION_COOKIE}")
+          fi
+
+          buyer_id="${BUYER_ID_INPUT}"
+          if [[ -z "${buyer_id}" ]]; then
+            seats_json="$(curl -fsS -m 30 "${auth_args[@]}" "${API_BASE_URL%/}/seats?active_only=true")"
+            buyer_id="$(jq -r --arg q "${SEAT_NAME_INPUT}" '
+              def norm: ascii_downcase | gsub("[^a-z0-9]+"; " ") | gsub("^ +| +$"; "");
+              map(select((.display_name // "" | norm) == ($q | norm)))
+              | if length == 1 then .[0].buyer_id else empty end
+            ' <<<"${seats_json}")"
+            if [[ -z "${buyer_id}" ]]; then
+              echo "Could not resolve exactly one active seat for: ${SEAT_NAME_INPUT}" >&2
+              jq -r --arg q "${SEAT_NAME_INPUT}" '
+                def norm: ascii_downcase | gsub("[^a-z0-9]+"; " ") | gsub("^ +| +$"; "");
+                map(select((.display_name // "" | norm | contains($q | norm)) or (.buyer_id // "" | contains($q))))
+                | .[:10][] | "\(.buyer_id)\t\(.display_name // "")\tcreatives=\(.creative_count // 0)"
+              ' <<<"${seats_json}" >&2
+              exit 1
+            fi
+          fi
+          echo "buyer_id=${buyer_id}" >> "$GITHUB_OUTPUT"
+          echo "Resolved buyer_id=${buyer_id}"
+
+      - name: Queue refresh
+        shell: bash
+        run: |
+          set -euo pipefail
+          auth_args=()
+          if [[ -n "${CATSCAN_BEARER_TOKEN:-}" ]]; then
+            auth_args=(-H "Authorization: Bearer ${CATSCAN_BEARER_TOKEN}")
+          else
+            auth_args=(-H "Cookie: ${CATSCAN_SESSION_COOKIE}")
+          fi
+
+          url="${API_BASE_URL%/}/creatives/language-flag-coverage/refresh"
+          response="$(curl -fsS -m 60 -X POST "${auth_args[@]}" --get "${url}" \
+            --data-urlencode "buyer_id=${{ steps.seat.outputs.buyer_id }}" \
+            --data-urlencode "refresh_limit=${REFRESH_LIMIT}" \
+            --data-urlencode "force=${FORCE}" \
+            --data-urlencode "days=${DAYS}")"
+          echo "${response}" | jq .
