@@ -87,8 +87,12 @@ jobs:
             seats_json="$(curl -fsS -m 30 "${auth_args[@]}" "${API_BASE_URL%/}/seats?active_only=true")"
             buyer_id="$(jq -r --arg q "${SEAT_NAME_INPUT}" '
               def norm: ascii_downcase | gsub("[^a-z0-9]+"; " ") | gsub("^ +| +$"; "");
-              map(select((.display_name // "" | norm) == ($q | norm)))
-              | if length == 1 then .[0].buyer_id else empty end
+              def exact: map(select((.display_name // "" | norm) == ($q | norm)));
+              def partial: map(select((.display_name // "" | norm | contains($q | norm)) or (.buyer_id // "" | contains($q))));
+              exact as $exact
+              | if ($exact | length) == 1 then $exact[0].buyer_id
+                else (partial as $partial | if ($partial | length) == 1 then $partial[0].buyer_id else empty end)
+                end
             ' <<<"${seats_json}")"
             if [[ -z "${buyer_id}" ]]; then
               echo "Could not resolve exactly one active seat for: ${SEAT_NAME_INPUT}" >&2

@@ -233,6 +233,41 @@ async def test_no_active_buyers():
     assert results[0].status == "FAIL"
 
 
+@pytest.mark.asyncio
+async def test_run_all_checks_refreshes_endpoints_before_checks():
+    """The deploy gate can refresh endpoint observations before C-EPT-001."""
+    responses = {
+        "FROM buyer_seats": [{"buyer_id": "b1", "bidder_id": "b1"}],
+        "FROM ingestion_runs WHERE finished_at IS NULL": [{"cnt": 0}],
+        "FROM ingestion_runs": [{"cnt": 42}],
+        "FROM import_history": [{"cnt": 5}],
+        "LEFT JOIN rtb_endpoints_current": [],
+        "FROM rtb_endpoints": [{"cnt": 3}],
+        "FROM precompute_refresh_log": [
+            {
+                "configured_active": 10,
+                "observed_precompute": 10,
+                "gap": 0,
+                "pending_refresh": 0,
+            }
+        ],
+        "FROM pretarg_daily WHERE buyer_account_id": [{"cnt": 50}],
+        "FROM pretarg_publisher_daily": [{"cnt": 30}],
+    }
+
+    with (
+        patch(PG_QUERY, new=_mock_pg(responses)),
+        patch(
+            "scripts.contracts_check.refresh_endpoints_current",
+            new=AsyncMock(return_value=3),
+        ) as refresh_mock,
+    ):
+        results = await run_all_checks(days=7, strict=False, refresh_endpoints=True)
+
+    refresh_mock.assert_awaited_once()
+    assert any(r.contract_id == "C-EPT-001" and r.status == "PASS" for r in results)
+
+
 # ---------------------------------------------------------------------------
 # Test 8: C-ING-001 stuck runs detected → WARN
 # ---------------------------------------------------------------------------

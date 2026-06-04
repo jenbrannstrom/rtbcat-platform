@@ -70,6 +70,11 @@ def parse_args() -> argparse.Namespace:
         default="POSTGRES_SERVING_DSN",
         help="Env var holding the DB DSN (default: POSTGRES_SERVING_DSN)",
     )
+    parser.add_argument(
+        "--refresh-endpoints-current",
+        action="store_true",
+        help="Refresh rtb_endpoints_current before checking C-EPT-001",
+    )
     parser.add_argument("--json-out", help="Path to write JSON output")
     return parser.parse_args()
 
@@ -210,6 +215,15 @@ async def check_ept_001() -> CheckResult:
         f"All {total_cnt} endpoints have current observations",
         {"total_endpoints": total_cnt, "missing": 0, "stale": 0},
     )
+
+
+async def refresh_endpoints_current() -> int:
+    """Refresh the endpoint-current derived table used by C-EPT-001."""
+    from services.endpoints_service import EndpointsService
+
+    refreshed = await EndpointsService().refresh_endpoints_current()
+    logger.info("Refreshed rtb_endpoints_current rows: %s", refreshed)
+    return int(refreshed or 0)
 
 
 async def check_pre_002(days: int, buyers: list[dict]) -> CheckResult:
@@ -510,6 +524,7 @@ async def run_all_checks(
     days: int = 7,
     strict: bool = False,
     buyer_filter: Optional[str] = None,
+    refresh_endpoints: bool = False,
 ) -> list[CheckResult]:
     """Execute all contract checks and return results."""
     buyers = await discover_active_buyers(buyer_filter)
@@ -523,6 +538,8 @@ async def run_all_checks(
         ]
 
     logger.info("Active buyers: %s", [b["buyer_id"] for b in buyers])
+    if refresh_endpoints:
+        await refresh_endpoints_current()
 
     return [
         await check_ing_001(days),
@@ -544,12 +561,20 @@ async def main() -> None:
         os.environ.setdefault("POSTGRES_DSN", dsn)
 
     logger.info(
-        "Contract check: days=%d, strict=%s, buyer=%s, dsn_env=%s",
-        args.days, args.strict, args.buyer, args.db_dsn_env,
+        "Contract check: days=%d, strict=%s, buyer=%s, dsn_env=%s, "
+        "refresh_endpoints_current=%s",
+        args.days,
+        args.strict,
+        args.buyer,
+        args.db_dsn_env,
+        args.refresh_endpoints_current,
     )
 
     results = await run_all_checks(
-        days=args.days, strict=args.strict, buyer_filter=args.buyer,
+        days=args.days,
+        strict=args.strict,
+        buyer_filter=args.buyer,
+        refresh_endpoints=args.refresh_endpoints_current,
     )
 
     passes, warns, fails = print_summary(results)

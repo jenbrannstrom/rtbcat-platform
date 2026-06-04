@@ -140,6 +140,7 @@ jobs:
             APP_VERSION=sha-${{ steps.vars.outputs.short_sha }}
             GIT_SHA=${{ steps.vars.outputs.short_sha }}
             RELEASE_VERSION=${{ steps.vars.outputs.release_version }}
+            INSTALL_AI_EXTRAS=true
           cache-from: type=gha,scope=${{ matrix.image_name }}
           cache-to: type=gha,mode=max,scope=${{ matrix.image_name }}
 
