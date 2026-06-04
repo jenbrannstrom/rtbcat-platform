@@ -2,16 +2,22 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime
 from typing import Any
 
 from fastapi import HTTPException
 
+from config import ConfigManager
+from services.creative_cache_service import CreativeCacheService
 from services.creative_language_flag_service import build_creative_language_flag_row
 from services.config_service import ConfigService
 from services.creative_countries_service import CreativeCountriesService
 from services.language_ai_config import get_selected_language_ai_provider
+from storage.adapters import creative_dict_to_storage
 from storage.postgres_repositories.creative_analysis_repo import CreativeAnalysisRepository
+
+logger = logging.getLogger(__name__)
 
 
 class CreativeLanguageService:
@@ -46,6 +52,44 @@ class CreativeLanguageService:
         if isinstance(value, datetime):
             return value.isoformat()
         return str(value)
+
+    async def _refresh_live_creative_for_analysis(self, creative: Any, store: Any) -> Any:
+        """Best-effort live refresh so language analysis sees the rendered Google payload."""
+        if not getattr(creative, "buyer_id", None):
+            return creative
+
+        try:
+            cache_service = CreativeCacheService(store=store, config=ConfigManager())
+            client = await cache_service.resolve_live_client(creative)
+            live_dict = await client.get_creative_by_id(
+                creative_id=creative.id,
+                view="FULL",
+                buyer_id=creative.buyer_id,
+            )
+            if not live_dict:
+                return creative
+
+            live_creative = creative_dict_to_storage(live_dict)
+            live_creative.campaign_id = getattr(creative, "campaign_id", None)
+            live_creative.cluster_id = getattr(creative, "cluster_id", None)
+            live_creative.seat_name = getattr(creative, "seat_name", None)
+            live_creative.detected_language = getattr(creative, "detected_language", None)
+            live_creative.detected_language_code = getattr(creative, "detected_language_code", None)
+            live_creative.language_confidence = getattr(creative, "language_confidence", None)
+            live_creative.language_source = getattr(creative, "language_source", None)
+            live_creative.language_analyzed_at = getattr(creative, "language_analyzed_at", None)
+            live_creative.language_analysis_error = getattr(creative, "language_analysis_error", None)
+
+            if hasattr(store, "save_creatives"):
+                await store.save_creatives([live_creative])
+            return live_creative
+        except Exception as exc:
+            logger.warning(
+                "Live creative refresh failed before language analysis for %s: %s",
+                getattr(creative, "id", "unknown"),
+                exc,
+            )
+            return creative
 
     async def analyze_language(self, creative: Any, store: Any, force: bool) -> dict[str, Any]:
         """Run language detection for a creative and persist results."""
@@ -89,10 +133,11 @@ class CreativeLanguageService:
                 ),
             )
 
+        analysis_creative = await self._refresh_live_creative_for_analysis(creative, store)
         result = await analyzer.analyze_creative(
-            creative_id=creative.id,
-            raw_data=creative.raw_data,
-            creative_format=creative.format,
+            creative_id=analysis_creative.id,
+            raw_data=analysis_creative.raw_data,
+            creative_format=analysis_creative.format,
         )
 
         await store.creative_repository.update_language_detection(

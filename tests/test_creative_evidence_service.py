@@ -1,6 +1,8 @@
 """Tests for the CreativeEvidenceService."""
 
 import logging
+import sys
+import types
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -40,6 +42,40 @@ class TestCollectHtmlEvidence:
         raw_data = {"html": {"snippet": ""}}
         result = service.collect_evidence("c3", raw_data, "HTML")
         assert result.text_content == ""
+
+    def test_html_screenshot_uses_creative_dimensions(self, service, tmp_path, monkeypatch):
+        service._evidence_dir = tmp_path
+
+        page = MagicMock()
+        browser = MagicMock()
+        browser.new_page.return_value = page
+
+        playwright = MagicMock()
+        playwright.chromium.launch.return_value = browser
+
+        class _PlaywrightContext:
+            def __enter__(self):
+                return playwright
+
+            def __exit__(self, exc_type, exc, tb):
+                return None
+
+        playwright_module = types.ModuleType("playwright")
+        sync_api_module = types.ModuleType("playwright.sync_api")
+        sync_api_module.sync_playwright = lambda: _PlaywrightContext()
+        monkeypatch.setitem(sys.modules, "playwright", playwright_module)
+        monkeypatch.setitem(sys.modules, "playwright.sync_api", sync_api_module)
+
+        path = service._take_html_screenshot(
+            "c-dimensions",
+            "<div>मिटाना</div>",
+            width=320,
+            height=50,
+        )
+
+        assert path
+        browser.new_page.assert_called_once_with(viewport={"width": 320, "height": 50})
+        page.screenshot.assert_called_once_with(path=path, full_page=False)
 
 
 class TestCollectVideoEvidence:

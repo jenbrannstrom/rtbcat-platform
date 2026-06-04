@@ -130,7 +130,12 @@ class CreativeEvidenceService:
             result.image_urls = self._extract_image_urls_from_html(snippet)
 
             # Try Playwright screenshot (graceful degradation)
-            screenshot_path = self._take_html_screenshot(creative_id, snippet)
+            screenshot_path = self._take_html_screenshot(
+                creative_id,
+                snippet,
+                width=html_data.get("width"),
+                height=html_data.get("height"),
+            )
             if screenshot_path:
                 result.screenshot_path = screenshot_path
                 ocr_text = self._ocr_image(
@@ -235,7 +240,22 @@ class CreativeEvidenceService:
         urls = re.findall(r'<img[^>]+src=["\']([^"\']+)["\']', html, re.IGNORECASE)
         return [u for u in urls if u.startswith("http")]
 
-    def _take_html_screenshot(self, creative_id: str, snippet: str) -> Optional[str]:
+    @staticmethod
+    def _coerce_dimension(value: object, default: int, *, minimum: int = 1, maximum: int = 2000) -> int:
+        try:
+            dimension = int(value)  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            return default
+        return max(minimum, min(maximum, dimension))
+
+    def _take_html_screenshot(
+        self,
+        creative_id: str,
+        snippet: str,
+        *,
+        width: object = None,
+        height: object = None,
+    ) -> Optional[str]:
         """Take a screenshot of HTML using Playwright. Returns path or None."""
         try:
             from playwright.sync_api import sync_playwright
@@ -244,13 +264,23 @@ class CreativeEvidenceService:
             return None
 
         output_path = str(self._creative_dir(creative_id) / "screenshot.png")
+        viewport_width = self._coerce_dimension(width, 1024)
+        viewport_height = self._coerce_dimension(height, 768)
         try:
             with sync_playwright() as p:
                 browser = p.chromium.launch(headless=True)
-                page = browser.new_page(viewport={"width": 1024, "height": 768})
+                page = browser.new_page(
+                    viewport={"width": viewport_width, "height": viewport_height}
+                )
                 page.set_content(snippet, wait_until="domcontentloaded")
+                page.add_style_tag(
+                    content=(
+                        "html, body { margin: 0 !important; padding: 0 !important; "
+                        "overflow: hidden !important; }"
+                    )
+                )
                 page.wait_for_timeout(1000)
-                page.screenshot(path=output_path, full_page=True)
+                page.screenshot(path=output_path, full_page=False)
                 browser.close()
             return output_path
         except Exception as e:
