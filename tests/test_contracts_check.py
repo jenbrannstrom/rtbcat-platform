@@ -19,6 +19,7 @@ from scripts.contracts_check import (
     check_ing_002,
     check_pre_002,
     check_pre_003,
+    fail_stale_ingestion_runs,
     run_all_checks,
 )
 
@@ -50,6 +51,7 @@ def _mock_pg(responses: dict[str, list[dict]]) -> AsyncMock:
 
 
 PG_QUERY = "scripts.contracts_check.pg_query"
+PG_EXECUTE = "scripts.contracts_check.pg_execute"
 
 
 # ---------------------------------------------------------------------------
@@ -276,6 +278,20 @@ async def test_run_all_checks_refreshes_endpoints_before_checks():
 async def test_ing_001_stuck_runs():
     """ingestion_runs has rows but some are stuck (no finished_at)."""
     responses = {
+        "age_hours": [
+            {
+                "run_id": "run-1",
+                "source_type": "csv",
+                "buyer_id": "1111111111",
+                "status": "running",
+                "report_type": "rtb_daily",
+                "import_trigger": "gmail-auto",
+                "started_at": "2026-06-03T00:00:00Z",
+                "age_hours": 12.5,
+                "row_count": 0,
+                "error_summary": "",
+            }
+        ],
         "FROM ingestion_runs WHERE finished_at IS NULL": [{"cnt": 2}],
         "FROM ingestion_runs": [{"cnt": 10}],
     }
@@ -285,6 +301,60 @@ async def test_ing_001_stuck_runs():
 
     assert result.status == "WARN"
     assert result.details["stuck_runs"] == 2
+    assert result.details["stuck_run_sample"][0]["run_id"] == "run-1"
+
+
+@pytest.mark.asyncio
+async def test_fail_stale_ingestion_runs_marks_old_unfinished_runs_failed():
+    execute = AsyncMock(return_value=4)
+
+    with patch(PG_EXECUTE, new=execute):
+        count = await fail_stale_ingestion_runs(24)
+
+    assert count == 4
+    sql, params = execute.call_args.args
+    assert "UPDATE ingestion_runs" in sql
+    assert "finished_at IS NULL" in sql
+    assert params == (24,)
+
+
+@pytest.mark.asyncio
+async def test_run_all_checks_repairs_stale_ingestion_runs_before_check():
+    responses = {
+        "FROM buyer_seats": [{"buyer_id": "b1", "bidder_id": "b1"}],
+        "FROM ingestion_runs WHERE finished_at IS NULL": [{"cnt": 0}],
+        "FROM ingestion_runs": [{"cnt": 42}],
+        "FROM import_history": [{"cnt": 5}],
+        "LEFT JOIN rtb_endpoints_current": [],
+        "FROM rtb_endpoints": [{"cnt": 3}],
+        "FROM precompute_refresh_log": [
+            {
+                "configured_active": 1,
+                "observed_precompute": 1,
+                "gap": 0,
+                "pending_refresh": 0,
+            }
+        ],
+        "FROM pretarg_daily WHERE buyer_account_id": [{"cnt": 50}],
+        "FROM pretarg_publisher_daily": [{"cnt": 30}],
+    }
+
+    with (
+        patch(PG_QUERY, new=_mock_pg(responses)),
+        patch(PG_EXECUTE, new=AsyncMock(return_value=4)) as execute,
+    ):
+        results = await run_all_checks(
+            days=7,
+            strict=False,
+            fail_stale_ingestion=True,
+            stale_ingestion_hours=24,
+        )
+
+    execute.assert_awaited_once()
+    ing_001 = next(r for r in results if r.contract_id == "C-ING-001")
+    assert ing_001.status == "PASS"
+    assert ing_001.details["stale_runs_failed_before_check"] == 4
+    assert ing_001.details["stale_ingestion_hours"] == 24
 
 
 # ---------------------------------------------------------------------------

@@ -24,7 +24,7 @@ from typing import Any, Optional
 # Ensure project root is importable when run from scripts/ directory.
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from storage.postgres_database import pg_query  # noqa: E402
+from storage.postgres_database import pg_execute, pg_query  # noqa: E402
 
 logging.basicConfig(
     level=logging.INFO,
@@ -75,6 +75,17 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Refresh rtb_endpoints_current before checking C-EPT-001",
     )
+    parser.add_argument(
+        "--fail-stale-ingestion-runs",
+        action="store_true",
+        help="Mark unfinished ingestion_runs older than --stale-ingestion-hours as failed",
+    )
+    parser.add_argument(
+        "--stale-ingestion-hours",
+        type=int,
+        default=24,
+        help="Age threshold for --fail-stale-ingestion-runs (default: 24)",
+    )
     parser.add_argument("--json-out", help="Path to write JSON output")
     return parser.parse_args()
 
@@ -117,6 +128,28 @@ async def check_ing_001(days: int) -> CheckResult:
     stuck_count = stuck[0]["cnt"] if stuck else 0
 
     details = {"total_runs": total, "stuck_runs": stuck_count}
+    if stuck_count > 0:
+        stuck_rows = await pg_query(
+            """
+            SELECT
+                run_id,
+                source_type,
+                buyer_id,
+                status,
+                report_type,
+                import_trigger,
+                started_at,
+                ROUND((EXTRACT(EPOCH FROM (NOW() - started_at)) / 3600.0)::numeric, 2) AS age_hours,
+                row_count,
+                LEFT(COALESCE(error_summary, ''), 200) AS error_summary
+            FROM ingestion_runs
+            WHERE finished_at IS NULL
+              AND started_at < NOW() - INTERVAL '1 hour'
+            ORDER BY started_at ASC
+            LIMIT 10
+            """
+        )
+        details["stuck_run_sample"] = stuck_rows
 
     if total == 0:
         return CheckResult(
@@ -131,6 +164,25 @@ async def check_ing_001(days: int) -> CheckResult:
     return CheckResult(
         "C-ING-001", "ingestion_runs populated", "PASS",
         f"{total} run(s), 0 stuck", details,
+    )
+
+
+async def fail_stale_ingestion_runs(stale_hours: int) -> int:
+    """Close clearly abandoned ingestion runs so old bookkeeping does not stay WARN forever."""
+    hours = max(int(stale_hours), 1)
+    return await pg_execute(
+        """
+        UPDATE ingestion_runs
+        SET status = 'failed',
+            error_summary = COALESCE(
+                NULLIF(error_summary, ''),
+                'Marked failed by contract maintenance after stale unfinished run'
+            ),
+            finished_at = CURRENT_TIMESTAMP
+        WHERE finished_at IS NULL
+          AND started_at < NOW() - (%s::int * INTERVAL '1 hour')
+        """,
+        (hours,),
     )
 
 
@@ -525,6 +577,8 @@ async def run_all_checks(
     strict: bool = False,
     buyer_filter: Optional[str] = None,
     refresh_endpoints: bool = False,
+    fail_stale_ingestion: bool = False,
+    stale_ingestion_hours: int = 24,
 ) -> list[CheckResult]:
     """Execute all contract checks and return results."""
     buyers = await discover_active_buyers(buyer_filter)
@@ -540,9 +594,22 @@ async def run_all_checks(
     logger.info("Active buyers: %s", [b["buyer_id"] for b in buyers])
     if refresh_endpoints:
         await refresh_endpoints_current()
+    stale_failed = 0
+    if fail_stale_ingestion:
+        stale_failed = await fail_stale_ingestion_runs(stale_ingestion_hours)
+        logger.info(
+            "Marked %d stale ingestion run(s) failed (threshold=%dh)",
+            stale_failed,
+            max(int(stale_ingestion_hours), 1),
+        )
+
+    ing_001 = await check_ing_001(days)
+    if stale_failed:
+        ing_001.details["stale_runs_failed_before_check"] = stale_failed
+        ing_001.details["stale_ingestion_hours"] = max(int(stale_ingestion_hours), 1)
 
     return [
-        await check_ing_001(days),
+        ing_001,
         await check_ing_002(days, buyers),
         await check_ept_001(),
         await check_pre_002(days, buyers),
@@ -562,12 +629,15 @@ async def main() -> None:
 
     logger.info(
         "Contract check: days=%d, strict=%s, buyer=%s, dsn_env=%s, "
-        "refresh_endpoints_current=%s",
+        "refresh_endpoints_current=%s, fail_stale_ingestion_runs=%s, "
+        "stale_ingestion_hours=%d",
         args.days,
         args.strict,
         args.buyer,
         args.db_dsn_env,
         args.refresh_endpoints_current,
+        args.fail_stale_ingestion_runs,
+        args.stale_ingestion_hours,
     )
 
     results = await run_all_checks(
@@ -575,6 +645,8 @@ async def main() -> None:
         strict=args.strict,
         buyer_filter=args.buyer,
         refresh_endpoints=args.refresh_endpoints_current,
+        fail_stale_ingestion=args.fail_stale_ingestion_runs,
+        stale_ingestion_hours=args.stale_ingestion_hours,
     )
 
     passes, warns, fails = print_summary(results)
