@@ -1,5 +1,9 @@
 """Tests for provider-specific language analyzer paths."""
 
+from types import SimpleNamespace
+
+import pytest
+
 from api.analysis.language_analyzer import LanguageAnalyzer
 
 
@@ -82,3 +86,39 @@ class TestLanguageAnalyzerProviders:
         assert not result.success
         assert "text content" in (result.error or "").lower()
         assert result.source == "claude"
+
+    @pytest.mark.asyncio
+    async def test_html_analysis_uses_rendered_evidence_ocr(self, monkeypatch):
+        analyzer = LanguageAnalyzer(provider="gemini", api_key="test-gemini-key")
+        raw_data = {
+            "html": {
+                "snippet": (
+                    "<html><body><canvas id='ad'></canvas>"
+                    "<script>/* text is rendered at runtime */</script></body></html>"
+                )
+            }
+        }
+
+        monkeypatch.setattr(
+            "services.creative_evidence_service.CreativeEvidenceService.collect_evidence",
+            lambda *args, **kwargs: SimpleNamespace(
+                text_content="",
+                ocr_texts=["ဝယ်ယူပါ"],
+                screenshot_path="/tmp/rendered.png",
+                video_frames=[],
+            ),
+        )
+        monkeypatch.setattr(
+            analyzer,
+            "detect_language",
+            lambda text: analyzer._parse_response(
+                '{"language":"Burmese","language_code":"my","confidence":0.93}'
+            ),
+        )
+
+        result = await analyzer.analyze_creative("creative-1", raw_data, "HTML")
+
+        assert result.success
+        assert result.language == "Burmese"
+        assert result.language_code == "my"
+        assert result.source == "gemini_rendered_evidence"

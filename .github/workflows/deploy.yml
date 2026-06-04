@@ -353,6 +353,7 @@ jobs:
               sudo docker exec catscan-api python /app/scripts/contracts_check.py \
                 --days 7 \
                 --db-dsn-env POSTGRES_DSN \
+                --refresh-endpoints-current \
                 --json-out ${CONTAINER_ARTIFACT_PATH}
               CHECK_EXIT=\$?
               sudo docker cp catscan-api:${CONTAINER_ARTIFACT_PATH} ${VM_ARTIFACT_PATH} >/dev/null 2>&1

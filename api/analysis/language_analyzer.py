@@ -587,9 +587,77 @@ Rules:
             if result.success:
                 return result
 
+        # Rendered evidence fallback: HTML ads often hide visible text in
+        # CSS backgrounds, canvas, JS-built DOM, or image assets.
+        evidence_result = self._detect_from_rendered_evidence(
+            creative_id,
+            raw_data,
+            creative_format,
+        )
+        if evidence_result.success:
+            return evidence_result
+
         return LanguageDetectionResult(
             source=self.provider,
             error=f"No text or image content found in {creative_format} creative",
+        )
+
+    def _detect_from_rendered_evidence(
+        self,
+        creative_id: str,
+        raw_data: dict,
+        creative_format: str,
+    ) -> LanguageDetectionResult:
+        """Use screenshot/OCR evidence when static extraction misses visible text."""
+        if creative_format not in {"HTML", "VIDEO"}:
+            return LanguageDetectionResult(
+                source=self.provider,
+                error=f"Rendered evidence not supported for {creative_format}",
+            )
+
+        try:
+            from services.creative_evidence_service import CreativeEvidenceService
+
+            evidence = CreativeEvidenceService().collect_evidence(
+                creative_id,
+                raw_data,
+                creative_format,
+                ai_provider=self.provider,
+                ai_api_key=self.api_key,
+            )
+        except Exception as exc:
+            logger.warning("Rendered evidence collection failed for %s: %s", creative_id, exc)
+            return LanguageDetectionResult(source=self.provider, error=str(exc))
+
+        text_parts = []
+        text_content = getattr(evidence, "text_content", "")
+        if text_content:
+            text_parts.append(text_content)
+        text_parts.extend(t for t in getattr(evidence, "ocr_texts", []) if t)
+
+        if text_parts:
+            result = self.detect_language(" ".join(text_parts))
+            if result.success:
+                result.source = f"{result.source}_rendered_evidence"
+                return result
+
+        screenshot_path = getattr(evidence, "screenshot_path", None)
+        if screenshot_path:
+            result = self.detect_language_from_image(screenshot_path)
+            if result.success:
+                result.source = f"{result.source}_rendered_screenshot"
+                return result
+
+        frame_paths = getattr(evidence, "video_frames", [])
+        for frame_path in frame_paths:
+            result = self.detect_language_from_image(frame_path)
+            if result.success:
+                result.source = f"{result.source}_rendered_frame"
+                return result
+
+        return LanguageDetectionResult(
+            source=self.provider,
+            error="Rendered evidence did not contain detectable language",
         )
 
 

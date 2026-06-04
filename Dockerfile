@@ -12,14 +12,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Create virtual environment
 RUN python -m venv /opt/venv
-ENV PATH="/opt/venv/bin:$PATH"
+ENV PATH="/opt/venv/bin:$PATH" \
+    PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 
 # Install Python dependencies
 ARG INSTALL_AI_EXTRAS=false
 COPY requirements.txt requirements-ai.txt ./
-RUN pip install --no-cache-dir --upgrade pip && \
+RUN mkdir -p /ms-playwright && \
+    pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt && \
-    if [ "$INSTALL_AI_EXTRAS" = "true" ]; then pip install --no-cache-dir -r requirements-ai.txt; fi
+    if [ "$INSTALL_AI_EXTRAS" = "true" ]; then \
+      pip install --no-cache-dir -r requirements-ai.txt && \
+      python -m playwright install chromium; \
+    fi
 
 # Stage 2: Runtime
 FROM python:3.11-slim as runtime
@@ -29,14 +34,21 @@ WORKDIR /app
 # Create non-root user for security
 RUN groupadd -r rtbcat && useradd -r -g rtbcat rtbcat
 
-# Install runtime dependencies (ffmpeg for video thumbnails)
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    ffmpeg \
-    && rm -rf /var/lib/apt/lists/*
-
 # Copy virtual environment from builder
 COPY --from=builder /opt/venv /opt/venv
-ENV PATH="/opt/venv/bin:$PATH"
+COPY --from=builder /ms-playwright /ms-playwright
+ENV PATH="/opt/venv/bin:$PATH" \
+    PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+
+# Install runtime dependencies (ffmpeg for video thumbnails, Chromium libs for AI extras)
+ARG INSTALL_AI_EXTRAS=false
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends ffmpeg && \
+    if [ "$INSTALL_AI_EXTRAS" = "true" ]; then \
+      /opt/venv/bin/python -m playwright install-deps chromium; \
+    fi && \
+    rm -rf /var/lib/apt/lists/* && \
+    chown -R rtbcat:rtbcat /ms-playwright
 
 # Copy application code
 COPY --chown=rtbcat:rtbcat . .

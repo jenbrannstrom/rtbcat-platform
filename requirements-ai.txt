@@ -3,3 +3,7 @@
 # Gemini uses a local SDK and image helpers. Claude and Grok integrations use
 # direct HTTPS APIs and do not require additional client libraries here.
 google-genai==1.66.0
+
+# HTML creatives can render their visible text via CSS, JS, canvas, or images.
+# Playwright provides screenshot evidence for OCR and vision fallback.
+playwright==1.51.0
