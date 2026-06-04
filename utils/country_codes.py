@@ -393,6 +393,13 @@ NAME_TO_ALPHA2 = {name.upper(): code for code, name in COUNTRY_NAMES.items()}
 NORMALIZED_NAME_TO_ALPHA2 = {
     _normalize_lookup_key(name): code for code, name in COUNTRY_NAMES.items()
 }
+NORMALIZED_NAME_TO_ALPHA2.update(
+    {
+        "BURMA": "MM",
+        "MYANMAR (BURMA)": "MM",
+        "MYANMAR BURMA": "MM",
+    }
+)
 
 
 def normalize_country_code(code_or_name: str) -> str:
