@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
-from services.gemini_client import generate_gemini_content
+from services.gemini_client import generate_gemini_content, get_gemini_model_name
 from services.language_ai_config import (
     get_provider_env_key,
     normalize_language_ai_provider,
@@ -520,7 +520,7 @@ Rules:
             ]}],
             "generationConfig": {"temperature": 0.1, "maxOutputTokens": 200},
         }
-        model = os.getenv("CATSCAN_GEMINI_MODEL", "gemini-2.0-flash")
+        model = get_gemini_model_name()
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={self.api_key}"
         response_data = self._post_json(url=url, headers={"Content-Type": "application/json"}, payload=payload, timeout=timeout)
         candidates = response_data.get("candidates", [])
@@ -618,6 +618,7 @@ LANGUAGE_CODES = {
     "vi": "Vietnamese",
     "id": "Indonesian",
     "ms": "Malay",
+    "my": "Burmese",
     "sv": "Swedish",
     "da": "Danish",
     "no": "Norwegian",

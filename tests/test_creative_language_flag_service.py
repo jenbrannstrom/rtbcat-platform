@@ -101,6 +101,30 @@ def test_build_creative_language_flag_row_normalizes_country_names() -> None:
     assert row["currency_flag_reason"] == "No obvious market currency detected"
 
 
+def test_build_creative_language_flag_row_matches_burmese_in_myanmar() -> None:
+    creative = SimpleNamespace(
+        id="lHF3b17Qx3iDXD9muefTqLWkHGf6il0hiAFjNkMwqze",
+        name="Burmese CTA creative",
+        buyer_id="1487810529",
+        format="HTML",
+        approval_status="APPROVED",
+        advertiser_name=None,
+        detected_language="Burmese",
+        detected_language_code="my",
+        raw_data={"html": {"snippet": ""}},
+    )
+
+    row = build_creative_language_flag_row(
+        creative=creative,
+        serving_countries=["MYANMAR (BURMA)"],
+        latest_geo_run=None,
+    )
+
+    assert row["serving_countries"] == ["MM"]
+    assert row["language_flag_status"] == "green"
+    assert row["language_flag_reason"] == "MY matches MMR"
+
+
 def test_build_creative_language_flag_row_surfaces_geo_secondary_language_finding() -> None:
     creative = SimpleNamespace(
         id="2028723258945941508",

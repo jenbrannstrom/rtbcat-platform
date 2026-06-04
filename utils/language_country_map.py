@@ -68,6 +68,9 @@ LANGUAGE_TO_COUNTRIES: dict[str, list[str]] = {
     # Malay
     "ms": ["MY", "SG", "BN"],
 
+    # Burmese / Myanmar language
+    "my": ["MM"],
+
     # Swedish
     "sv": ["SE", "FI"],
 

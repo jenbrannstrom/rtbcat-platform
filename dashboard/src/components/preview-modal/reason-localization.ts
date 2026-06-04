@@ -20,6 +20,7 @@ type ReasonLocalizationMessages = Pick<
 
 const LANGUAGE_NAME_TO_CODE: Record<string, string> = {
   arabic: "ar",
+  burmese: "my",
   chinese: "zh",
   english: "en",
   french: "fr",
@@ -50,6 +51,7 @@ const ALPHA3_TO_ALPHA2: Record<string, string> = {
   KOR: "KR",
   MEX: "MX",
   MYS: "MY",
+  MMR: "MM",
   NZL: "NZ",
   PHL: "PH",
   PRT: "PT",
