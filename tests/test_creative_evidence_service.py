@@ -75,6 +75,7 @@ class TestCollectHtmlEvidence:
 
         assert path
         browser.new_page.assert_called_once_with(viewport={"width": 320, "height": 50})
+        page.wait_for_timeout.assert_called_once_with(10000)
         page.screenshot.assert_called_once_with(path=path, full_page=False)
 
 

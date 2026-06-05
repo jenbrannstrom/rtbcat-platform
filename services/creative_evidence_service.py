@@ -279,7 +279,7 @@ class CreativeEvidenceService:
                         "overflow: hidden !important; }"
                     )
                 )
-                page.wait_for_timeout(1000)
+                page.wait_for_timeout(10000)
                 page.screenshot(path=output_path, full_page=False)
                 browser.close()
             return output_path
