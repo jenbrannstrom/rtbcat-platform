@@ -39,7 +39,7 @@ jobs:
       LIMIT: ${{ inputs.limit }}
       CATSCAN_BEARER_TOKEN: ${{ secrets.CATSCAN_CANARY_BEARER_TOKEN }}
       CATSCAN_SESSION_COOKIE: ${{ secrets.CATSCAN_CANARY_SESSION_COOKIE }}
-      CATSCAN_POSTGRES_DSN: ${{ secrets.POSTGRES_DSN }}
+      CATSCAN_POSTGRES_DSN: ${{ secrets.CATSCAN_POSTGRES_DSN || secrets.POSTGRES_DSN }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -88,6 +88,62 @@ jobs:
             --data-urlencode "limit=${LIMIT}" \
             --data-urlencode "offset=0" \
             > coverage.json
+
+      - name: Fetch API sanity checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          auth_args=()
+          if [[ -n "${CATSCAN_BEARER_TOKEN:-}" ]]; then
+            auth_args=(-H "Authorization: Bearer ${CATSCAN_BEARER_TOKEN}")
+          else
+            auth_args=(-H "Cookie: ${CATSCAN_SESSION_COOKIE}")
+          fi
+
+          curl -fsS -m 60 "${auth_args[@]}" --get "${API_BASE_URL%/}/seats" \
+            --data-urlencode "active_only=false" \
+            > seats.json
+          curl -fsS -m 60 "${auth_args[@]}" --get "${API_BASE_URL%/}/creatives/v2" \
+            --data-urlencode "buyer_id=${BUYER_ID}" \
+            --data-urlencode "limit=1" \
+            --data-urlencode "offset=0" \
+            --data-urlencode "slim=true" \
+            > creatives-v2.json
+
+          jq -r --arg buyer_id "${BUYER_ID}" '
+            {
+              matching_seats: [
+                .[]
+                | select(.buyer_id == $buyer_id)
+                | {
+                    buyer_id,
+                    bidder_id,
+                    display_name,
+                    active,
+                    creative_count,
+                    last_synced
+                  }
+              ]
+            }
+          ' seats.json | tee seats-summary.json
+
+          jq -r '
+            {
+              total: (.meta.total // 0),
+              returned: (.meta.returned // 0),
+              approved_count: (.meta.approved_count // 0),
+              not_approved_count: (.meta.not_approved_count // 0),
+              first_creative: ((.data // []) | .[0] // null | if . == null then null else {
+                id,
+                buyer_id,
+                format,
+                detected_language_code,
+                language_analyzed_at,
+                language_analysis_error,
+                market_alert
+              } end)
+            }
+          ' creatives-v2.json | tee creatives-v2-summary.json
 
       - name: Summarize
         shell: bash
@@ -140,6 +196,15 @@ jobs:
                   ] | @tsv)
                 end
             ' coverage.json
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+          {
+            echo
+            echo "### API Sanity Checks"
+            echo
+            echo '```json'
+            jq -s '{seat: .[0], creatives_v2: .[1]}' seats-summary.json creatives-v2-summary.json
+            echo '```'
           } >> "${GITHUB_STEP_SUMMARY}"
 
           echo "Remaining language alerts:"
