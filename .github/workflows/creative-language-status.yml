@@ -145,6 +145,81 @@ jobs:
             }
           ' creatives-v2.json | tee creatives-v2-summary.json
 
+      - name: Fetch all creative pages
+        shell: bash
+        run: |
+          set -euo pipefail
+          auth_args=()
+          if [[ -n "${CATSCAN_BEARER_TOKEN:-}" ]]; then
+            auth_args=(-H "Authorization: Bearer ${CATSCAN_BEARER_TOKEN}")
+          else
+            auth_args=(-H "Cookie: ${CATSCAN_SESSION_COOKIE}")
+          fi
+
+          : > creatives-v2-all.jsonl
+          : > creatives-v2-page-metas.jsonl
+          page_limit=200
+          offset=0
+          while true; do
+            curl -fsS -m 60 "${auth_args[@]}" --get "${API_BASE_URL%/}/creatives/v2" \
+              --data-urlencode "buyer_id=${BUYER_ID}" \
+              --data-urlencode "limit=${page_limit}" \
+              --data-urlencode "offset=${offset}" \
+              --data-urlencode "slim=true" \
+              > "creatives-v2-page-${offset}.json"
+            jq -c '.meta' "creatives-v2-page-${offset}.json" >> creatives-v2-page-metas.jsonl
+            jq -c '.data[]?' "creatives-v2-page-${offset}.json" >> creatives-v2-all.jsonl
+            has_more="$(jq -r '.meta.has_more' "creatives-v2-page-${offset}.json")"
+            if [[ "${has_more}" != "true" ]]; then
+              break
+            fi
+            offset=$((offset + page_limit))
+            if (( offset > 10000 )); then
+              echo "pagination exceeded safety cap" >&2
+              exit 1
+            fi
+          done
+
+          jq -s '
+            def count_rows(f): [ .[] | select(f) ] | length;
+            {
+              returned: length,
+              analyzed: count_rows(.language_analyzed_at != null),
+              missing_analysis: count_rows(.language_analyzed_at == null),
+              detected_language: count_rows(.detected_language_code != null),
+              analysis_errors: count_rows(.language_analysis_error != null),
+              language_errors_no_content: count_rows((.language_analysis_error // "") | contains("No text or image content found")),
+              market_alerts: count_rows(.market_alert != null),
+              language_market_alerts: count_rows(.market_alert.category == "language"),
+              geo_market_alerts: count_rows(.market_alert.category == "geo_linguistic"),
+              red_market_alerts: count_rows(.market_alert.status == "red"),
+              orange_market_alerts: count_rows(.market_alert.status == "orange"),
+              sample_language_errors: [
+                .[]
+                | select(.language_analysis_error != null)
+                | {
+                    id,
+                    buyer_id,
+                    format,
+                    detected_language_code,
+                    language_analyzed_at,
+                    language_analysis_error,
+                    market_alert
+                  }
+              ][:25],
+              sample_market_alerts: [
+                .[]
+                | select(.market_alert != null)
+                | {
+                    id,
+                    market_alert,
+                    detected_language_code,
+                    language_analysis_error
+                  }
+              ][:25]
+            }
+          ' creatives-v2-all.jsonl | tee creatives-v2-all-summary.json
+
       - name: Summarize
         shell: bash
         run: |
@@ -204,6 +279,12 @@ jobs:
             echo
             echo '```json'
             jq -s '{seat: .[0], creatives_v2: .[1]}' seats-summary.json creatives-v2-summary.json
+            echo '```'
+            echo
+            echo "### All Creative Pages"
+            echo
+            echo '```json'
+            cat creatives-v2-all-summary.json
             echo '```'
           } >> "${GITHUB_STEP_SUMMARY}"
 
