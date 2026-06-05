@@ -1,0 +1,156 @@
+name: Creative Language Status
+
+on:
+  workflow_dispatch:
+    inputs:
+      api_base_url:
+        description: "API base URL including /api"
+        required: true
+        default: "https://scan.rtb.cat/api"
+      buyer_id:
+        description: "Buyer seat ID to inspect."
+        required: true
+      days:
+        description: "Serving-country lookback window."
+        required: true
+        default: "7"
+      scan_limit:
+        description: "Maximum creatives to scan in the coverage query."
+        required: true
+        default: "10000"
+      limit:
+        description: "Maximum rows to return for local counting."
+        required: true
+        default: "1000"
+
+permissions:
+  contents: read
+
+jobs:
+  status:
+    name: Report language coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      API_BASE_URL: ${{ inputs.api_base_url }}
+      BUYER_ID: ${{ inputs.buyer_id }}
+      DAYS: ${{ inputs.days }}
+      SCAN_LIMIT: ${{ inputs.scan_limit }}
+      LIMIT: ${{ inputs.limit }}
+      CATSCAN_BEARER_TOKEN: ${{ secrets.CATSCAN_CANARY_BEARER_TOKEN }}
+      CATSCAN_SESSION_COOKIE: ${{ secrets.CATSCAN_CANARY_SESSION_COOKIE }}
+    steps:
+      - name: Validate inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "${CATSCAN_BEARER_TOKEN:-}" && -z "${CATSCAN_SESSION_COOKIE:-}" ]]; then
+            echo "Set CATSCAN_CANARY_BEARER_TOKEN or CATSCAN_CANARY_SESSION_COOKIE in repository secrets." >&2
+            exit 1
+          fi
+          if [[ -z "${BUYER_ID:-}" ]]; then
+            echo "buyer_id is required." >&2
+            exit 1
+          fi
+          if ! [[ "${DAYS}" =~ ^[0-9]+$ ]] || (( DAYS < 1 || DAYS > 90 )); then
+            echo "days must be between 1 and 90." >&2
+            exit 1
+          fi
+          if ! [[ "${SCAN_LIMIT}" =~ ^[0-9]+$ ]] || (( SCAN_LIMIT < 1 || SCAN_LIMIT > 10000 )); then
+            echo "scan_limit must be between 1 and 10000." >&2
+            exit 1
+          fi
+          if ! [[ "${LIMIT}" =~ ^[0-9]+$ ]] || (( LIMIT < 1 || LIMIT > 1000 )); then
+            echo "limit must be between 1 and 1000." >&2
+            exit 1
+          fi
+
+      - name: Fetch coverage
+        shell: bash
+        run: |
+          set -euo pipefail
+          auth_args=()
+          if [[ -n "${CATSCAN_BEARER_TOKEN:-}" ]]; then
+            auth_args=(-H "Authorization: Bearer ${CATSCAN_BEARER_TOKEN}")
+          else
+            auth_args=(-H "Cookie: ${CATSCAN_SESSION_COOKIE}")
+          fi
+
+          url="${API_BASE_URL%/}/creatives/language-flag-coverage"
+          curl -fsS -m 60 "${auth_args[@]}" --get "${url}" \
+            --data-urlencode "buyer_id=${BUYER_ID}" \
+            --data-urlencode "days=${DAYS}" \
+            --data-urlencode "scan_limit=${SCAN_LIMIT}" \
+            --data-urlencode "limit=${LIMIT}" \
+            --data-urlencode "offset=0" \
+            > coverage.json
+
+      - name: Summarize
+        shell: bash
+        run: |
+          set -euo pipefail
+          jq -r '
+            def rows: (.rows // []);
+            def count_rows(f): [rows[] | select(f)] | length;
+            def n($v): ($v // 0);
+            {
+              buyer_id: env.BUYER_ID,
+              days: (env.DAYS | tonumber),
+              total: (.total // 0),
+              returned: (.returned // (rows | length)),
+              analyzed: count_rows(.language_analyzed_at != null),
+              missing_analysis: count_rows(.language_analyzed_at == null),
+              detected_language: count_rows(.detected_language_code != null),
+              analysis_errors: count_rows(.language_analysis_error != null),
+              language_green: n(.summary.language_green),
+              language_orange: n(.summary.language_orange),
+              language_red: n(.summary.language_red),
+              language_alerts: (n(.summary.language_orange) + n(.summary.language_red)),
+              geo_green: n(.summary.geo_green),
+              geo_orange: n(.summary.geo_orange),
+              geo_red: n(.summary.geo_red),
+              geo_alerts: (n(.summary.geo_orange) + n(.summary.geo_red))
+            }
+          ' coverage.json | tee summary.json
+
+          {
+            echo "## Creative Language Status"
+            echo
+            echo '```json'
+            cat summary.json
+            echo '```'
+            echo
+            echo "### Remaining Language Alerts"
+            jq -r '
+              (.rows // [])
+              | map(select(.language_flag_status != "green"))
+              | .[:25]
+              | if length == 0 then "None" else
+                  (["creative_id","language_status","reason","detected","served_countries"] | @tsv),
+                  (.[] | [
+                    (.creative_id // ""),
+                    (.language_flag_status // ""),
+                    (.language_flag_reason // ""),
+                    (.detected_language_code // ""),
+                    ((.served_countries // []) | join(","))
+                  ] | @tsv)
+                end
+            ' coverage.json
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+          echo "Remaining language alerts:"
+          jq -r '
+            (.rows // [])
+            | map(select(.language_flag_status != "green"))
+            | .[:25]
+            | if length == 0 then "None" else
+                (["creative_id","language_status","reason","detected","served_countries"] | @tsv),
+                (.[] | [
+                  (.creative_id // ""),
+                  (.language_flag_status // ""),
+                  (.language_flag_reason // ""),
+                  (.detected_language_code // ""),
+                  ((.served_countries // []) | join(","))
+                ] | @tsv)
+              end
+          ' coverage.json
