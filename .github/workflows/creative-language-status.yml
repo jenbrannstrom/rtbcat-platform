@@ -39,7 +39,11 @@ jobs:
       LIMIT: ${{ inputs.limit }}
       CATSCAN_BEARER_TOKEN: ${{ secrets.CATSCAN_CANARY_BEARER_TOKEN }}
       CATSCAN_SESSION_COOKIE: ${{ secrets.CATSCAN_CANARY_SESSION_COOKIE }}
+      CATSCAN_POSTGRES_DSN: ${{ secrets.POSTGRES_DSN }}
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Validate inputs
         shell: bash
         run: |
@@ -154,3 +158,165 @@ jobs:
                 ] | @tsv)
               end
           ' coverage.json
+
+      - name: Direct DB fallback
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "${CATSCAN_POSTGRES_DSN:-}" ]]; then
+            echo "POSTGRES_DSN secret is not set; skipping direct DB fallback."
+            exit 0
+          fi
+
+          python3 -m pip install --disable-pip-version-check --quiet "psycopg[binary]==3.2.10"
+          python3 - <<'PY'
+          from __future__ import annotations
+
+          import json
+          import os
+          from types import SimpleNamespace
+
+          import psycopg
+          from psycopg.rows import dict_row
+
+          from services.creative_language_flag_service import build_creative_language_flag_row
+
+          buyer_id = os.environ["BUYER_ID"]
+          days = int(os.environ["DAYS"])
+          limit = int(os.environ["LIMIT"])
+          dsn = os.environ["CATSCAN_POSTGRES_DSN"]
+
+          def emit(name: str, payload: object) -> None:
+            print(f"{name}:")
+            print(json.dumps(payload, indent=2, default=str, ensure_ascii=False))
+
+          with psycopg.connect(dsn, row_factory=dict_row) as conn:
+            with conn.cursor() as cur:
+              cur.execute(
+                """
+                SELECT buyer_id, bidder_id, display_name, active, creative_count, last_synced::text AS last_synced
+                FROM buyer_seats
+                WHERE buyer_id = %s
+                """,
+                (buyer_id,),
+              )
+              seat = cur.fetchone()
+
+              cur.execute(
+                """
+                SELECT
+                  COUNT(*)::int AS total_creatives,
+                  COUNT(*) FILTER (WHERE language_analyzed_at IS NOT NULL)::int AS analyzed,
+                  COUNT(*) FILTER (WHERE language_analyzed_at IS NULL)::int AS missing_analysis,
+                  COUNT(*) FILTER (
+                    WHERE detected_language_code IS NOT NULL AND detected_language_code <> ''
+                  )::int AS detected_language,
+                  COUNT(*) FILTER (
+                    WHERE language_analysis_error IS NOT NULL AND language_analysis_error <> ''
+                  )::int AS analysis_errors,
+                  COUNT(*) FILTER (WHERE language_source = 'manual')::int AS manual_language
+                FROM creatives
+                WHERE buyer_id = %s
+                """,
+                (buyer_id,),
+              )
+              aggregate = cur.fetchone() or {}
+
+              cur.execute(
+                """
+                SELECT id, name, buyer_id, format, approval_status, advertiser_name,
+                       detected_language, detected_language_code, language_confidence,
+                       language_source, language_analyzed_at::text AS language_analyzed_at,
+                       language_analysis_error, raw_data
+                FROM creatives
+                WHERE buyer_id = %s
+                ORDER BY created_at DESC
+                LIMIT %s
+                """,
+                (buyer_id, limit),
+              )
+              creatives = cur.fetchall()
+
+              creative_ids = [row["id"] for row in creatives]
+              serving_country_map: dict[str, list[str]] = {}
+              if creative_ids:
+                cur.execute(
+                  """
+                  SELECT creative_id,
+                         geography AS country_code,
+                         COALESCE(SUM(spend_micros), 0) AS spend_micros
+                  FROM performance_metrics
+                  WHERE creative_id = ANY(%s)
+                    AND geography IS NOT NULL
+                    AND geography != ''
+                    AND metric_date >= CURRENT_DATE - make_interval(days => %s)
+                  GROUP BY creative_id, geography
+                  ORDER BY creative_id, spend_micros DESC, geography
+                  """,
+                  (creative_ids, days),
+                )
+                for row in cur.fetchall():
+                  serving_country_map.setdefault(row["creative_id"], []).append(row["country_code"])
+
+          rows = []
+          for row in creatives:
+            creative = SimpleNamespace(**row)
+            flag = build_creative_language_flag_row(
+              creative=creative,
+              serving_countries=serving_country_map.get(row["id"], []),
+              latest_geo_run=None,
+            )
+            flag["language_analyzed_at"] = row.get("language_analyzed_at")
+            flag["language_analysis_error"] = row.get("language_analysis_error")
+            rows.append(flag)
+
+          language_green = sum(1 for row in rows if row["language_flag_status"] == "green")
+          language_orange = sum(1 for row in rows if row["language_flag_status"] == "orange")
+          language_red = sum(1 for row in rows if row["language_flag_status"] == "red")
+          remaining_alerts = [
+            {
+              "creative_id": row["creative_id"],
+              "language_status": row["language_flag_status"],
+              "reason": row["language_flag_reason"],
+              "detected": row.get("detected_language_code"),
+              "effective": row.get("effective_language_code"),
+              "served_countries": row.get("serving_countries", []),
+            }
+            for row in rows
+            if row["language_flag_status"] != "green"
+          ]
+
+          db_summary = {
+            "buyer_id": buyer_id,
+            "seat": seat,
+            **aggregate,
+            "returned_for_flagging": len(rows),
+            "language_green": language_green,
+            "language_orange": language_orange,
+            "language_red": language_red,
+            "language_alerts": language_orange + language_red,
+            "all_returned_creatives_analyzed": bool(rows)
+            and int(aggregate.get("missing_analysis") or 0) == 0,
+          }
+
+          emit("Direct DB language status", db_summary)
+          emit("Direct DB remaining language alerts sample", remaining_alerts[:25])
+
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as handle:
+            handle.write("\n## Direct DB Language Status\n\n")
+            handle.write("```json\n")
+            handle.write(json.dumps(db_summary, indent=2, default=str, ensure_ascii=False))
+            handle.write("\n```\n")
+            handle.write("\n### Direct DB Remaining Language Alerts Sample\n\n")
+            if not remaining_alerts:
+              handle.write("None\n")
+            else:
+              handle.write("| creative_id | status | reason | detected | served_countries |\n")
+              handle.write("| --- | --- | --- | --- | --- |\n")
+              for row in remaining_alerts[:25]:
+                handle.write(
+                  f"| {row['creative_id']} | {row['language_status']} | "
+                  f"{row['reason']} | {row.get('detected') or ''} | "
+                  f"{','.join(row.get('served_countries') or [])} |\n"
+                )
+          PY
