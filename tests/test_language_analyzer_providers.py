@@ -140,6 +140,15 @@ class TestLanguageAnalyzerProviders:
         )
         assert image == "https://cdn.example.com/thumb.png"
 
+    def test_resolve_image_uses_google_preview_url_hint(self):
+        analyzer = LanguageAnalyzer(provider="gemini", api_key="test-gemini-key")
+        image = analyzer._resolve_image_for_creative(
+            "creative-1",
+            {"html": {"snippet": ""}, "previewUrl": "https://storage.example.com/preview"},
+            "HTML",
+        )
+        assert image == "https://storage.example.com/preview"
+
     @pytest.mark.asyncio
     async def test_html_analysis_uses_google_detected_language_metadata(self, monkeypatch):
         analyzer = LanguageAnalyzer(provider="gemini", api_key="test-gemini-key")

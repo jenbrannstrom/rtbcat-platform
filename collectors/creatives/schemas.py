@@ -115,6 +115,7 @@ class CreativeDict(TypedDict, total=False):
         advertiserName: Declared advertiser name.
         declaredClickThroughUrls: All declared click-through URLs.
         apiUpdateTime: Last API update timestamp.
+        previewUrl: URL that can be used to preview the creative when provided by Google.
         renderUrl: URL content for render-url creatives when provided by Google.
         creativeServingDecision: Full serving-decision payload when returned.
         collectedAt: Timestamp when this data was collected.
@@ -142,6 +143,7 @@ class CreativeDict(TypedDict, total=False):
     advertiserName: Optional[str]
     declaredClickThroughUrls: list[str]
     apiUpdateTime: Optional[str]
+    previewUrl: Optional[str]
     renderUrl: Optional[str]
     creativeServingDecision: Optional[dict]
     collectedAt: str
