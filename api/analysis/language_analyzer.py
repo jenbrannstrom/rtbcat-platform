@@ -380,6 +380,47 @@ Rules:
                 error=f"Failed to parse API response: {exc}",
             )
 
+    @staticmethod
+    def _google_detected_language_result(raw_data: dict) -> LanguageDetectionResult:
+        """Use Google's own detected language metadata when available."""
+        serving_decision = raw_data.get("creativeServingDecision")
+        candidates: list[object] = []
+        if isinstance(serving_decision, dict):
+            detected = serving_decision.get("detectedLanguages")
+            if isinstance(detected, list):
+                candidates.extend(detected)
+        detected = raw_data.get("detectedLanguages")
+        if isinstance(detected, list):
+            candidates.extend(detected)
+
+        for candidate in candidates:
+            code = None
+            if isinstance(candidate, str):
+                code = candidate
+            elif isinstance(candidate, dict):
+                code = (
+                    candidate.get("languageCode")
+                    or candidate.get("language_code")
+                    or candidate.get("code")
+                    or candidate.get("language")
+                )
+            if not isinstance(code, str) or not code.strip():
+                continue
+
+            normalized = code.strip().lower().split("-", maxsplit=1)[0]
+            language = LANGUAGE_CODES.get(normalized) or normalized.upper()
+            return LanguageDetectionResult(
+                language=language,
+                language_code=normalized,
+                confidence=0.75,
+                source="google_detected_language",
+            )
+
+        return LanguageDetectionResult(
+            source="google_detected_language",
+            error="Google creative metadata did not include detected languages",
+        )
+
     def _resolve_image_for_creative(
         self,
         creative_id: str,
@@ -604,6 +645,10 @@ Rules:
         )
         if evidence_result.success:
             return evidence_result
+
+        google_result = self._google_detected_language_result(raw_data)
+        if google_result.success:
+            return google_result
 
         return LanguageDetectionResult(
             source=self.provider,

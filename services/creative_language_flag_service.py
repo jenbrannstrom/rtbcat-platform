@@ -572,5 +572,9 @@ def build_creative_language_flag_row(
         "geo_linguistic_status": geo_flag["status"],
         "geo_linguistic_reason": geo_flag["reason"],
         "geo_linguistic_decision": geo_flag.get("decision"),
-        "geo_linguistic_completed_at": latest_geo_run.get("completed_at") if latest_geo_run else None,
+        "geo_linguistic_completed_at": (
+            _serialize_timestamp(latest_geo_run.get("completed_at"))
+            if latest_geo_run
+            else None
+        ),
     }
