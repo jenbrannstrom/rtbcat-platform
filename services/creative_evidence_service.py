@@ -298,6 +298,15 @@ class CreativeEvidenceService:
             return default
         return max(minimum, min(maximum, dimension))
 
+    @staticmethod
+    def _device_scale_factor(width: int, height: int) -> int:
+        """Increase screenshot pixel density for tiny banner creatives."""
+        if width <= 480 or height <= 120:
+            return 3
+        if width <= 800 or height <= 250:
+            return 2
+        return 1
+
     def _take_html_screenshot(
         self,
         creative_id: str,
@@ -316,11 +325,13 @@ class CreativeEvidenceService:
         output_path = str(self._creative_dir(creative_id) / "screenshot.png")
         viewport_width = self._coerce_dimension(width, 1024)
         viewport_height = self._coerce_dimension(height, 768)
+        scale_factor = self._device_scale_factor(viewport_width, viewport_height)
         try:
             with sync_playwright() as p:
                 browser = p.chromium.launch(headless=True)
                 page = browser.new_page(
-                    viewport={"width": viewport_width, "height": viewport_height}
+                    viewport={"width": viewport_width, "height": viewport_height},
+                    device_scale_factor=scale_factor,
                 )
                 page.set_content(snippet, wait_until="domcontentloaded")
                 page.add_style_tag(
@@ -362,11 +373,13 @@ class CreativeEvidenceService:
         output_path = str(self._creative_dir(creative_id) / "screenshot.png")
         viewport_width = self._coerce_dimension(width, 1024)
         viewport_height = self._coerce_dimension(height, 768)
+        scale_factor = self._device_scale_factor(viewport_width, viewport_height)
         try:
             with sync_playwright() as p:
                 browser = p.chromium.launch(headless=True)
                 page = browser.new_page(
-                    viewport={"width": viewport_width, "height": viewport_height}
+                    viewport={"width": viewport_width, "height": viewport_height},
+                    device_scale_factor=scale_factor,
                 )
                 page.goto(url, wait_until="domcontentloaded", timeout=15000)
                 page.add_style_tag(
