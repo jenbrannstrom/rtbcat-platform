@@ -43,6 +43,11 @@ class TestCollectHtmlEvidence:
         result = service.collect_evidence("c3", raw_data, "HTML")
         assert result.text_content == ""
 
+    def test_html_advertiser_name_alone_is_not_language_evidence(self, service):
+        raw_data = {"html": {}, "advertiserName": "Amazing Design Tools"}
+        result = service.collect_evidence("c3-advertiser", raw_data, "HTML")
+        assert result.text_content == ""
+
     def test_extracts_text_from_google_html_snippet_variant(self, service):
         raw_data = {"html": {"htmlSnippet": "<div>मिटाना</div>", "width": 320, "height": 50}}
         result = service.collect_evidence("c3-alt", raw_data, "HTML")

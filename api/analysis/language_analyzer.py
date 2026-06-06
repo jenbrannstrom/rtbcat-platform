@@ -143,7 +143,7 @@ class LanguageAnalyzer:
                     text_parts.append(value)
 
         advertiser = raw_data.get("advertiserName", "")
-        if advertiser and advertiser not in text_parts:
+        if advertiser and text_parts and advertiser not in text_parts:
             text_parts.append(advertiser)
 
         if not text_parts:
