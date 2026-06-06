@@ -131,6 +131,16 @@ class TestLanguageAnalyzerProviders:
         )
         assert text == "मिटाना"
 
+    def test_extract_text_does_not_treat_html_advertiser_as_ad_copy(self):
+        analyzer = LanguageAnalyzer(provider="gemini", api_key="test-gemini-key")
+
+        text = analyzer.extract_text_from_creative(
+            {"html": {}, "advertiserName": "Amazing Design Tools"},
+            "HTML",
+        )
+
+        assert text is None
+
     def test_resolve_image_uses_html_thumbnail_hint(self):
         analyzer = LanguageAnalyzer(provider="gemini", api_key="test-gemini-key")
         image = analyzer._resolve_image_for_creative(

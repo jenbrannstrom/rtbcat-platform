@@ -180,7 +180,7 @@ class CreativeEvidenceService:
 
         # Check advertiser name
         advertiser = raw_data.get("advertiserName", "")
-        if advertiser:
+        if advertiser and result.text_content:
             result.text_content = f"{result.text_content} {advertiser}".strip()
 
     def _collect_video_evidence(
@@ -213,7 +213,7 @@ class CreativeEvidenceService:
                         result.ocr_texts.append(ocr_text)
 
         advertiser = raw_data.get("advertiserName", "")
-        if advertiser:
+        if advertiser and result.text_content:
             result.text_content = f"{result.text_content} {advertiser}".strip()
 
     def _collect_native_evidence(
