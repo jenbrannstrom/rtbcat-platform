@@ -101,6 +101,30 @@ def test_build_creative_language_flag_row_normalizes_country_names() -> None:
     assert row["currency_flag_reason"] == "No obvious market currency detected"
 
 
+def test_build_creative_language_flag_row_accepts_english_in_india() -> None:
+    creative = SimpleNamespace(
+        id="2014265280192819202",
+        name="India creative",
+        buyer_id="1487810529",
+        format="HTML",
+        approval_status="APPROVED",
+        advertiser_name=None,
+        detected_language="English",
+        detected_language_code="en",
+        raw_data={"html": {"snippet": ""}},
+    )
+
+    row = build_creative_language_flag_row(
+        creative=creative,
+        serving_countries=["INDIA"],
+        latest_geo_run=None,
+    )
+
+    assert row["serving_countries"] == ["IN"]
+    assert row["language_flag_status"] == "green"
+    assert row["language_flag_reason"] == "EN matches IND"
+
+
 def test_build_creative_language_flag_row_matches_burmese_in_myanmar() -> None:
     creative = SimpleNamespace(
         id="lHF3b17Qx3iDXD9muefTqLWkHGf6il0hiAFjNkMwqze",

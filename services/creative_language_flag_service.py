@@ -54,7 +54,7 @@ _CURRENCY_TO_COUNTRIES = {
     "VND": ["VN"],
 }
 
-_PRIMARY_ENGLISH_MARKETS = {"US", "GB", "CA", "AU", "NZ", "IE", "ZA", "SG"}
+_PRIMARY_ENGLISH_MARKETS = {"US", "GB", "CA", "AU", "NZ", "IE", "ZA", "SG", "IN"}
 _ENGLISH_HINT_WORDS = {
     "only",
     "free",
