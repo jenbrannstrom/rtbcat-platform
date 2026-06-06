@@ -76,6 +76,14 @@ def _determine_format(creative_data: dict) -> CreativeFormat:
     Returns:
         CreativeFormat: 'HTML', 'VIDEO', 'NATIVE', or 'UNKNOWN'.
     """
+    creative_format = creative_data.get("creativeFormat")
+    if creative_format == "HTML":
+        return "HTML"
+    if creative_format == "VIDEO":
+        return "VIDEO"
+    if creative_format == "NATIVE":
+        return "NATIVE"
+
     if creative_data.get("html"):
         return "HTML"
     elif creative_data.get("video"):
@@ -354,6 +362,8 @@ def parse_creative_response(
         "advertiserName": creative_data.get("advertiserName"),
         "declaredClickThroughUrls": click_urls,
         "apiUpdateTime": creative_data.get("apiUpdateTime"),
+        "renderUrl": creative_data.get("renderUrl"),
+        "creativeServingDecision": creative_data.get("creativeServingDecision"),
         "collectedAt": datetime.now(timezone.utc).isoformat(),
         "source": "authorized_buyers_api",
         # App info (Phase 29)

@@ -139,3 +139,31 @@ class TestLanguageAnalyzerProviders:
             "HTML",
         )
         assert image == "https://cdn.example.com/thumb.png"
+
+    @pytest.mark.asyncio
+    async def test_html_analysis_uses_google_detected_language_metadata(self, monkeypatch):
+        analyzer = LanguageAnalyzer(provider="gemini", api_key="test-gemini-key")
+
+        monkeypatch.setattr(
+            "services.creative_evidence_service.CreativeEvidenceService.collect_evidence",
+            lambda *args, **kwargs: SimpleNamespace(
+                text_content="",
+                ocr_texts=[],
+                screenshot_path=None,
+                video_frames=[],
+            ),
+        )
+
+        result = await analyzer.analyze_creative(
+            "creative-1",
+            {
+                "html": {"snippet": ""},
+                "creativeServingDecision": {"detectedLanguages": ["hi"]},
+            },
+            "HTML",
+        )
+
+        assert result.success
+        assert result.language == "Hindi"
+        assert result.language_code == "hi"
+        assert result.source == "google_detected_language"

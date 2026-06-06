@@ -1,6 +1,8 @@
 import pytest
 
 from collectors.creatives.client import CreativesClient
+from collectors.creatives.parsers import parse_creative_response
+from storage.adapters import creative_dict_to_storage
 
 
 class _Request:
@@ -61,3 +63,26 @@ async def test_get_creative_by_id_encodes_buyer_resource_name(monkeypatch) -> No
     assert result is not None
     assert result["creativeId"] == creative_id
     assert buyer_get_names == ["buyers/6574658621/creatives/abc%2Bdef%2Fghi"]
+
+
+def test_parse_creative_response_preserves_google_language_metadata() -> None:
+    parsed = parse_creative_response(
+        {
+            "name": "bidders/123/creatives/creative-1",
+            "creativeId": "creative-1",
+            "creativeFormat": "HTML",
+            "renderUrl": "https://render.example.com/ad",
+            "creativeServingDecision": {"detectedLanguages": ["hi"]},
+            "html": {"width": 320, "height": 50},
+        },
+        "123",
+        buyer_id="1487810529",
+    )
+
+    creative = creative_dict_to_storage(parsed)
+
+    assert parsed["format"] == "HTML"
+    assert parsed["renderUrl"] == "https://render.example.com/ad"
+    assert parsed["creativeServingDecision"] == {"detectedLanguages": ["hi"]}
+    assert creative.raw_data["renderUrl"] == "https://render.example.com/ad"
+    assert creative.raw_data["creativeServingDecision"] == {"detectedLanguages": ["hi"]}

@@ -2353,7 +2353,7 @@ class PostgresStore:
         """Get thumbnail status for a single creative."""
         row = await pg_query_one(
             """
-            SELECT creative_id, status, error_reason, updated_at
+            SELECT creative_id, status, error_reason, gcs_path, updated_at
             FROM creative_thumbnails WHERE creative_id = %s
             """,
             (creative_id,)
@@ -2362,6 +2362,7 @@ class PostgresStore:
             return {
                 "status": row["status"],
                 "error_reason": row["error_reason"],
+                "thumbnail_url": row.get("gcs_path"),
                 "updated_at": row["updated_at"],
             }
         return None

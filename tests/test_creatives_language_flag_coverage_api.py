@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from types import SimpleNamespace
 
 import pytest
@@ -51,6 +52,33 @@ async def test_language_flag_coverage_list_uses_store_list_creatives() -> None:
             "include_raw_data": True,
         }
     ]
+
+
+def test_language_flag_coverage_serializes_geo_completed_at_datetime() -> None:
+    row = creatives_router.build_creative_language_flag_row(
+        creative=SimpleNamespace(
+            id="creative-1",
+            name="Creative",
+            buyer_id="1487810529",
+            format="HTML",
+            approval_status="APPROVED",
+            advertiser_name=None,
+            detected_language=None,
+            detected_language_code=None,
+            raw_data={},
+        ),
+        serving_countries=["IN"],
+        latest_geo_run={
+            "status": "failed",
+            "error_message": "AI report failed",
+            "completed_at": datetime(2026, 6, 6, tzinfo=timezone.utc),
+            "result": {},
+        },
+    )
+
+    model = creatives_router.CreativeLanguageFlagCoverageRow(**row)
+
+    assert model.geo_linguistic_completed_at == "2026-06-06T00:00:00+00:00"
 
 
 def test_language_flag_coverage_endpoint_returns_expected_statuses(

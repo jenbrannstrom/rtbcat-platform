@@ -115,6 +115,8 @@ class CreativeDict(TypedDict, total=False):
         advertiserName: Declared advertiser name.
         declaredClickThroughUrls: All declared click-through URLs.
         apiUpdateTime: Last API update timestamp.
+        renderUrl: URL content for render-url creatives when provided by Google.
+        creativeServingDecision: Full serving-decision payload when returned.
         collectedAt: Timestamp when this data was collected.
         source: Data source identifier (always 'authorized_buyers_api').
         canonical_size: Normalized IAB standard size (e.g., "300x250 (Medium Rectangle)").
@@ -140,6 +142,8 @@ class CreativeDict(TypedDict, total=False):
     advertiserName: Optional[str]
     declaredClickThroughUrls: list[str]
     apiUpdateTime: Optional[str]
+    renderUrl: Optional[str]
+    creativeServingDecision: Optional[dict]
     collectedAt: str
     source: Literal["authorized_buyers_api"]
     canonical_size: str
