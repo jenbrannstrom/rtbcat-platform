@@ -108,7 +108,10 @@ class TestCollectHtmlEvidence:
         )
 
         assert path
-        browser.new_page.assert_called_once_with(viewport={"width": 320, "height": 50})
+        browser.new_page.assert_called_once_with(
+            viewport={"width": 320, "height": 50},
+            device_scale_factor=3,
+        )
         page.wait_for_timeout.assert_called_once_with(10000)
         page.screenshot.assert_called_once_with(path=path, full_page=False)
 
@@ -147,7 +150,10 @@ class TestCollectHtmlEvidence:
         )
 
         assert path
-        browser.new_page.assert_called_once_with(viewport={"width": 320, "height": 50})
+        browser.new_page.assert_called_once_with(
+            viewport={"width": 320, "height": 50},
+            device_scale_factor=3,
+        )
         page.goto.assert_called_once_with(
             "https://preview.example.com/ad",
             wait_until="domcontentloaded",
