@@ -129,6 +129,7 @@ class CreativeEvidenceService:
     ) -> None:
         snippet = extract_html_snippet(raw_data)
         width, height = extract_html_dimensions(raw_data)
+        render_urls = self._extract_html_render_urls(raw_data)
 
         if snippet:
             result.text_content = self._strip_html_tags(snippet)
@@ -156,6 +157,26 @@ class CreativeEvidenceService:
 
         elif raw_data:
             result.image_urls.extend(extract_html_image_hints(raw_data))
+
+        if not result.screenshot_path:
+            for render_url in render_urls:
+                screenshot_path = self._take_url_screenshot(
+                    creative_id,
+                    render_url,
+                    width=width,
+                    height=height,
+                )
+                if not screenshot_path:
+                    continue
+                result.screenshot_path = screenshot_path
+                ocr_text = self._ocr_image(
+                    screenshot_path,
+                    ai_provider=ai_provider,
+                    ai_api_key=ai_api_key,
+                )
+                if ocr_text:
+                    result.ocr_texts.append(ocr_text)
+                break
 
         # Check advertiser name
         advertiser = raw_data.get("advertiserName", "")
@@ -252,6 +273,24 @@ class CreativeEvidenceService:
         return [u for u in urls if u.startswith("http")]
 
     @staticmethod
+    def _extract_html_render_urls(raw_data: dict) -> list[str]:
+        urls: list[str] = []
+        containers: list[object] = [raw_data]
+        html_payload = raw_data.get("html") if isinstance(raw_data, dict) else None
+        if isinstance(html_payload, dict):
+            containers.append(html_payload)
+
+        for container in containers:
+            if not isinstance(container, dict):
+                continue
+            for key in ("previewUrl", "preview_url", "renderUrl", "render_url"):
+                value = container.get(key)
+                if isinstance(value, str) and value.startswith(("http://", "https://")):
+                    if value not in urls:
+                        urls.append(value)
+        return urls
+
+    @staticmethod
     def _coerce_dimension(value: object, default: int, *, minimum: int = 1, maximum: int = 2000) -> int:
         try:
             dimension = int(value)  # type: ignore[arg-type]
@@ -296,6 +335,52 @@ class CreativeEvidenceService:
             return output_path
         except Exception as e:
             logger.warning("HTML screenshot failed for %s: %s", creative_id, e)
+            return None
+
+    def _take_url_screenshot(
+        self,
+        creative_id: str,
+        url: str,
+        *,
+        width: object = None,
+        height: object = None,
+    ) -> Optional[str]:
+        """Open a safe public URL, wait for render, and save a screenshot."""
+        if not is_safe_public_http_url(url):
+            logger.warning(
+                "Blocked URL screenshot for unsafe URL",
+                extra={"creative_id": creative_id},
+            )
+            return None
+
+        try:
+            from playwright.sync_api import sync_playwright
+        except ImportError:
+            logger.debug("Playwright not installed, skipping URL screenshot")
+            return None
+
+        output_path = str(self._creative_dir(creative_id) / "screenshot.png")
+        viewport_width = self._coerce_dimension(width, 1024)
+        viewport_height = self._coerce_dimension(height, 768)
+        try:
+            with sync_playwright() as p:
+                browser = p.chromium.launch(headless=True)
+                page = browser.new_page(
+                    viewport={"width": viewport_width, "height": viewport_height}
+                )
+                page.goto(url, wait_until="domcontentloaded", timeout=15000)
+                page.add_style_tag(
+                    content=(
+                        "html, body { margin: 0 !important; padding: 0 !important; "
+                        "overflow: hidden !important; }"
+                    )
+                )
+                page.wait_for_timeout(10000)
+                page.screenshot(path=output_path, full_page=False)
+                browser.close()
+            return output_path
+        except Exception as e:
+            logger.warning("URL screenshot failed for %s: %s", creative_id, e)
             return None
 
     # ==================== VAST / Video helpers ====================

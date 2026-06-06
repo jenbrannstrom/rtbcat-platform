@@ -149,6 +149,63 @@ class TestLanguageAnalyzerProviders:
         )
         assert image == "https://storage.example.com/preview"
 
+    def test_detect_language_uses_devanagari_script_heuristic(self):
+        analyzer = LanguageAnalyzer(provider="gemini", api_key="test-gemini-key")
+
+        result = analyzer.detect_language("AD मिटाना")
+
+        assert result.success
+        assert result.language == "Hindi"
+        assert result.language_code == "hi"
+        assert result.source == "script_heuristic"
+
+    def test_parse_response_uses_visible_text_script_signal(self):
+        analyzer = LanguageAnalyzer(provider="gemini", api_key="test-gemini-key")
+
+        result = analyzer._parse_response(
+            (
+                '{"visible_text":"AD मिटाना","language":"English",'
+                '"language_code":"en","confidence":0.92}'
+            )
+        )
+
+        assert result.success
+        assert result.language == "Hindi"
+        assert result.language_code == "hi"
+        assert result.source == "gemini_script_heuristic"
+
+    @pytest.mark.asyncio
+    async def test_html_english_vision_result_checks_rendered_script_evidence(self, monkeypatch):
+        analyzer = LanguageAnalyzer(provider="gemini", api_key="test-gemini-key")
+
+        monkeypatch.setattr(
+            analyzer,
+            "detect_language_from_image",
+            lambda image_source: analyzer._parse_response(
+                '{"language":"English","language_code":"en","confidence":0.96}'
+            ),
+        )
+        monkeypatch.setattr(
+            "services.creative_evidence_service.CreativeEvidenceService.collect_evidence",
+            lambda *args, **kwargs: SimpleNamespace(
+                text_content="",
+                ocr_texts=["AD मिटाना"],
+                screenshot_path="/tmp/rendered.png",
+                video_frames=[],
+            ),
+        )
+
+        result = await analyzer.analyze_creative(
+            "creative-1",
+            {"previewUrl": "https://storage.example.com/preview"},
+            "HTML",
+        )
+
+        assert result.success
+        assert result.language == "Hindi"
+        assert result.language_code == "hi"
+        assert result.source == "script_heuristic_rendered_evidence"
+
     @pytest.mark.asyncio
     async def test_html_analysis_uses_google_detected_language_metadata(self, monkeypatch):
         analyzer = LanguageAnalyzer(provider="gemini", api_key="test-gemini-key")
