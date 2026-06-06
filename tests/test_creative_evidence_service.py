@@ -53,6 +53,30 @@ class TestCollectHtmlEvidence:
         result = service.collect_evidence("c3-thumb", raw_data, "HTML")
         assert result.image_urls == ["https://cdn.example.com/thumb.png"]
 
+    def test_screenshots_google_preview_url_without_snippet(self, service, monkeypatch):
+        raw_data = {"html": {"previewUrl": "https://preview.example.com/ad", "width": 320, "height": 50}}
+
+        screenshot = MagicMock(return_value="/tmp/rendered.png")
+        ocr = MagicMock(return_value="AD मिटाना")
+        monkeypatch.setattr(service, "_take_url_screenshot", screenshot)
+        monkeypatch.setattr(service, "_ocr_image", ocr)
+
+        result = service.collect_evidence(
+            "c3-preview",
+            raw_data,
+            "HTML",
+            ai_api_key="test-key",
+        )
+
+        assert result.screenshot_path == "/tmp/rendered.png"
+        assert result.ocr_texts == ["AD मिटाना"]
+        screenshot.assert_called_once_with(
+            "c3-preview",
+            "https://preview.example.com/ad",
+            width=320,
+            height=50,
+        )
+
     def test_html_screenshot_uses_creative_dimensions(self, service, tmp_path, monkeypatch):
         service._evidence_dir = tmp_path
 
@@ -85,6 +109,50 @@ class TestCollectHtmlEvidence:
 
         assert path
         browser.new_page.assert_called_once_with(viewport={"width": 320, "height": 50})
+        page.wait_for_timeout.assert_called_once_with(10000)
+        page.screenshot.assert_called_once_with(path=path, full_page=False)
+
+    def test_url_screenshot_waits_for_render(self, service, tmp_path, monkeypatch):
+        service._evidence_dir = tmp_path
+
+        page = MagicMock()
+        browser = MagicMock()
+        browser.new_page.return_value = page
+
+        playwright = MagicMock()
+        playwright.chromium.launch.return_value = browser
+
+        class _PlaywrightContext:
+            def __enter__(self):
+                return playwright
+
+            def __exit__(self, exc_type, exc, tb):
+                return None
+
+        playwright_module = types.ModuleType("playwright")
+        sync_api_module = types.ModuleType("playwright.sync_api")
+        sync_api_module.sync_playwright = lambda: _PlaywrightContext()
+        monkeypatch.setitem(sys.modules, "playwright", playwright_module)
+        monkeypatch.setitem(sys.modules, "playwright.sync_api", sync_api_module)
+        monkeypatch.setattr(
+            "services.creative_evidence_service.is_safe_public_http_url",
+            lambda url: True,
+        )
+
+        path = service._take_url_screenshot(
+            "c-url",
+            "https://preview.example.com/ad",
+            width=320,
+            height=50,
+        )
+
+        assert path
+        browser.new_page.assert_called_once_with(viewport={"width": 320, "height": 50})
+        page.goto.assert_called_once_with(
+            "https://preview.example.com/ad",
+            wait_until="domcontentloaded",
+            timeout=15000,
+        )
         page.wait_for_timeout.assert_called_once_with(10000)
         page.screenshot.assert_called_once_with(path=path, full_page=False)
 

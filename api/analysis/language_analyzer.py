@@ -27,6 +27,12 @@ from utils.creative_html import extract_html_image_hints, extract_html_snippet
 logger = logging.getLogger(__name__)
 
 
+_SCRIPT_LANGUAGE_PATTERNS: tuple[tuple[re.Pattern[str], str, str], ...] = (
+    (re.compile(r"[\u0900-\u097F]"), "Hindi", "hi"),
+    (re.compile(r"[\u1000-\u109F]"), "Burmese", "my"),
+)
+
+
 def get_provider_api_key_sync(
     provider: str = "gemini",
     db_path: Optional[str] = None,  # kept for backward compatibility
@@ -74,6 +80,34 @@ class LanguageAnalyzer:
     def is_configured(self) -> bool:
         """Check if API key is configured."""
         return bool(self.api_key)
+
+    @staticmethod
+    def _script_language_result(
+        text: object,
+        *,
+        source: str,
+        confidence: float = 0.99,
+    ) -> LanguageDetectionResult:
+        """Detect unambiguous script signals before calling an AI provider."""
+        if not isinstance(text, str) or not text.strip():
+            return LanguageDetectionResult(
+                source=source,
+                error="No script language signal found",
+            )
+
+        for pattern, language, language_code in _SCRIPT_LANGUAGE_PATTERNS:
+            if pattern.search(text):
+                return LanguageDetectionResult(
+                    language=language,
+                    language_code=language_code,
+                    confidence=confidence,
+                    source=source,
+                )
+
+        return LanguageDetectionResult(
+            source=source,
+            error="No script language signal found",
+        )
 
     def extract_text_from_creative(
         self,
@@ -183,6 +217,13 @@ class LanguageAnalyzer:
                 error="Insufficient text content for language detection",
             )
 
+        script_result = self._script_language_result(
+            text,
+            source="script_heuristic",
+        )
+        if script_result.success:
+            return script_result
+
         if not self.is_configured:
             return LanguageDetectionResult(
                 source=self.provider,
@@ -222,6 +263,7 @@ Text to analyze:
 
 Respond ONLY with valid JSON in this exact format:
 {{
+  "visible_text": "Buy now",
   "language": "English",
   "language_code": "en",
   "confidence": 0.95
@@ -231,7 +273,10 @@ Rules:
 - "language" should be the full English name of the dominant language (e.g., "German", "French", "Spanish")
 - "language_code" should be the ISO 639-1 two-letter code (e.g., "de", "fr", "es")
 - "confidence" should be between 0.0 and 1.0
+- "visible_text" should contain the readable ad copy or CTA text you used for the decision
 - Do not ignore short CTA/button text like "instalar", "download", or "comprar ahora"
+- For short creatives, a single readable CTA/button word is enough to determine the language
+- Non-Latin scripts are strong signals: Devanagari text is Hindi ("hi") and Myanmar script is Burmese ("my") unless other readable ad copy clearly dominates
 - If the text mixes multiple languages, still return the dominant language but lower confidence below 0.8
 - If the text is too short or ambiguous, set confidence below 0.5
 - If you cannot determine the language, respond with: {{"language": null, "language_code": null, "confidence": 0.0}}
@@ -355,6 +400,16 @@ Rules:
 
         try:
             data = json.loads(text.strip())
+            visible_text = data.get("visible_text") or data.get("visibleText")
+            if isinstance(visible_text, list):
+                visible_text = " ".join(str(value) for value in visible_text if value)
+            script_result = self._script_language_result(
+                visible_text,
+                source=f"{self.provider}_script_heuristic",
+            )
+            if script_result.success:
+                return script_result
+
             language = data.get("language")
             language_code = data.get("language_code")
             confidence = float(data.get("confidence", 0.0))
@@ -485,6 +540,7 @@ Rules:
 
 Respond ONLY with valid JSON in this exact format:
 {
+  "visible_text": "Buy now",
   "language": "English",
   "language_code": "en",
   "confidence": 0.95
@@ -494,7 +550,11 @@ Rules:
 - "language" should be the full English name of the dominant language (e.g., "German", "French", "Spanish")
 - "language_code" should be the ISO 639-1 two-letter code (e.g., "de", "fr", "es")
 - "confidence" should be between 0.0 and 1.0
+- "visible_text" should contain the readable ad copy or CTA text you used for the decision
 - Do not ignore CTA/button text if it is visible
+- For short creatives, a single readable CTA/button word is enough to determine the language
+- Ignore tiny/partial ad chrome such as "AD", clipped labels, file names, or UI boilerplate unless there is no readable ad copy
+- Non-Latin scripts are strong signals: Devanagari text is Hindi ("hi") and Myanmar script is Burmese ("my") unless other readable ad copy clearly dominates
 - If the image shows mixed languages, still return the dominant language but lower confidence below 0.8
 - If you cannot see any text in the image, respond with: {"language": null, "language_code": null, "confidence": 0.0}
 """
@@ -634,6 +694,17 @@ Rules:
             logger.debug("Falling back to vision for creative %s with %s", creative_id, self.provider)
             result = self.detect_language_from_image(image_source)
             if result.success:
+                if creative_format == "HTML" and (result.language_code or "").lower() == "en":
+                    evidence_result = self._detect_from_rendered_evidence(
+                        creative_id,
+                        raw_data,
+                        creative_format,
+                    )
+                    if (
+                        evidence_result.success
+                        and (evidence_result.language_code or "").lower() != "en"
+                    ):
+                        return evidence_result
                 return result
 
         # Rendered evidence fallback: HTML ads often hide visible text in
