@@ -95,6 +95,7 @@ def creative_dict_to_storage(data: "CreativeDict") -> Creative:
         raw_data={
             "declaredClickThroughUrls": data.get("declaredClickThroughUrls", []),
             "apiUpdateTime": data.get("apiUpdateTime"),
+            "previewUrl": data.get("previewUrl"),
             "renderUrl": data.get("renderUrl"),
             "creativeServingDecision": data.get("creativeServingDecision"),
             "collectedAt": data.get("collectedAt"),

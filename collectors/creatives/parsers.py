@@ -362,6 +362,7 @@ def parse_creative_response(
         "advertiserName": creative_data.get("advertiserName"),
         "declaredClickThroughUrls": click_urls,
         "apiUpdateTime": creative_data.get("apiUpdateTime"),
+        "previewUrl": creative_data.get("previewUrl"),
         "renderUrl": creative_data.get("renderUrl"),
         "creativeServingDecision": creative_data.get("creativeServingDecision"),
         "collectedAt": datetime.now(timezone.utc).isoformat(),

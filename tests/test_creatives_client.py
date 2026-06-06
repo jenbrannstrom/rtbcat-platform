@@ -71,6 +71,7 @@ def test_parse_creative_response_preserves_google_language_metadata() -> None:
             "name": "bidders/123/creatives/creative-1",
             "creativeId": "creative-1",
             "creativeFormat": "HTML",
+            "previewUrl": "https://storage.googleapis.com/preview/ad",
             "renderUrl": "https://render.example.com/ad",
             "creativeServingDecision": {"detectedLanguages": ["hi"]},
             "html": {"width": 320, "height": 50},
@@ -82,7 +83,9 @@ def test_parse_creative_response_preserves_google_language_metadata() -> None:
     creative = creative_dict_to_storage(parsed)
 
     assert parsed["format"] == "HTML"
+    assert parsed["previewUrl"] == "https://storage.googleapis.com/preview/ad"
     assert parsed["renderUrl"] == "https://render.example.com/ad"
     assert parsed["creativeServingDecision"] == {"detectedLanguages": ["hi"]}
+    assert creative.raw_data["previewUrl"] == "https://storage.googleapis.com/preview/ad"
     assert creative.raw_data["renderUrl"] == "https://render.example.com/ad"
     assert creative.raw_data["creativeServingDecision"] == {"detectedLanguages": ["hi"]}

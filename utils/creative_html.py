@@ -18,6 +18,8 @@ _HTML_SNIPPET_KEYS = (
 _HTML_IMAGE_KEYS = (
     "thumbnailUrl",
     "thumbnail_url",
+    "previewUrl",
+    "preview_url",
     "imageUrl",
     "image_url",
     "creativeUrl",
