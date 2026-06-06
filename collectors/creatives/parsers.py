@@ -21,6 +21,7 @@ from collectors.creatives.schemas import (
     VideoCreativeData,
 )
 from utils.app_parser import extract_app_info_from_creative_sync
+from utils.creative_html import extract_html_snippet
 
 logger = logging.getLogger(__name__)
 
@@ -98,7 +99,7 @@ def _extract_html_data(creative_data: dict) -> Optional[HtmlCreativeData]:
         return None
 
     return HtmlCreativeData(
-        snippet=html.get("snippet", ""),
+        snippet=extract_html_snippet({"html": html}),
         width=html.get("width", 0),
         height=html.get("height", 0),
     )

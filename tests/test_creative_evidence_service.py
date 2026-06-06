@@ -43,6 +43,16 @@ class TestCollectHtmlEvidence:
         result = service.collect_evidence("c3", raw_data, "HTML")
         assert result.text_content == ""
 
+    def test_extracts_text_from_google_html_snippet_variant(self, service):
+        raw_data = {"html": {"htmlSnippet": "<div>मिटाना</div>", "width": 320, "height": 50}}
+        result = service.collect_evidence("c3-alt", raw_data, "HTML")
+        assert "मिटाना" in result.text_content
+
+    def test_extracts_html_thumbnail_hint_without_snippet(self, service):
+        raw_data = {"html": {"thumbnailUrl": "https://cdn.example.com/thumb.png"}}
+        result = service.collect_evidence("c3-thumb", raw_data, "HTML")
+        assert result.image_urls == ["https://cdn.example.com/thumb.png"]
+
     def test_html_screenshot_uses_creative_dimensions(self, service, tmp_path, monkeypatch):
         service._evidence_dir = tmp_path
 

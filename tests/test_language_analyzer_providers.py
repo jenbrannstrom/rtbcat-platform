@@ -122,3 +122,20 @@ class TestLanguageAnalyzerProviders:
         assert result.language == "Burmese"
         assert result.language_code == "my"
         assert result.source == "gemini_rendered_evidence"
+
+    def test_extract_text_reads_google_html_snippet_variant(self):
+        analyzer = LanguageAnalyzer(provider="gemini", api_key="test-gemini-key")
+        text = analyzer.extract_text_from_creative(
+            {"html": {"htmlSnippet": "<div>मिटाना</div>"}},
+            "HTML",
+        )
+        assert text == "मिटाना"
+
+    def test_resolve_image_uses_html_thumbnail_hint(self):
+        analyzer = LanguageAnalyzer(provider="gemini", api_key="test-gemini-key")
+        image = analyzer._resolve_image_for_creative(
+            "creative-1",
+            {"html": {"thumbnailUrl": "https://cdn.example.com/thumb.png"}},
+            "HTML",
+        )
+        assert image == "https://cdn.example.com/thumb.png"

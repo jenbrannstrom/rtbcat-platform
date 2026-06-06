@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-from types import SimpleNamespace
 from typing import Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
@@ -250,92 +249,18 @@ async def _get_market_alert_map(
 
 
 async def _list_creatives_for_language_flag_coverage(
+    store,
     buyer_id: Optional[str],
     search: Optional[str],
     scan_limit: int,
 ) -> list:
-    search_term = (search or "").strip()
-    conditions: list[str] = []
-    params: list[object] = []
-
-    if buyer_id:
-        conditions.append("buyer_id = %s")
-        params.append(buyer_id)
-
-    if search_term:
-        pattern = f"%{search_term}%"
-        conditions.append(
-            "("
-            "id ILIKE %s OR "
-            "COALESCE(name, '') ILIKE %s OR "
-            "COALESCE(advertiser_name, '') ILIKE %s OR "
-            "COALESCE(utm_campaign, '') ILIKE %s"
-            ")"
-        )
-        params.extend([pattern, pattern, pattern, pattern])
-
-    sql = """
-        SELECT
-            id,
-            name,
-            buyer_id,
-            format,
-            approval_status,
-            advertiser_name,
-            detected_language,
-            detected_language_code,
-            jsonb_strip_nulls(
-                jsonb_build_object(
-                    'advertiserName',
-                    NULLIF(LEFT(COALESCE(raw_data->>'advertiserName', ''), 512), ''),
-                    'html',
-                    CASE
-                        WHEN raw_data ? 'html' THEN jsonb_strip_nulls(
-                            jsonb_build_object(
-                                'snippet',
-                                NULLIF(LEFT(COALESCE(raw_data->'html'->>'snippet', ''), 12000), '')
-                            )
-                        )
-                        ELSE NULL
-                    END,
-                    'native',
-                    CASE
-                        WHEN raw_data ? 'native' THEN jsonb_strip_nulls(
-                            jsonb_build_object(
-                                'headline', NULLIF(LEFT(COALESCE(raw_data->'native'->>'headline', ''), 1000), ''),
-                                'body', NULLIF(LEFT(COALESCE(raw_data->'native'->>'body', ''), 4000), ''),
-                                'callToAction', NULLIF(LEFT(COALESCE(raw_data->'native'->>'callToAction', ''), 512), ''),
-                                'advertiserName', NULLIF(LEFT(COALESCE(raw_data->'native'->>'advertiserName', ''), 512), ''),
-                                'snippet', NULLIF(LEFT(COALESCE(raw_data->'native'->>'snippet', ''), 4000), '')
-                            )
-                        )
-                        ELSE NULL
-                    END,
-                    'video',
-                    CASE
-                        WHEN raw_data ? 'video' THEN jsonb_strip_nulls(
-                            jsonb_build_object(
-                                'vastXml', NULLIF(LEFT(COALESCE(raw_data->'video'->>'vastXml', ''), 12000), ''),
-                                'videoVastXml', NULLIF(LEFT(COALESCE(raw_data->'video'->>'videoVastXml', ''), 12000), '')
-                            )
-                        )
-                        ELSE NULL
-                    END,
-                    'videoVastXml',
-                    NULLIF(LEFT(COALESCE(raw_data->>'videoVastXml', ''), 12000), '')
-                )
-            ) AS raw_data
-        FROM creatives
-    """
-
-    if conditions:
-        sql += " WHERE " + " AND ".join(conditions)
-
-    sql += " ORDER BY created_at DESC LIMIT %s"
-    params.append(scan_limit)
-
-    rows = await pg_query(sql, tuple(params))
-    return [SimpleNamespace(**row) for row in rows]
+    return await store.list_creatives(
+        buyer_id=buyer_id,
+        search=search,
+        limit=scan_limit,
+        offset=0,
+        include_raw_data=True,
+    )
 
 
 async def _refresh_language_flag_coverage_batch(
@@ -791,6 +716,7 @@ async def get_creative_language_flag_coverage(
     buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
 
     creatives = await _list_creatives_for_language_flag_coverage(
+        store,
         buyer_id=buyer_id,
         search=search,
         scan_limit=scan_limit,
@@ -914,6 +840,7 @@ async def refresh_creative_language_flag_coverage(
     buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
 
     creatives = await _list_creatives_for_language_flag_coverage(
+        store,
         buyer_id=buyer_id,
         search=search,
         scan_limit=refresh_limit,
