@@ -5,9 +5,11 @@ from __future__ import annotations
 import json
 import re
 import unicodedata
+from datetime import datetime
 from typing import Any, Optional
 
 from utils.country_codes import get_country_alpha3, normalize_country_code
+from utils.creative_html import extract_html_snippet
 from utils.language_country_map import check_language_country_match
 
 _CURRENCY_PATTERNS = re.compile(
@@ -148,11 +150,9 @@ def extract_creative_market_text(creative: Any) -> str:
         if value:
             parts.append(str(value))
 
-    html_payload = raw_data.get("html")
-    if isinstance(html_payload, dict):
-        snippet = str(html_payload.get("snippet") or "").strip()
-        if snippet:
-            parts.append(_strip_html_tags(snippet))
+    snippet = extract_html_snippet(raw_data)
+    if snippet:
+        parts.append(_strip_html_tags(snippet))
 
     native_payload = raw_data.get("native")
     if isinstance(native_payload, dict):
@@ -237,6 +237,14 @@ def _normalize_country_list(country_codes: list[str]) -> list[str]:
 
 def _status_rank(status: Optional[str]) -> int:
     return {"green": 0, "orange": 1, "red": 2}.get(str(status or "").lower(), 0)
+
+
+def _serialize_timestamp(value: Any) -> Optional[str]:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.isoformat()
+    return str(value)
 
 
 def _build_native_plaintext_language_signal(
@@ -530,6 +538,10 @@ def build_creative_language_flag_row(
         "approval_status": getattr(creative, "approval_status", None),
         "detected_language": getattr(creative, "detected_language", None),
         "detected_language_code": getattr(creative, "detected_language_code", None),
+        "language_confidence": getattr(creative, "language_confidence", None),
+        "language_source": getattr(creative, "language_source", None),
+        "language_analyzed_at": _serialize_timestamp(getattr(creative, "language_analyzed_at", None)),
+        "language_analysis_error": getattr(creative, "language_analysis_error", None),
         "heuristic_language_code": heuristic_language_code,
         "plaintext_language_summary": (
             plaintext_language_signal.get("summary") if plaintext_language_signal else None

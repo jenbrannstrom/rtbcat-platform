@@ -16,6 +16,7 @@ from services.creative_countries_service import CreativeCountriesService
 from services.language_ai_config import get_selected_language_ai_provider
 from storage.adapters import creative_dict_to_storage
 from storage.postgres_repositories.creative_analysis_repo import CreativeAnalysisRepository
+from utils.creative_html import set_html_thumbnail_hint
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +57,7 @@ class CreativeLanguageService:
     async def _refresh_live_creative_for_analysis(self, creative: Any, store: Any) -> Any:
         """Best-effort live refresh so language analysis sees the rendered Google payload."""
         if not getattr(creative, "buyer_id", None):
-            return creative
+            return await self._attach_html_thumbnail_hint(creative, store)
 
         try:
             cache_service = CreativeCacheService(store=store, config=ConfigManager())
@@ -82,14 +83,45 @@ class CreativeLanguageService:
 
             if hasattr(store, "save_creatives"):
                 await store.save_creatives([live_creative])
-            return live_creative
+            return await self._attach_html_thumbnail_hint(live_creative, store)
         except Exception as exc:
             logger.warning(
                 "Live creative refresh failed before language analysis for %s: %s",
                 getattr(creative, "id", "unknown"),
                 exc,
             )
+            return await self._attach_html_thumbnail_hint(creative, store)
+
+    async def _attach_html_thumbnail_hint(self, creative: Any, store: Any) -> Any:
+        """Best-effort attach a cached HTML thumbnail URL for vision analysis."""
+        if getattr(creative, "format", None) != "HTML" or not hasattr(store, "get_thumbnail_status"):
             return creative
+
+        try:
+            status = await store.get_thumbnail_status(creative.id)
+        except Exception:
+            logger.debug(
+                "HTML thumbnail lookup failed before language analysis for %s",
+                getattr(creative, "id", "unknown"),
+                exc_info=True,
+            )
+            return creative
+
+        thumbnail_url = None
+        if isinstance(status, dict):
+            thumbnail_url = status.get("thumbnail_url") or status.get("gcs_path")
+        else:
+            thumbnail_url = getattr(status, "thumbnail_url", None) or getattr(status, "gcs_path", None)
+        if not isinstance(thumbnail_url, str) or not thumbnail_url.startswith(("http://", "https://")):
+            return creative
+
+        raw_data = getattr(creative, "raw_data", None)
+        if not isinstance(raw_data, dict):
+            raw_data = {}
+        else:
+            raw_data = dict(raw_data)
+        creative.raw_data = set_html_thumbnail_hint(raw_data, thumbnail_url)
+        return creative
 
     async def analyze_language(self, creative: Any, store: Any, force: bool) -> dict[str, Any]:
         """Run language detection for a creative and persist results."""

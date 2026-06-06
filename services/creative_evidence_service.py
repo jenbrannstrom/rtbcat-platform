@@ -22,6 +22,11 @@ from xml.etree import ElementTree
 
 from services.gemini_client import generate_gemini_content
 from services.url_safety import is_safe_public_http_url
+from utils.creative_html import (
+    extract_html_dimensions,
+    extract_html_image_hints,
+    extract_html_snippet,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -122,19 +127,22 @@ class CreativeEvidenceService:
         ai_provider: str = "gemini",
         ai_api_key: Optional[str] = None,
     ) -> None:
-        html_data = raw_data.get("html", {})
-        snippet = html_data.get("snippet", "")
+        snippet = extract_html_snippet(raw_data)
+        width, height = extract_html_dimensions(raw_data)
 
         if snippet:
             result.text_content = self._strip_html_tags(snippet)
             result.image_urls = self._extract_image_urls_from_html(snippet)
+            result.image_urls.extend(
+                url for url in extract_html_image_hints(raw_data) if url not in result.image_urls
+            )
 
             # Try Playwright screenshot (graceful degradation)
             screenshot_path = self._take_html_screenshot(
                 creative_id,
                 snippet,
-                width=html_data.get("width"),
-                height=html_data.get("height"),
+                width=width,
+                height=height,
             )
             if screenshot_path:
                 result.screenshot_path = screenshot_path
@@ -145,6 +153,9 @@ class CreativeEvidenceService:
                 )
                 if ocr_text:
                     result.ocr_texts.append(ocr_text)
+
+        elif raw_data:
+            result.image_urls.extend(extract_html_image_hints(raw_data))
 
         # Check advertiser name
         advertiser = raw_data.get("advertiserName", "")

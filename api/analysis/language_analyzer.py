@@ -22,6 +22,7 @@ from services.language_ai_config import (
     normalize_language_ai_provider,
 )
 from services.secrets_manager import get_secrets_manager
+from utils.creative_html import extract_html_image_hints, extract_html_snippet
 
 logger = logging.getLogger(__name__)
 
@@ -86,8 +87,7 @@ class LanguageAnalyzer:
         text_parts: list[str] = []
 
         if creative_format == "HTML":
-            html_data = raw_data.get("html", {})
-            snippet = html_data.get("snippet", "")
+            snippet = extract_html_snippet(raw_data)
             if snippet:
                 text = self._strip_html_tags(snippet)
                 if text:
@@ -393,7 +393,15 @@ Rules:
                 return str(thumb)
 
         if creative_format == "HTML":
-            snippet = (raw_data.get("html") or {}).get("snippet", "")
+            for image_hint in extract_html_image_hints(raw_data):
+                return image_hint
+
+            for suffix in (".png", ".jpg", ".jpeg", ".webp"):
+                thumb = Path.home() / ".catscan" / "evidence" / creative_id / f"screenshot{suffix}"
+                if thumb.exists():
+                    return str(thumb)
+
+            snippet = extract_html_snippet(raw_data)
             if snippet:
                 from utils.html_thumbnail import extract_image_urls_from_html
                 urls = extract_image_urls_from_html(snippet)

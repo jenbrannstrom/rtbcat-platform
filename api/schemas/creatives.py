@@ -208,6 +208,10 @@ class CreativeLanguageFlagCoverageRow(BaseModel):
     approval_status: Optional[str] = None
     detected_language: Optional[str] = None
     detected_language_code: Optional[str] = None
+    language_confidence: Optional[float] = None
+    language_source: Optional[str] = None
+    language_analyzed_at: Optional[str] = None
+    language_analysis_error: Optional[str] = None
     heuristic_language_code: Optional[str] = None
     effective_language_code: Optional[str] = None
     serving_countries: list[str] = Field(default_factory=list)

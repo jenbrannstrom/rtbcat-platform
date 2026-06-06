@@ -25,6 +25,34 @@ def _build_client(store: object) -> SyncASGIClient:
     return SyncASGIClient(app)
 
 
+@pytest.mark.asyncio
+async def test_language_flag_coverage_list_uses_store_list_creatives() -> None:
+    calls: list[dict[str, object]] = []
+
+    class _Store:
+        async def list_creatives(self, **kwargs):
+            calls.append(kwargs)
+            return [SimpleNamespace(id="creative-1")]
+
+    rows = await creatives_router._list_creatives_for_language_flag_coverage(
+        _Store(),
+        buyer_id="1487810529",
+        search="creative",
+        scan_limit=350,
+    )
+
+    assert [row.id for row in rows] == ["creative-1"]
+    assert calls == [
+        {
+            "buyer_id": "1487810529",
+            "search": "creative",
+            "limit": 350,
+            "offset": 0,
+            "include_raw_data": True,
+        }
+    ]
+
+
 def test_language_flag_coverage_endpoint_returns_expected_statuses(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -58,10 +86,12 @@ def test_language_flag_coverage_endpoint_returns_expected_statuses(
         return {}
 
     async def _fake_list_creatives_for_language_flag_coverage(
+        passed_store,
         buyer_id: str | None,
         search: str | None,
         scan_limit: int,
     ):
+        assert passed_store is store
         assert buyer_id == "1487810529"
         assert search is None
         assert scan_limit == 250
@@ -105,6 +135,7 @@ def test_language_flag_coverage_endpoint_returns_expected_statuses(
     assert row["geo_linguistic_status"] == "red"
     assert row["serving_countries"] == ["PH"]
     assert row["detected_currencies"] == ["AED"]
+    assert "language_analysis_error" in row
     assert payload["summary"]["language_orange"] == 1
     assert payload["summary"]["geo_red"] == 1
 
@@ -119,10 +150,12 @@ def test_language_flag_coverage_endpoint_tolerates_bad_raw_data_and_aux_failures
         return buyer_id
 
     async def _fake_list_creatives_for_language_flag_coverage(
+        passed_store,
         buyer_id: str | None,
         search: str | None,
         scan_limit: int,
     ):
+        assert passed_store is store
         assert buyer_id == "1487810529"
         assert search is None
         assert scan_limit == 250
@@ -184,10 +217,12 @@ def test_language_flag_refresh_endpoint_queues_batch_refresh(
         return buyer_id
 
     async def _fake_list_creatives_for_language_flag_coverage(
+        passed_store,
         buyer_id: str | None,
         search: str | None,
         scan_limit: int,
     ):
+        assert passed_store is store
         assert buyer_id == "1487810529"
         assert search == "2013919535262576642"
         assert scan_limit == 500

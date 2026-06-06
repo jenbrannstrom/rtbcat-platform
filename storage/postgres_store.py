@@ -544,6 +544,7 @@ class PostgresStore:
     ) -> dict[str, Any]:
         """Extract thumbnail URLs from HTML creative snippets and cache in creative_thumbnails."""
         import json
+        from utils.creative_html import extract_html_snippet
         from utils.html_thumbnail import extract_primary_image_url
 
         where_parts = ["c.format = 'HTML'"]
@@ -592,10 +593,7 @@ class PostgresStore:
                 except Exception:
                     raw_data = {}
 
-            html_data = raw_data.get("html") if isinstance(raw_data, dict) else None
-            snippet = ""
-            if isinstance(html_data, dict):
-                snippet = html_data.get("snippet") or ""
+            snippet = extract_html_snippet(raw_data)
 
             image_url = extract_primary_image_url(snippet) if snippet else None
 
