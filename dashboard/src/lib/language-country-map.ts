@@ -44,6 +44,123 @@ const LANGUAGE_TO_COUNTRIES: Record<string, string[]> = {
   sw: ["KE", "TZ", "UG"],
 };
 
+const LANGUAGE_NAMES: Record<string, string> = {
+  ar: "Arabic",
+  bg: "Bulgarian",
+  bn: "Bengali",
+  cs: "Czech",
+  da: "Danish",
+  de: "German",
+  el: "Greek",
+  en: "English",
+  es: "Spanish",
+  et: "Estonian",
+  fi: "Finnish",
+  fr: "French",
+  he: "Hebrew",
+  hi: "Hindi",
+  hr: "Croatian",
+  hu: "Hungarian",
+  id: "Indonesian",
+  it: "Italian",
+  ja: "Japanese",
+  ko: "Korean",
+  lt: "Lithuanian",
+  lv: "Latvian",
+  mr: "Marathi",
+  ms: "Malay",
+  my: "Myanmar",
+  nl: "Dutch",
+  no: "Norwegian",
+  pl: "Polish",
+  pt: "Portuguese",
+  ro: "Romanian",
+  ru: "Russian",
+  sk: "Slovak",
+  sl: "Slovenian",
+  sr: "Serbian",
+  sv: "Swedish",
+  sw: "Swahili",
+  ta: "Tamil",
+  te: "Telugu",
+  th: "Thai",
+  tr: "Turkish",
+  uk: "Ukrainian",
+  ur: "Urdu",
+  vi: "Vietnamese",
+  zh: "Chinese",
+};
+
+const COUNTRY_NAMES: Record<string, string> = {
+  AE: "United Arab Emirates",
+  AR: "Argentina",
+  AT: "Austria",
+  AU: "Australia",
+  BE: "Belgium",
+  BR: "Brazil",
+  CA: "Canada",
+  CH: "Switzerland",
+  CN: "China",
+  CO: "Colombia",
+  DE: "Germany",
+  DK: "Denmark",
+  ES: "Spain",
+  FI: "Finland",
+  FR: "France",
+  GB: "United Kingdom",
+  HK: "Hong Kong",
+  ID: "Indonesia",
+  IE: "Ireland",
+  IL: "Israel",
+  IN: "India",
+  IT: "Italy",
+  JP: "Japan",
+  KR: "South Korea",
+  MX: "Mexico",
+  MY: "Malaysia",
+  NL: "Netherlands",
+  NZ: "New Zealand",
+  PH: "Philippines",
+  PL: "Poland",
+  PT: "Portugal",
+  RU: "Russia",
+  SA: "Saudi Arabia",
+  SE: "Sweden",
+  SG: "Singapore",
+  TH: "Thailand",
+  TR: "Turkey",
+  TW: "Taiwan",
+  UA: "Ukraine",
+  US: "United States",
+  VN: "Vietnam",
+  ZA: "South Africa",
+};
+
+export function getLanguageName(
+  languageCode: string | null | undefined,
+  fallback?: string | null
+): string | null {
+  if (!languageCode && fallback) return fallback;
+  if (!languageCode) return null;
+  const normalized = languageCode.toLowerCase();
+  return LANGUAGE_NAMES[normalized] || fallback || normalized.toUpperCase();
+}
+
+export function getCountryName(countryCode: string | null | undefined): string | null {
+  if (!countryCode) return null;
+  const normalized = countryCode.toUpperCase();
+  return COUNTRY_NAMES[normalized] || normalized;
+}
+
+export function countryFlag(countryCode: string | null | undefined): string {
+  if (!countryCode || !/^[a-z]{2}$/i.test(countryCode)) return "";
+  return countryCode
+    .toUpperCase()
+    .split("")
+    .map((char) => String.fromCodePoint(127397 + char.charCodeAt(0)))
+    .join("");
+}
+
 export function isLanguageCountryMismatch(
   languageCode: string | null | undefined,
   countryCode: string | null | undefined

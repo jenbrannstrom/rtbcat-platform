@@ -134,6 +134,7 @@ export async function getCreativeLanguageFlagCoverage(params?: {
   search?: string;
   language_state?: "all" | "green" | "orange" | "red";
   geo_state?: "all" | "green" | "orange" | "red";
+  severity?: "all" | "confirmed" | "review" | "ok";
   limit?: number;
   offset?: number;
   scan_limit?: number;
@@ -144,6 +145,7 @@ export async function getCreativeLanguageFlagCoverage(params?: {
   if (params?.search) searchParams.set("search", params.search);
   if (params?.language_state) searchParams.set("language_state", params.language_state);
   if (params?.geo_state) searchParams.set("geo_state", params.geo_state);
+  if (params?.severity) searchParams.set("severity", params.severity);
   if (params?.limit !== undefined) searchParams.set("limit", String(params.limit));
   if (params?.offset !== undefined) searchParams.set("offset", String(params.offset));
   if (params?.scan_limit !== undefined) searchParams.set("scan_limit", String(params.scan_limit));
