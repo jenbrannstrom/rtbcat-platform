@@ -28,7 +28,8 @@ import { LanguageSection } from "./LanguageSection";
 import { GeoLinguisticSection } from "./GeoLinguisticSection";
 
 interface PreviewModalProps {
-  creative: Creative;
+  creative?: Creative;
+  creativeId?: string;
   performance?: CreativePerformanceSummary;
   targetCountryCodes?: string[];
   onCreativeUpdate?: (creative: Creative) => void;
@@ -40,13 +41,15 @@ interface PreviewModalProps {
  */
 export function PreviewModal({
   creative: initialCreative,
+  creativeId,
   performance,
   targetCountryCodes,
   onCreativeUpdate,
   onClose,
 }: PreviewModalProps) {
   const { t, language } = useTranslation();
-  const [creative, setCreative] = useState<Creative>(initialCreative);
+  const initialCreativeId = initialCreative?.id ?? creativeId;
+  const [creative, setCreative] = useState<Creative | null>(initialCreative ?? null);
   const [isLoadingFull, setIsLoadingFull] = useState(false);
   const [isLoadingDestinationDiagnostics, setIsLoadingDestinationDiagnostics] = useState(false);
   const [destinationDiagnostics, setDestinationDiagnostics] = useState<CreativeDestinationDiagnostics | null>(null);
@@ -69,33 +72,37 @@ export function PreviewModal({
     return () => window.removeEventListener("keydown", handleEsc);
   }, [onClose]);
 
-  // Fetch live creative payload first; fallback behavior is handled server-side.
+  // Render cached DB data first. Live Google refresh is explicit via the refresh button.
   useEffect(() => {
+    if (!initialCreativeId) return;
+    if (initialCreative) {
+      setCreative(initialCreative);
+      setPreviewSource((initialCreative.data_source?.source || "cache") as "live" | "cache");
+      setPreviewMessage(null);
+      return;
+    }
+
     setIsLoadingFull(true);
-    getCreativeLive(initialCreative.id, { allowCacheFallback: true, refreshCache: true, days: 7 })
-      .then((resp) => {
-        setCreative(resp.creative);
-        onCreativeUpdateRef.current?.(resp.creative);
-        setPreviewSource(resp.source);
-        setPreviewMessage(resp.message);
-      })
-      .catch(async (err) => {
-        console.error("Failed to fetch live creative:", err);
-        // Last-resort fallback keeps modal usable.
-        const fullCreative = await getCreative(initialCreative.id);
+    getCreative(initialCreativeId)
+      .then((fullCreative) => {
         setCreative(fullCreative);
         onCreativeUpdateRef.current?.(fullCreative);
         setPreviewSource("cache");
-        setPreviewMessage(t.previewModal.liveFetchUnavailableShowingCached);
+        setPreviewMessage(null);
+      })
+      .catch((err) => {
+        console.error("Failed to fetch cached creative:", err);
+        setPreviewMessage(t.creatives.creativePreviewUnavailable);
       })
       .finally(() => setIsLoadingFull(false));
-  }, [initialCreative.id, t.previewModal.liveFetchUnavailableShowingCached]);
+  }, [initialCreative, initialCreativeId, t.creatives.creativePreviewUnavailable]);
 
   useEffect(() => {
+    if (!initialCreativeId) return;
     let cancelled = false;
     setIsLoadingDestinationDiagnostics(true);
     setDestinationDiagnosticsError(null);
-    getCreativeDestinationDiagnostics(initialCreative.id)
+    getCreativeDestinationDiagnostics(initialCreativeId)
       .then((diagnostics) => {
         if (!cancelled) {
           setDestinationDiagnostics(diagnostics);
@@ -114,12 +121,13 @@ export function PreviewModal({
     return () => {
       cancelled = true;
     };
-  }, [initialCreative.id]);
+  }, [initialCreativeId]);
 
   const refetchLive = async () => {
+    if (!initialCreativeId) return;
     setIsRefetchingLive(true);
     try {
-      const resp = await getCreativeLive(initialCreative.id, {
+      const resp = await getCreativeLive(initialCreativeId, {
         allowCacheFallback: false,
         refreshCache: true,
         days: 7,
@@ -136,6 +144,25 @@ export function PreviewModal({
       setIsRefetchingLive(false);
     }
   };
+
+  if (!creative || !initialCreativeId) {
+    return (
+      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+        <div className="bg-white rounded-lg shadow-xl w-full max-w-lg p-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-sm text-gray-600">
+              {isLoadingFull && <Loader2 className="h-4 w-4 animate-spin" />}
+              {isLoadingFull ? t.creatives.loadingCreativePreview : t.creatives.creativePreviewUnavailable}
+            </div>
+            <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded">
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+          {previewMessage && <div className="mt-3 text-sm text-red-700">{previewMessage}</div>}
+        </div>
+      </div>
+    );
+  }
 
   // Extract data from raw_data
   const rawData = (creative as unknown as { raw_data?: Record<string, unknown> }).raw_data;
@@ -460,6 +487,7 @@ export function PreviewModal({
               targetCountryCodes={targetCountryCodes}
               onLanguageUpdate={(language, languageCode) => {
                 setCreative((prev) => {
+                  if (!prev) return prev;
                   const nextCreative = {
                     ...prev,
                     detected_language: language,

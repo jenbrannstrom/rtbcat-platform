@@ -50,6 +50,8 @@ async def test_language_flag_coverage_list_uses_store_list_creatives() -> None:
             "limit": 350,
             "offset": 0,
             "include_raw_data": True,
+            "sort_by": "spend",
+            "sort_days": 30,
         }
     ]
 
@@ -122,7 +124,7 @@ def test_language_flag_coverage_endpoint_returns_expected_statuses(
         assert passed_store is store
         assert buyer_id == "1487810529"
         assert search is None
-        assert scan_limit == 250
+        assert scan_limit == 3000
         return [
             SimpleNamespace(
                 id="1987702299778854923",
@@ -166,6 +168,109 @@ def test_language_flag_coverage_endpoint_returns_expected_statuses(
     assert "language_analysis_error" in row
     assert payload["summary"]["language_orange"] == 1
     assert payload["summary"]["geo_red"] == 1
+    assert payload["summary"]["count_confirmed"] == 1
+    assert payload["summary"]["spend_confirmed_micros"] == 53420000
+    assert payload["summary"]["spend_at_risk_micros"] == 53420000
+
+
+def test_language_flag_coverage_sorts_by_severity_then_spend_and_filters_severity(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = object()
+
+    async def _resolve_buyer_id(buyer_id, store=None, user=None):
+        _ = (store, user)
+        return buyer_id
+
+    creatives = [
+        SimpleNamespace(id="red-low", name="Red low", buyer_id="1487810529"),
+        SimpleNamespace(id="red-high", name="Red high", buyer_id="1487810529"),
+        SimpleNamespace(id="review-high", name="Review high", buyer_id="1487810529"),
+    ]
+
+    async def _fake_list_creatives_for_language_flag_coverage(
+        passed_store,
+        buyer_id: str | None,
+        search: str | None,
+        scan_limit: int,
+    ):
+        _ = (passed_store, buyer_id, search, scan_limit)
+        return creatives
+
+    async def _fake_spend_snapshot(_creative_ids):
+        return {
+            "red-low": {"spend": 100, "imps": 10, "last_active": "2026-06-01"},
+            "red-high": {"spend": 500, "imps": 50, "last_active": "2026-06-01"},
+            "review-high": {"spend": 1000, "imps": 100, "last_active": "2026-06-01"},
+        }
+
+    async def _fake_serving_country_map(_creative_ids, _days):
+        return {creative.id: ["DE"] for creative in creatives}
+
+    async def _fake_get_latest_runs(_creative_ids):
+        return {}
+
+    def _fake_build_row(creative, serving_countries, latest_geo_run):
+        _ = (serving_countries, latest_geo_run)
+        status = "orange" if creative.id == "review-high" else "red"
+        return {
+            "creative_id": creative.id,
+            "creative_name": creative.name,
+            "buyer_id": creative.buyer_id,
+            "format": "HTML",
+            "approval_status": "APPROVED",
+            "detected_language": "Spanish",
+            "detected_language_code": "es",
+            "language_confidence": None,
+            "language_source": "heuristic",
+            "language_analyzed_at": None,
+            "language_analysis_error": None,
+            "heuristic_language_code": "es",
+            "effective_language_code": "es",
+            "serving_countries": ["DE"],
+            "detected_currencies": [],
+            "language_flag_status": "green",
+            "language_flag_reason": "Language accepted",
+            "language_flag_source": "heuristic",
+            "currency_flag_status": "green",
+            "currency_flag_reason": "No currency issue",
+            "geo_linguistic_status": status,
+            "geo_linguistic_reason": "Market mismatch",
+            "geo_linguistic_decision": "needs_review" if status == "orange" else "mismatch",
+            "geo_linguistic_completed_at": None,
+        }
+
+    monkeypatch.setattr(creatives_router, "resolve_buyer_id", _resolve_buyer_id)
+    monkeypatch.setattr(
+        creatives_router,
+        "_list_creatives_for_language_flag_coverage",
+        _fake_list_creatives_for_language_flag_coverage,
+    )
+    monkeypatch.setattr(creatives_router, "_get_spend_snapshot", _fake_spend_snapshot)
+    monkeypatch.setattr(creatives_router, "_get_serving_country_map", _fake_serving_country_map)
+    monkeypatch.setattr(creatives_router.analysis_repo, "get_latest_runs", _fake_get_latest_runs)
+    monkeypatch.setattr(creatives_router, "build_creative_language_flag_row", _fake_build_row)
+
+    client = _build_client(store)
+    response = client.get("/api/creatives/language-flag-coverage?buyer_id=1487810529")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert [row["creative_id"] for row in payload["rows"]] == [
+        "red-high",
+        "red-low",
+        "review-high",
+    ]
+    assert payload["summary"]["count_confirmed"] == 2
+    assert payload["summary"]["count_review"] == 1
+    assert payload["summary"]["spend_confirmed_micros"] == 600
+    assert payload["summary"]["spend_review_micros"] == 1000
+
+    filtered = client.get(
+        "/api/creatives/language-flag-coverage?buyer_id=1487810529&severity=review"
+    )
+    assert filtered.status_code == 200
+    assert [row["creative_id"] for row in filtered.json()["rows"]] == ["review-high"]
 
 
 def test_language_flag_coverage_endpoint_tolerates_bad_raw_data_and_aux_failures(
@@ -186,7 +291,7 @@ def test_language_flag_coverage_endpoint_tolerates_bad_raw_data_and_aux_failures
         assert passed_store is store
         assert buyer_id == "1487810529"
         assert search is None
-        assert scan_limit == 250
+        assert scan_limit == 3000
         return [
             SimpleNamespace(
                 id="broken-raw-data",

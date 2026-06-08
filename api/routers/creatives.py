@@ -60,6 +60,16 @@ def _status_rank(status: str) -> int:
     return {"red": 0, "orange": 1, "green": 2}.get(status, 3)
 
 
+def _severity_rank(row: object) -> int:
+    language_status = getattr(row, "language_flag_status", None)
+    geo_status = getattr(row, "geo_linguistic_status", None)
+    if language_status == "red" or geo_status == "red":
+        return 0
+    if language_status == "orange" or geo_status == "orange":
+        return 1
+    return 2
+
+
 def _is_meaningful_currency_signal(
     status: str,
     reason: Optional[str],
@@ -260,7 +270,56 @@ async def _list_creatives_for_language_flag_coverage(
         limit=scan_limit,
         offset=0,
         include_raw_data=True,
+        sort_by="spend" if buyer_id else None,
+        sort_days=30,
     )
+
+
+async def _attach_language_flag_preview_payloads(
+    rows: list[CreativeLanguageFlagCoverageRow],
+    creative_map: dict[str, object],
+    store,
+    days: int,
+) -> list[CreativeLanguageFlagCoverageRow]:
+    if not rows:
+        return rows
+
+    creative_ids = [row.creative_id for row in rows]
+    try:
+        ctx = await creatives_service.get_list_context(store, creative_ids, days)
+    except Exception:
+        logger.warning(
+            "Failed to hydrate language-flag preview payloads",
+            extra={"creative_ids": creative_ids},
+            exc_info=True,
+        )
+        return rows
+
+    hydrated_rows: list[CreativeLanguageFlagCoverageRow] = []
+    for row in rows:
+        creative = creative_map.get(row.creative_id)
+        if creative is None:
+            hydrated_rows.append(row)
+            continue
+        try:
+            preview = build_creative_response(
+                creative,
+                ctx,
+                row.creative_id,
+                creatives_service,
+                slim=False,
+                source="cache",
+            )
+            hydrated_rows.append(row.copy(update={"preview_creative": preview}))
+        except Exception:
+            logger.warning(
+                "Failed to build language-flag preview payload",
+                extra={"creative_id": row.creative_id},
+                exc_info=True,
+            )
+            hydrated_rows.append(row)
+
+    return hydrated_rows
 
 
 async def _refresh_language_flag_coverage_batch(
@@ -700,13 +759,18 @@ async def get_creative_language_flag_coverage(
         pattern="^(all|green|orange|red)$",
         description="Filter rows by geo-linguistic state",
     ),
+    severity: str = Query(
+        "all",
+        pattern="^(all|confirmed|review|ok)$",
+        description="confirmed=red on either axis, review=orange and not red, ok=green",
+    ),
     limit: int = Query(200, ge=1, le=1000, description="Page size"),
     offset: int = Query(0, ge=0, description="Rows to skip"),
     scan_limit: int = Query(
-        250,
+        3000,
         ge=100,
         le=10000,
-        description="Maximum creatives to inspect before applying filters and pagination",
+        description="Maximum spend-ranked creatives to inspect before applying filters and pagination",
     ),
     days: int = Query(7, ge=1, le=90, description="Serving-country lookback window"),
     store=Depends(get_store),
@@ -721,6 +785,7 @@ async def get_creative_language_flag_coverage(
         search=search,
         scan_limit=scan_limit,
     )
+    creative_map = {c.id: c for c in creatives}
 
     creative_ids = [c.id for c in creatives]
     try:
@@ -759,15 +824,22 @@ async def get_creative_language_flag_coverage(
             impressions = int(perf.get("imps", 0) or 0)
             last_active = perf.get("last_active")
 
-            rows.append(
-                CreativeLanguageFlagCoverageRow(
-                    **row_data,
-                    spend_30d_micros=spend_micros,
-                    impressions_30d=impressions,
-                    last_active_date=str(last_active) if last_active else None,
-                    is_active=spend_micros > 0,
-                )
+            row = CreativeLanguageFlagCoverageRow(
+                **row_data,
+                spend_30d_micros=spend_micros,
+                impressions_30d=impressions,
+                last_active_date=str(last_active) if last_active else None,
+                is_active=spend_micros > 0,
             )
+            if severity != "all":
+                severity_rank = _severity_rank(row)
+                if (
+                    (severity == "confirmed" and severity_rank != 0)
+                    or (severity == "review" and severity_rank != 1)
+                    or (severity == "ok" and severity_rank != 2)
+                ):
+                    continue
+            rows.append(row)
         except Exception:
             skipped_creatives += 1
             logger.exception(
@@ -783,8 +855,7 @@ async def get_creative_language_flag_coverage(
 
     rows.sort(
         key=lambda item: (
-            _status_rank(item.geo_linguistic_status),
-            _status_rank(item.language_flag_status),
+            _severity_rank(item),
             -item.spend_30d_micros,
             (item.creative_name or "").lower(),
             item.creative_id,
@@ -793,6 +864,21 @@ async def get_creative_language_flag_coverage(
 
     total = len(rows)
     paged_rows = rows[offset : offset + limit]
+    paged_rows = await _attach_language_flag_preview_payloads(
+        paged_rows,
+        creative_map,
+        store,
+        days,
+    )
+    count_confirmed = sum(1 for item in rows if _severity_rank(item) == 0)
+    count_review = sum(1 for item in rows if _severity_rank(item) == 1)
+    count_ok = sum(1 for item in rows if _severity_rank(item) == 2)
+    spend_confirmed = sum(
+        item.spend_30d_micros for item in rows if _severity_rank(item) == 0
+    )
+    spend_review = sum(
+        item.spend_30d_micros for item in rows if _severity_rank(item) == 1
+    )
     summary = CreativeLanguageFlagCoverageSummary(
         language_green=sum(1 for item in rows if item.language_flag_status == "green"),
         language_orange=sum(1 for item in rows if item.language_flag_status == "orange"),
@@ -800,6 +886,12 @@ async def get_creative_language_flag_coverage(
         geo_green=sum(1 for item in rows if item.geo_linguistic_status == "green"),
         geo_orange=sum(1 for item in rows if item.geo_linguistic_status == "orange"),
         geo_red=sum(1 for item in rows if item.geo_linguistic_status == "red"),
+        spend_at_risk_micros=spend_confirmed + spend_review,
+        spend_confirmed_micros=spend_confirmed,
+        spend_review_micros=spend_review,
+        count_confirmed=count_confirmed,
+        count_review=count_review,
+        count_ok=count_ok,
     )
 
     return CreativeLanguageFlagCoverageResponse(
@@ -808,6 +900,9 @@ async def get_creative_language_flag_coverage(
         returned=len(paged_rows),
         limit=limit,
         offset=offset,
+        scanned=len(creatives),
+        scan_limit=scan_limit,
+        scan_limit_reached=len(creatives) >= scan_limit,
         summary=summary,
     )
 

@@ -5,55 +5,72 @@ import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { CheckCircle2, HelpCircle, RefreshCw, Search, ShieldAlert } from "lucide-react";
 import { useParams, usePathname } from "next/navigation";
-import { getCreativeLanguageFlagCoverage, refreshCreativeLanguageFlagCoverage } from "@/lib/api";
-import { LoadingPage } from "@/components/loading";
+import { CreativeThumb } from "@/components/creative-thumb";
 import { ErrorPage } from "@/components/error";
+import { LoadingPage } from "@/components/loading";
+import { PreviewModal } from "@/components/preview-modal";
 import { useAccount } from "@/contexts/account-context";
 import { useTranslation } from "@/contexts/i18n-context";
+import { getCreativeLanguageFlagCoverage, refreshCreativeLanguageFlagCoverage } from "@/lib/api";
 import { splitBuyerPath, toBuyerScopedPath } from "@/lib/buyer-routes";
-import { cn } from "@/lib/utils";
+import {
+  buildLanguageFlagHeadline,
+  getLanguageFlagSeverity,
+  type LanguageFlagSeverity,
+} from "@/lib/language-flag-headline";
+import { cn, getFormatLabel } from "@/lib/utils";
+import type { Creative, CreativeLanguageFlagCoverageRow } from "@/types/api";
 
 const PAGE_SIZE = 100;
-const INITIAL_SCAN_LIMIT = 200;
+const INITIAL_SCAN_LIMIT = 3000;
 const BULK_REFRESH_LIMIT = 500;
 const AUTO_REFRESH_WINDOW_MS = 60_000;
 
-const STATUS_CONFIG = {
-  green: {
-    badge: "bg-green-100 text-green-700",
-    icon: CheckCircle2,
-  },
-  orange: {
-    badge: "bg-amber-100 text-amber-700",
-    icon: HelpCircle,
-  },
-  red: {
+const SEVERITY_CONFIG: Record<LanguageFlagSeverity, {
+  dot: string;
+  badge: string;
+  Icon: typeof ShieldAlert;
+}> = {
+  confirmed: {
+    dot: "bg-red-500",
     badge: "bg-red-100 text-red-700",
-    icon: ShieldAlert,
+    Icon: ShieldAlert,
   },
-} as const;
+  review: {
+    dot: "bg-amber-500",
+    badge: "bg-amber-100 text-amber-700",
+    Icon: HelpCircle,
+  },
+  ok: {
+    dot: "bg-green-500",
+    badge: "bg-green-100 text-green-700",
+    Icon: CheckCircle2,
+  },
+};
 
-function StatusBadge({
-  status,
-  reason,
-  label,
-}: {
-  status: "green" | "orange" | "red" | string;
-  reason: string;
-  label: string;
-}) {
-  const config = STATUS_CONFIG[status as keyof typeof STATUS_CONFIG] || STATUS_CONFIG.orange;
-  const Icon = config.icon;
+function formatMoney(micros: number | null | undefined, language: string, compact = false): string {
+  if (!micros || micros <= 0) return compact ? "$0" : "-";
+  const value = micros / 1_000_000;
+  return new Intl.NumberFormat(language, {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: compact || value >= 100 ? 0 : 2,
+    notation: compact ? "compact" : "standard",
+  }).format(value);
+}
 
-  return (
-    <div className="space-y-1">
-      <span className={cn("inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium", config.badge)}>
-        <Icon className="h-3.5 w-3.5" />
-        {label}
-      </span>
-      <div className="max-w-md text-xs text-gray-600">{reason}</div>
-    </div>
-  );
+function rowFootline(row: CreativeLanguageFlagCoverageRow): string {
+  const parts = [
+    `#${row.creative_id}`,
+    row.creative_name ? `"${row.creative_name}"` : null,
+    row.format ? getFormatLabel(row.format) : null,
+    row.approval_status || null,
+  ].filter(Boolean);
+  return parts.join(" · ");
+}
+
+function isRowRefreshable(row: CreativeLanguageFlagCoverageRow): boolean {
+  return row.geo_linguistic_status === "orange" || !row.geo_linguistic_completed_at;
 }
 
 export default function LanguageFlagCoveragePage() {
@@ -65,25 +82,25 @@ export default function LanguageFlagCoveragePage() {
   const buyerIdFromParams = typeof params?.buyerId === "string" ? params.buyerId : null;
   const effectiveBuyerId = buyerIdFromParams ?? buyerIdInPath ?? selectedBuyerId ?? null;
   const [search, setSearch] = useState("");
-  const [languageState, setLanguageState] = useState<"all" | "green" | "orange" | "red">("all");
-  const [geoState, setGeoState] = useState<"all" | "green" | "orange" | "red">("all");
+  const [severity, setSeverity] = useState<"all" | LanguageFlagSeverity>("all");
   const [pageIndex, setPageIndex] = useState(0);
   const [notice, setNotice] = useState<{ tone: "success" | "error"; message: string } | null>(null);
   const [isAutoRefreshing, setIsAutoRefreshing] = useState(false);
+  const [previewTarget, setPreviewTarget] = useState<{
+    creativeId: string;
+    creative?: Creative | null;
+  } | null>(null);
+  const [refreshingCreativeId, setRefreshingCreativeId] = useState<string | null>(null);
 
   useEffect(() => {
     setPageIndex(0);
   }, [effectiveBuyerId]);
 
   useEffect(() => {
-    if (!isAutoRefreshing) {
-      return;
-    }
-
+    if (!isAutoRefreshing) return;
     const timeoutId = window.setTimeout(() => {
       setIsAutoRefreshing(false);
     }, AUTO_REFRESH_WINDOW_MS);
-
     return () => window.clearTimeout(timeoutId);
   }, [isAutoRefreshing]);
 
@@ -94,8 +111,7 @@ export default function LanguageFlagCoveragePage() {
       "creative-language-flag-coverage",
       effectiveBuyerId,
       search,
-      languageState,
-      geoState,
+      severity,
       offset,
     ],
     enabled: Boolean(effectiveBuyerId),
@@ -105,8 +121,7 @@ export default function LanguageFlagCoveragePage() {
       getCreativeLanguageFlagCoverage({
         buyer_id: effectiveBuyerId ?? undefined,
         search: search.trim() || undefined,
-        language_state: languageState,
-        geo_state: geoState,
+        severity,
         limit: PAGE_SIZE,
         offset,
         scan_limit: INITIAL_SCAN_LIMIT,
@@ -148,6 +163,32 @@ export default function LanguageFlagCoveragePage() {
     },
   });
 
+  const refreshRowMutation = useMutation({
+    mutationFn: (creativeId: string) => {
+      setRefreshingCreativeId(creativeId);
+      return refreshCreativeLanguageFlagCoverage({
+        buyer_id: effectiveBuyerId ?? undefined,
+        search: creativeId,
+        refresh_limit: 1,
+        force: true,
+      });
+    },
+    onSuccess: async () => {
+      setIsAutoRefreshing(true);
+      await refetch();
+    },
+    onError: (mutationError) => {
+      setNotice({
+        tone: "error",
+        message:
+          mutationError instanceof Error
+            ? mutationError.message
+            : t.creatives.languageFlagsRefreshFailed,
+      });
+    },
+    onSettled: () => setRefreshingCreativeId(null),
+  });
+
   const rows = data?.rows ?? [];
   const summary = data?.summary;
   const total = data?.total ?? 0;
@@ -155,19 +196,34 @@ export default function LanguageFlagCoveragePage() {
   const pageEnd = offset + rows.length;
   const hasMore = offset + rows.length < total;
 
-  const flaggedPct = useMemo(() => {
-    if (!summary) return 0;
-    const denominator = summary.geo_green + summary.geo_orange + summary.geo_red;
-    if (denominator === 0) return 0;
-    return ((summary.geo_orange + summary.geo_red) / denominator) * 100;
-  }, [summary]);
+  const riskCount = (summary?.count_confirmed ?? 0) + (summary?.count_review ?? 0);
+  const riskFigure = t.creatives.languageFlagsRiskFigure
+    .replace("{amount}", formatMoney(summary?.spend_at_risk_micros ?? 0, language))
+    .replace("{count}", riskCount.toLocaleString(language));
+
+  const segments = useMemo(() => [
+    {
+      key: "confirmed" as const,
+      label: t.creatives.languageFlagsSeverityConfirmed,
+      count: summary?.count_confirmed ?? 0,
+      spend: summary?.spend_confirmed_micros ?? 0,
+    },
+    {
+      key: "review" as const,
+      label: t.creatives.languageFlagsSeverityReview,
+      count: summary?.count_review ?? 0,
+      spend: summary?.spend_review_micros ?? 0,
+    },
+    {
+      key: "ok" as const,
+      label: t.creatives.languageFlagsSeverityOk,
+      count: summary?.count_ok ?? 0,
+      spend: 0,
+    },
+  ], [summary, t.creatives]);
 
   if (!effectiveBuyerId) {
-    return (
-      <ErrorPage
-        message={t.creatives.languageFlagsSelectBuyer}
-      />
-    );
+    return <ErrorPage message={t.creatives.languageFlagsSelectBuyer} />;
   }
 
   if (isLoading) {
@@ -183,20 +239,13 @@ export default function LanguageFlagCoveragePage() {
     );
   }
 
-  const statusLabels = {
-    green: t.creatives.statusGreen,
-    orange: t.creatives.statusOrange,
-    red: t.creatives.statusRed,
-  } as const;
-
   return (
     <div className="space-y-4 p-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold text-gray-900">{t.creatives.languageFlagsTitle}</h1>
-          <p className="text-sm text-gray-600">
-            {t.creatives.languageFlagsDescription}
-          </p>
+          <div className="mt-1 text-2xl font-semibold text-gray-950">{riskFigure}</div>
+          <p className="mt-1 text-sm text-gray-600">{t.creatives.languageFlagsDescription}</p>
         </div>
         <Link
           href={toBuyerScopedPath("/creatives", effectiveBuyerId)}
@@ -204,25 +253,6 @@ export default function LanguageFlagCoveragePage() {
         >
           {t.creatives.backToCreatives}
         </Link>
-      </div>
-
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-        <div className="rounded-lg border border-gray-200 bg-white p-3">
-          <div className="text-xs uppercase tracking-wide text-gray-500">{t.creatives.languageFlagsLangRed}</div>
-          <div className="mt-1 text-2xl font-semibold text-red-700">{summary?.language_red ?? 0}</div>
-        </div>
-        <div className="rounded-lg border border-gray-200 bg-white p-3">
-          <div className="text-xs uppercase tracking-wide text-gray-500">{t.creatives.languageFlagsLangOrange}</div>
-          <div className="mt-1 text-2xl font-semibold text-amber-700">{summary?.language_orange ?? 0}</div>
-        </div>
-        <div className="rounded-lg border border-gray-200 bg-white p-3">
-          <div className="text-xs uppercase tracking-wide text-gray-500">{t.creatives.languageFlagsGeoRed}</div>
-          <div className="mt-1 text-2xl font-semibold text-red-700">{summary?.geo_red ?? 0}</div>
-        </div>
-        <div className="rounded-lg border border-gray-200 bg-white p-3">
-          <div className="text-xs uppercase tracking-wide text-gray-500">{t.creatives.languageFlagsFlagged}</div>
-          <div className="mt-1 text-2xl font-semibold text-gray-900">{flaggedPct.toFixed(1)}%</div>
-        </div>
       </div>
 
       {notice && (
@@ -239,7 +269,52 @@ export default function LanguageFlagCoveragePage() {
       )}
 
       <div className="flex flex-wrap items-end gap-3">
-        <label className="block w-full max-w-md">
+        <div className="inline-flex overflow-hidden rounded-lg border border-gray-200 bg-white">
+          {segments.map((segment) => {
+            const active = severity === segment.key;
+            const config = SEVERITY_CONFIG[segment.key];
+            return (
+              <button
+                key={segment.key}
+                type="button"
+                onClick={() => {
+                  setPageIndex(0);
+                  setSeverity(segment.key);
+                }}
+                className={cn(
+                  "min-w-[148px] border-r border-gray-200 px-3 py-2 text-left text-sm last:border-r-0 hover:bg-gray-50",
+                  active && "bg-gray-900 text-white hover:bg-gray-900"
+                )}
+              >
+                <span className="flex items-center gap-2 font-medium">
+                  <span className={cn("h-2 w-2 rounded-full", config.dot)} />
+                  {segment.label}
+                </span>
+                <span className={cn("mt-0.5 block text-xs", active ? "text-gray-200" : "text-gray-500")}>
+                  {segment.count.toLocaleString(language)} · {formatMoney(segment.spend, language, true)}
+                </span>
+              </button>
+            );
+          })}
+          <button
+            type="button"
+            onClick={() => {
+              setPageIndex(0);
+              setSeverity("all");
+            }}
+            className={cn(
+              "min-w-[92px] px-3 py-2 text-left text-sm hover:bg-gray-50",
+              severity === "all" && "bg-gray-900 text-white hover:bg-gray-900"
+            )}
+          >
+            <span className="font-medium">{t.common.all}</span>
+            <span className={cn("mt-0.5 block text-xs", severity === "all" ? "text-gray-200" : "text-gray-500")}>
+              {total.toLocaleString(language)}
+            </span>
+          </button>
+        </div>
+
+        <label className="block w-full max-w-sm">
           <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500">
             {t.creatives.languageFlagsSearchLabel}
           </span>
@@ -257,147 +332,147 @@ export default function LanguageFlagCoveragePage() {
           </div>
         </label>
 
-        <label className="block">
-          <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500">
-            {t.creatives.languageFlagsLanguageStatus}
-          </span>
-          <select
-            value={languageState}
-            onChange={(event) => {
-              setPageIndex(0);
-              setLanguageState(event.target.value as "all" | "green" | "orange" | "red");
-            }}
-            className="input py-1.5 pr-8 text-sm"
-          >
-            <option value="all">{t.creatives.languageFlagsAllLanguageResults}</option>
-            <option value="red">{t.creatives.languageFlagsLanguageRed}</option>
-            <option value="orange">{t.creatives.languageFlagsLanguageOrange}</option>
-            <option value="green">{t.creatives.languageFlagsLanguageGreen}</option>
-          </select>
-        </label>
+        <button
+          type="button"
+          onClick={() => refreshAllMutation.mutate()}
+          disabled={refreshAllMutation.isPending}
+          className="inline-flex items-center gap-2 rounded border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          <RefreshCw className={cn("h-4 w-4", refreshAllMutation.isPending && "animate-spin")} />
+          {t.creatives.languageFlagsRefreshAll}
+        </button>
+      </div>
 
-        <label className="block">
-          <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500">
-            {t.creatives.languageFlagsGeoStatus}
-          </span>
-          <select
-            value={geoState}
-            onChange={(event) => {
-              setPageIndex(0);
-              setGeoState(event.target.value as "all" | "green" | "orange" | "red");
-            }}
-            className="input py-1.5 pr-8 text-sm"
-          >
-            <option value="all">{t.creatives.languageFlagsAllGeoResults}</option>
-            <option value="red">{t.creatives.languageFlagsGeoRedOption}</option>
-            <option value="orange">{t.creatives.languageFlagsGeoOrangeOption}</option>
-            <option value="green">{t.creatives.languageFlagsGeoGreenOption}</option>
-          </select>
-        </label>
-
-        <div className="flex flex-col gap-1">
-          <span className="text-xs font-medium uppercase tracking-wide text-gray-500">
-            {t.common.refresh}
-          </span>
-          <button
-            type="button"
-            onClick={() => refreshAllMutation.mutate()}
-            disabled={refreshAllMutation.isPending}
-            className="inline-flex items-center gap-2 rounded border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <RefreshCw className={cn("h-4 w-4", refreshAllMutation.isPending && "animate-spin")} />
-            {t.creatives.languageFlagsRefreshAll}
-          </button>
+      {data?.scan_limit_reached && (
+        <div className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          {t.creatives.languageFlagsCoverageNote.replace(
+            "{count}",
+            data.scan_limit.toLocaleString(language)
+          )}
         </div>
-      </div>
-
-      <div className="text-xs text-gray-500">
-        {t.creatives.languageFlagsRefreshHint.replace(
-          "{count}",
-          BULK_REFRESH_LIMIT.toLocaleString(language)
-        )}
-      </div>
+      )}
 
       <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200 text-sm">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-3 py-2 text-left font-medium text-gray-600">{t.creatives.creativeId}</th>
-                <th className="px-3 py-2 text-left font-medium text-gray-600">{t.creatives.languageFlagsTableLangMismatch}</th>
-                <th className="px-3 py-2 text-left font-medium text-gray-600">{t.creatives.languageFlagsTableGeoLinguistic}</th>
-                <th className="px-3 py-2 text-left font-medium text-gray-600">{t.creatives.languageFlagsTableServing}</th>
-                <th className="px-3 py-2 text-right font-medium text-gray-600">{t.creatives.languageFlagsTableSpend30d}</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {rows.map((row) => (
-                <tr key={row.creative_id}>
-                  <td className="px-3 py-2 align-top">
-                    <div className="font-mono text-xs text-gray-900">{row.creative_id}</div>
-                    <div className="max-w-sm truncate text-xs text-gray-600" title={row.creative_name}>
-                      {row.creative_name}
-                    </div>
-                    <div className="mt-1 text-[11px] text-gray-400">
-                      {row.format || "-"} · {row.approval_status || "-"}
-                    </div>
-                  </td>
-                  <td className="px-3 py-2 align-top">
-                    <StatusBadge
-                      status={row.language_flag_status}
-                      reason={row.language_flag_reason}
-                      label={statusLabels[row.language_flag_status as keyof typeof statusLabels] || statusLabels.orange}
-                    />
-                    {(row.effective_language_code || row.language_flag_source) && (
-                      <div className="mt-1 text-[11px] text-gray-400">
-                        {(row.language_flag_source || t.creatives.languageFlagsSourceUnknown).toUpperCase()} · {(row.effective_language_code || "?").toUpperCase()}
-                      </div>
-                    )}
-                  </td>
-                  <td className="px-3 py-2 align-top">
-                    <StatusBadge
-                      status={row.geo_linguistic_status}
-                      reason={row.geo_linguistic_reason}
-                      label={statusLabels[row.geo_linguistic_status as keyof typeof statusLabels] || statusLabels.orange}
-                    />
-                    {row.detected_currencies.length > 0 && (
-                      <div className="mt-1 text-[11px] text-gray-400">
-                        {t.creatives.languageFlagsCurrencyLabel}: {row.detected_currencies.join(", ")}
-                      </div>
-                    )}
-                    <div className="mt-1 text-[11px] text-gray-400">
-                      {row.geo_linguistic_completed_at
-                        ? t.creatives.languageFlagsUpdated.replace(
+        {rows.length === 0 ? (
+          <div className="px-3 py-8 text-center text-sm text-gray-500">
+            {t.creatives.languageFlagsNoResults}
+          </div>
+        ) : (
+          <div className="divide-y divide-gray-100">
+            {rows.map((row) => {
+              const severityKey = getLanguageFlagSeverity(row);
+              const config = SEVERITY_CONFIG[severityKey];
+              const Icon = config.Icon;
+              const headline = buildLanguageFlagHeadline(row, t.creatives);
+              const previewCreative = row.preview_creative ?? null;
+              const thumbCreative = previewCreative ?? {
+                format: row.format,
+                video: null,
+                native: null,
+                html: null,
+                display_url: null,
+                final_url: null,
+                data_source: null,
+              };
+              const openPreview = () => {
+                setPreviewTarget({
+                  creativeId: row.creative_id,
+                  creative: previewCreative,
+                });
+              };
+              const rowRefreshing = refreshingCreativeId === row.creative_id;
+
+              return (
+                <div
+                  key={row.creative_id}
+                  role="button"
+                  tabIndex={0}
+                  onClick={openPreview}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      openPreview();
+                    }
+                  }}
+                  className={cn(
+                    "grid cursor-pointer grid-cols-[72px_minmax(0,1fr)] gap-3 px-3 py-3 hover:bg-gray-50 md:grid-cols-[72px_minmax(0,1fr)_160px]",
+                    !row.is_active && "opacity-75"
+                  )}
+                >
+                  <div className="overflow-hidden rounded border border-gray-200">
+                    <CreativeThumb creative={thumbCreative} size="sm" showSourceBadge={false} />
+                  </div>
+
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className={cn("inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs font-medium", config.badge)}>
+                        <Icon className="h-3.5 w-3.5" />
+                        {severityKey === "confirmed"
+                          ? t.creatives.languageFlagsConfirmedWrong
+                          : severityKey === "review"
+                          ? t.creatives.languageFlagsNeedsReview
+                          : t.creatives.languageFlagsOk}
+                      </span>
+                      {row.geo_linguistic_completed_at ? (
+                        <span className="text-[11px] text-gray-400">
+                          {t.creatives.languageFlagsUpdated.replace(
                             "{date}",
                             new Date(row.geo_linguistic_completed_at).toLocaleDateString(language)
-                          )
-                        : t.creatives.languageFlagsNoAiRefreshYet}
+                          )}
+                        </span>
+                      ) : (
+                        <span className="text-[11px] text-gray-400">
+                          {t.creatives.languageFlagsNoAiRefreshYet}
+                        </span>
+                      )}
                     </div>
-                  </td>
-                  <td className="px-3 py-2 align-top text-xs text-gray-700">
-                    {row.serving_countries.length > 0 ? row.serving_countries.join(", ") : "-"}
-                  </td>
-                  <td className="px-3 py-2 align-top text-right text-xs">
-                    {row.spend_30d_micros > 0 ? (
-                      <span className="font-medium text-gray-900">
-                        ${(row.spend_30d_micros / 1_000_000).toFixed(2)}
-                      </span>
-                    ) : (
-                      <span className="text-gray-400">-</span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-              {rows.length === 0 && (
-                <tr>
-                  <td colSpan={5} className="px-3 py-8 text-center text-sm text-gray-500">
-                    {t.creatives.languageFlagsNoResults}
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+                    <div className="mt-1 truncate text-base font-medium text-gray-950" title={headline.title}>
+                      {headline.title}
+                    </div>
+                    <div className="mt-0.5 line-clamp-2 text-sm text-gray-600" title={headline.subtitle}>
+                      {headline.subtitle}
+                    </div>
+                    <div className="mt-1 truncate text-xs text-gray-400" title={rowFootline(row)}>
+                      {rowFootline(row)}
+                    </div>
+                  </div>
+
+                  <div className="col-span-2 flex items-center justify-between gap-2 md:col-span-1 md:flex-col md:items-end md:justify-center">
+                    <div className={cn("text-sm font-semibold", row.spend_30d_micros > 0 ? "text-gray-950" : "text-gray-400")}>
+                      {formatMoney(row.spend_30d_micros, language)} <span className="font-normal text-gray-400">/ 30d</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {isRowRefreshable(row) && (
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            refreshRowMutation.mutate(row.creative_id);
+                          }}
+                          disabled={rowRefreshing}
+                          className="inline-flex items-center gap-1 rounded border border-gray-200 bg-white px-2 py-1 text-xs text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+                        >
+                          <RefreshCw className={cn("h-3.5 w-3.5", rowRefreshing && "animate-spin")} />
+                          {t.creatives.languageFlagsRefreshRow}
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          openPreview();
+                        }}
+                        className="rounded border border-gray-200 bg-white px-2 py-1 text-xs font-medium text-primary-700 hover:bg-primary-50"
+                      >
+                        {t.creatives.languageFlagsView}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       <div className="flex items-center justify-between text-xs text-gray-600">
@@ -426,6 +501,14 @@ export default function LanguageFlagCoveragePage() {
           </button>
         </div>
       </div>
+
+      {previewTarget && (
+        <PreviewModal
+          creative={previewTarget.creative ?? undefined}
+          creativeId={previewTarget.creativeId}
+          onClose={() => setPreviewTarget(null)}
+        />
+      )}
     </div>
   );
 }

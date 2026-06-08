@@ -183,6 +183,7 @@ export interface CreativeLanguageFlagCoverageRow {
   impressions_30d: number;
   last_active_date: string | null;
   is_active: boolean;
+  preview_creative?: Creative | null;
 }
 
 export interface CreativeLanguageFlagCoverageSummary {
@@ -192,6 +193,12 @@ export interface CreativeLanguageFlagCoverageSummary {
   geo_green: number;
   geo_orange: number;
   geo_red: number;
+  spend_at_risk_micros: number;
+  spend_confirmed_micros: number;
+  spend_review_micros: number;
+  count_confirmed: number;
+  count_review: number;
+  count_ok: number;
 }
 
 export interface CreativeLanguageFlagCoverageResponse {
@@ -200,6 +207,9 @@ export interface CreativeLanguageFlagCoverageResponse {
   returned: number;
   limit: number;
   offset: number;
+  scanned: number;
+  scan_limit: number;
+  scan_limit_reached: boolean;
   summary: CreativeLanguageFlagCoverageSummary;
 }
 

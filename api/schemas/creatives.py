@@ -229,6 +229,7 @@ class CreativeLanguageFlagCoverageRow(BaseModel):
     impressions_30d: int = 0
     last_active_date: Optional[str] = None
     is_active: bool = False
+    preview_creative: Optional[CreativeResponse] = None
 
 
 class CreativeLanguageFlagCoverageSummary(BaseModel):
@@ -238,6 +239,12 @@ class CreativeLanguageFlagCoverageSummary(BaseModel):
     geo_green: int = 0
     geo_orange: int = 0
     geo_red: int = 0
+    spend_at_risk_micros: int = 0
+    spend_confirmed_micros: int = 0
+    spend_review_micros: int = 0
+    count_confirmed: int = 0
+    count_review: int = 0
+    count_ok: int = 0
 
 
 class CreativeLanguageFlagCoverageResponse(BaseModel):
@@ -246,6 +253,9 @@ class CreativeLanguageFlagCoverageResponse(BaseModel):
     returned: int
     limit: int
     offset: int
+    scanned: int = 0
+    scan_limit: int = 0
+    scan_limit_reached: bool = False
     summary: CreativeLanguageFlagCoverageSummary
 
 
