@@ -363,7 +363,7 @@ export default function LanguageFlagCoveragePage() {
               const severityKey = getLanguageFlagSeverity(row);
               const config = SEVERITY_CONFIG[severityKey];
               const Icon = config.Icon;
-              const headline = buildLanguageFlagHeadline(row, t.creatives);
+              const headline = buildLanguageFlagHeadline(row, t.creatives, language);
               const previewCreative = row.preview_creative ?? null;
               const thumbCreative = previewCreative ?? {
                 format: row.format,
