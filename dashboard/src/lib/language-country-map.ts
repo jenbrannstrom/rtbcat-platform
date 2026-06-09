@@ -91,6 +91,53 @@ const LANGUAGE_NAMES: Record<string, string> = {
   zh: "Chinese",
 };
 
+const LANGUAGE_NAMES_ZH: Record<string, string> = {
+  ar: "阿拉伯语",
+  bg: "保加利亚语",
+  bn: "孟加拉语",
+  cs: "捷克语",
+  da: "丹麦语",
+  de: "德语",
+  el: "希腊语",
+  en: "英语",
+  es: "西班牙语",
+  et: "爱沙尼亚语",
+  fi: "芬兰语",
+  fr: "法语",
+  he: "希伯来语",
+  hi: "印地语",
+  hr: "克罗地亚语",
+  hu: "匈牙利语",
+  id: "印尼语",
+  it: "意大利语",
+  ja: "日语",
+  ko: "韩语",
+  lt: "立陶宛语",
+  lv: "拉脱维亚语",
+  mr: "马拉地语",
+  ms: "马来语",
+  my: "缅甸语",
+  nl: "荷兰语",
+  no: "挪威语",
+  pl: "波兰语",
+  pt: "葡萄牙语",
+  ro: "罗马尼亚语",
+  ru: "俄语",
+  sk: "斯洛伐克语",
+  sl: "斯洛文尼亚语",
+  sr: "塞尔维亚语",
+  sv: "瑞典语",
+  sw: "斯瓦希里语",
+  ta: "泰米尔语",
+  te: "泰卢固语",
+  th: "泰语",
+  tr: "土耳其语",
+  uk: "乌克兰语",
+  ur: "乌尔都语",
+  vi: "越南语",
+  zh: "中文",
+};
+
 const COUNTRY_NAMES: Record<string, string> = {
   AE: "United Arab Emirates",
   AR: "Argentina",
@@ -136,19 +183,115 @@ const COUNTRY_NAMES: Record<string, string> = {
   ZA: "South Africa",
 };
 
+const COUNTRY_NAMES_ZH: Record<string, string> = {
+  AE: "阿联酋",
+  ARE: "阿联酋",
+  AR: "阿根廷",
+  ARG: "阿根廷",
+  AT: "奥地利",
+  AUT: "奥地利",
+  AU: "澳大利亚",
+  AUS: "澳大利亚",
+  BE: "比利时",
+  BEL: "比利时",
+  BR: "巴西",
+  BRA: "巴西",
+  CA: "加拿大",
+  CAN: "加拿大",
+  CH: "瑞士",
+  CHE: "瑞士",
+  CL: "智利",
+  CHL: "智利",
+  CN: "中国",
+  CHN: "中国",
+  CO: "哥伦比亚",
+  COL: "哥伦比亚",
+  DE: "德国",
+  DEU: "德国",
+  DK: "丹麦",
+  DNK: "丹麦",
+  ES: "西班牙",
+  ESP: "西班牙",
+  FI: "芬兰",
+  FIN: "芬兰",
+  FR: "法国",
+  FRA: "法国",
+  GB: "英国",
+  GBR: "英国",
+  HK: "香港",
+  HKG: "香港",
+  ID: "印度尼西亚",
+  IDN: "印度尼西亚",
+  IE: "爱尔兰",
+  IRL: "爱尔兰",
+  IL: "以色列",
+  ISR: "以色列",
+  IN: "印度",
+  IND: "印度",
+  IT: "意大利",
+  ITA: "意大利",
+  JP: "日本",
+  JPN: "日本",
+  KR: "韩国",
+  KOR: "韩国",
+  MX: "墨西哥",
+  MEX: "墨西哥",
+  MY: "马来西亚",
+  MYS: "马来西亚",
+  NL: "荷兰",
+  NLD: "荷兰",
+  NZ: "新西兰",
+  NZL: "新西兰",
+  PH: "菲律宾",
+  PHL: "菲律宾",
+  PL: "波兰",
+  POL: "波兰",
+  PT: "葡萄牙",
+  PRT: "葡萄牙",
+  RU: "俄罗斯",
+  RUS: "俄罗斯",
+  SA: "沙特阿拉伯",
+  SAU: "沙特阿拉伯",
+  SE: "瑞典",
+  SWE: "瑞典",
+  SG: "新加坡",
+  SGP: "新加坡",
+  TH: "泰国",
+  THA: "泰国",
+  TR: "土耳其",
+  TUR: "土耳其",
+  TW: "台湾",
+  TWN: "台湾",
+  UA: "乌克兰",
+  UKR: "乌克兰",
+  US: "美国",
+  USA: "美国",
+  VN: "越南",
+  VNM: "越南",
+  ZA: "南非",
+  ZAF: "南非",
+};
+
 export function getLanguageName(
   languageCode: string | null | undefined,
-  fallback?: string | null
+  fallback?: string | null,
+  locale?: string
 ): string | null {
   if (!languageCode && fallback) return fallback;
   if (!languageCode) return null;
   const normalized = languageCode.toLowerCase();
+  if (locale?.startsWith("zh")) {
+    return LANGUAGE_NAMES_ZH[normalized] || fallback || normalized.toUpperCase();
+  }
   return LANGUAGE_NAMES[normalized] || fallback || normalized.toUpperCase();
 }
 
-export function getCountryName(countryCode: string | null | undefined): string | null {
+export function getCountryName(countryCode: string | null | undefined, locale?: string): string | null {
   if (!countryCode) return null;
   const normalized = countryCode.toUpperCase();
+  if (locale?.startsWith("zh")) {
+    return COUNTRY_NAMES_ZH[normalized] || normalized;
+  }
   return COUNTRY_NAMES[normalized] || normalized;
 }
 
