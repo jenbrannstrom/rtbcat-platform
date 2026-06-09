@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { CheckCircle2, HelpCircle, RefreshCw, Search, ShieldAlert } from "lucide-react";
+import { CheckCircle2, Download, HelpCircle, RefreshCw, Search, ShieldAlert } from "lucide-react";
 import { useParams, usePathname } from "next/navigation";
 import { CreativeThumb } from "@/components/creative-thumb";
 import { ErrorPage } from "@/components/error";
@@ -22,6 +22,7 @@ import { cn, getFormatLabel } from "@/lib/utils";
 import type { Creative, CreativeLanguageFlagCoverageRow } from "@/types/api";
 
 const PAGE_SIZE = 100;
+const EXPORT_PAGE_SIZE = 1000;
 const INITIAL_SCAN_LIMIT = 3000;
 const BULK_REFRESH_LIMIT = 500;
 const AUTO_REFRESH_WINDOW_MS = 60_000;
@@ -73,6 +74,15 @@ function isRowRefreshable(row: CreativeLanguageFlagCoverageRow): boolean {
   return row.geo_linguistic_status === "orange" || !row.geo_linguistic_completed_at;
 }
 
+function csvCell(value: string | number | boolean | null | undefined): string {
+  const text = value === null || value === undefined ? "" : String(value);
+  return `"${text.replace(/"/g, '""')}"`;
+}
+
+function csvLine(values: Array<string | number | boolean | null | undefined>): string {
+  return values.map(csvCell).join(",");
+}
+
 export default function LanguageFlagCoveragePage() {
   const params = useParams<{ buyerId?: string }>();
   const pathname = usePathname();
@@ -91,6 +101,7 @@ export default function LanguageFlagCoveragePage() {
     creative?: Creative | null;
   } | null>(null);
   const [refreshingCreativeId, setRefreshingCreativeId] = useState<string | null>(null);
+  const [isExportingCsv, setIsExportingCsv] = useState(false);
 
   useEffect(() => {
     setPageIndex(0);
@@ -222,6 +233,101 @@ export default function LanguageFlagCoveragePage() {
     },
   ], [summary, t.creatives]);
 
+  const downloadCsv = async () => {
+    if (!effectiveBuyerId || isExportingCsv) return;
+    setIsExportingCsv(true);
+    try {
+      const exportedRows: CreativeLanguageFlagCoverageRow[] = [];
+      let nextOffset = 0;
+      let expectedTotal: number | null = null;
+
+      while (expectedTotal === null || exportedRows.length < expectedTotal) {
+        const response = await getCreativeLanguageFlagCoverage({
+          buyer_id: effectiveBuyerId,
+          search: search.trim() || undefined,
+          severity,
+          limit: EXPORT_PAGE_SIZE,
+          offset: nextOffset,
+          scan_limit: INITIAL_SCAN_LIMIT,
+        });
+
+        expectedTotal = response.total;
+        exportedRows.push(...response.rows);
+        if (response.rows.length === 0) break;
+        nextOffset += response.rows.length;
+      }
+
+      const header = csvLine([
+        "creative_id",
+        "creative_name",
+        "severity",
+        "headline",
+        "flag_reason",
+        "language_flag_status",
+        "language_flag_reason",
+        "geo_linguistic_status",
+        "geo_linguistic_reason",
+        "currency_flag_status",
+        "currency_flag_reason",
+        "serving_countries",
+        "detected_currencies",
+        "effective_language_code",
+        "detected_language",
+        "format",
+        "approval_status",
+        "spend_30d_micros",
+        "impressions_30d",
+        "last_active_date",
+      ]);
+      const body = exportedRows.map((row) => {
+        const headline = buildLanguageFlagHeadline(row, t.creatives, language);
+        return csvLine([
+          row.creative_id,
+          row.creative_name,
+          getLanguageFlagSeverity(row),
+          headline.title,
+          headline.subtitle,
+          row.language_flag_status,
+          row.language_flag_reason,
+          row.geo_linguistic_status,
+          row.geo_linguistic_reason,
+          row.currency_flag_status,
+          row.currency_flag_reason,
+          row.serving_countries.join("|"),
+          row.detected_currencies.join("|"),
+          row.effective_language_code,
+          row.detected_language,
+          row.format,
+          row.approval_status,
+          row.spend_30d_micros,
+          row.impressions_30d,
+          row.last_active_date,
+        ]);
+      });
+
+      const csv = [header, ...body].join("\r\n");
+      const blob = new Blob(["\ufeff", csv], { type: "text/csv;charset=utf-8" });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `language-flags-${effectiveBuyerId}-${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (exportError) {
+      setNotice({
+        tone: "error",
+        message:
+          exportError instanceof Error
+            ? exportError.message
+            : t.creatives.languageFlagsExportFailed,
+      });
+    } finally {
+      setIsExportingCsv(false);
+    }
+  };
+
   if (!effectiveBuyerId) {
     return <ErrorPage message={t.creatives.languageFlagsSelectBuyer} />;
   }
@@ -340,6 +446,20 @@ export default function LanguageFlagCoveragePage() {
         >
           <RefreshCw className={cn("h-4 w-4", refreshAllMutation.isPending && "animate-spin")} />
           {t.creatives.languageFlagsRefreshAll}
+        </button>
+
+        <button
+          type="button"
+          onClick={downloadCsv}
+          disabled={isExportingCsv || total === 0}
+          className="inline-flex items-center gap-2 rounded border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {isExportingCsv ? (
+            <RefreshCw className="h-4 w-4 animate-spin" />
+          ) : (
+            <Download className="h-4 w-4" />
+          )}
+          {isExportingCsv ? t.creatives.languageFlagsDownloadingCsv : t.creatives.languageFlagsDownloadCsv}
         </button>
       </div>
 

@@ -1113,6 +1113,9 @@ export interface Translations {
     languageFlagsCoverageNote: string;
     languageFlagsView: string;
     languageFlagsRefreshRow: string;
+    languageFlagsDownloadCsv: string;
+    languageFlagsDownloadingCsv: string;
+    languageFlagsExportFailed: string;
     backToCreatives: string;
     languageFlagsSelectBuyer: string;
     languageFlagsFailedToLoad: string;
