@@ -227,7 +227,9 @@ class AgentStatsService:
         totals = self._build_totals(funnel_row, spend_row, auction_row)
         freshness = self._build_freshness(funnel_row, spend_row)
         has_data = bool(totals["reached_queries"] or totals["impressions"] or totals["spend_micros"])
-        warnings = self._build_warnings(has_data=has_data, freshness=freshness)
+        warnings = self._build_warnings(
+            has_data=has_data, freshness=freshness, totals=totals
+        )
 
         sections = {
             "top_publishers": [self._publisher_payload(row) for row in top_publishers],
@@ -332,12 +334,24 @@ class AgentStatsService:
             "end_date": max(ends) if ends else None,
         }
 
-    def _build_warnings(self, *, has_data: bool, freshness: dict[str, Any]) -> list[str]:
+    def _build_warnings(
+        self,
+        *,
+        has_data: bool,
+        freshness: dict[str, Any],
+        totals: dict[str, Any],
+    ) -> list[str]:
         warnings: list[str] = []
         if not has_data:
             warnings.append("No precomputed rows were available for this buyer and period.")
         if not freshness.get("end_date"):
             warnings.append("Latest metric date is unavailable.")
+        if totals.get("impressions") and not totals.get("bids_in_auction"):
+            warnings.append(
+                "Bids-in-auction data is unavailable for this period, so win_rate_pct "
+                "reads 0. Check that the bidsinauction report includes the 'Bids in "
+                "auction' and 'Auctions won' columns."
+            )
         return warnings
 
     def _publisher_payload(self, row: dict[str, Any]) -> dict[str, Any]:
