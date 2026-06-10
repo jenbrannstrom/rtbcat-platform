@@ -1526,21 +1526,20 @@ class PostgresStore:
         return stats
 
     # =========================================================================
-    # STUB METHODS - TODO: Implement these
+    # STUB METHODS - not implemented; raise instead of silently dropping data
     # =========================================================================
 
     async def save_campaign(self, campaign: Campaign) -> None:
-        """Save or update a campaign. TODO: Implement."""
-        logger.warning("PostgresStore.save_campaign() is a stub")
+        """Save or update a campaign. Not implemented."""
+        raise NotImplementedError("PostgresStore.save_campaign() is not implemented")
 
     async def save_cluster(self, cluster: Cluster) -> None:
-        """Save or update a cluster. TODO: Implement."""
-        logger.warning("PostgresStore.save_cluster() is a stub")
+        """Save or update a cluster. Not implemented."""
+        raise NotImplementedError("PostgresStore.save_cluster() is not implemented")
 
     async def get_clusters(self) -> list[Cluster]:
-        """Get all clusters. TODO: Implement."""
-        logger.warning("PostgresStore.get_clusters() is a stub")
-        return []
+        """Get all clusters. Not implemented."""
+        raise NotImplementedError("PostgresStore.get_clusters() is not implemented")
 
     async def get_creative_performance_summary(
         self,
@@ -1601,28 +1600,30 @@ class PostgresStore:
         }
 
     async def save_performance_metrics(self, metrics: list[PerformanceMetric]) -> int:
-        """Save performance metrics. TODO: Implement."""
-        logger.warning("PostgresStore.save_performance_metrics() is a stub")
-        return 0
+        """Save performance metrics. Not implemented."""
+        raise NotImplementedError(
+            "PostgresStore.save_performance_metrics() is not implemented"
+        )
 
     async def get_performance_metrics(
         self,
         creative_id: Optional[str] = None,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
+        **_filters: Any,
     ) -> list[PerformanceMetric]:
-        """Get performance metrics. TODO: Implement."""
-        logger.warning("PostgresStore.get_performance_metrics() is a stub")
-        return []
+        """Get performance metrics. Not implemented."""
+        raise NotImplementedError(
+            "PostgresStore.get_performance_metrics() is not implemented"
+        )
 
     # =========================================================================
     # RTB TRAFFIC - STUB
     # =========================================================================
 
     async def save_rtb_traffic(self, traffic_data: list[dict]) -> int:
-        """Save RTB traffic data. TODO: Implement."""
-        logger.warning("PostgresStore.save_rtb_traffic() is a stub")
-        return 0
+        """Save RTB traffic data. Not implemented."""
+        raise NotImplementedError("PostgresStore.save_rtb_traffic() is not implemented")
 
     async def get_rtb_traffic(
         self,
@@ -1630,9 +1631,8 @@ class PostgresStore:
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
     ) -> list[dict]:
-        """Get RTB traffic data. TODO: Implement."""
-        logger.warning("PostgresStore.get_rtb_traffic() is a stub")
-        return []
+        """Get RTB traffic data. Not implemented."""
+        raise NotImplementedError("PostgresStore.get_rtb_traffic() is not implemented")
 
     # =========================================================================
     # RTB TRAFFIC - COMPAT HELPERS (used by analytics/tests)
@@ -2336,14 +2336,16 @@ class PostgresStore:
     # =========================================================================
 
     async def save_import_history(self, history: dict) -> int:
-        """Save import history record. TODO: Implement."""
-        logger.warning("PostgresStore.save_import_history() is a stub")
-        return 0
+        """Save import history record. Not implemented."""
+        raise NotImplementedError(
+            "PostgresStore.save_import_history() is not implemented"
+        )
 
     async def get_import_history(self, limit: int = 100) -> list[dict]:
-        """Get import history. TODO: Implement."""
-        logger.warning("PostgresStore.get_import_history() is a stub")
-        return []
+        """Get import history. Not implemented."""
+        raise NotImplementedError(
+            "PostgresStore.get_import_history() is not implemented"
+        )
 
     # =========================================================================
     # THUMBNAIL STATUS (Tier 3)

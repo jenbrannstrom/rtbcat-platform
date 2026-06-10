@@ -76,6 +76,21 @@ class AgentStatsRepository:
             (buyer_id, days),
         )
 
+    async def get_auction_totals(self, buyer_id: str, days: int) -> dict[str, Any] | None:
+        # home_seat_daily has no bids_in_auction column; the config-level
+        # precompute is the only home_* table that carries it.
+        return await pg_query_one(
+            """
+            SELECT
+                COALESCE(SUM(bids_in_auction), 0) AS bids_in_auction,
+                COALESCE(SUM(auctions_won), 0) AS auctions_won
+            FROM home_config_daily
+            WHERE buyer_account_id = %s
+              AND metric_date >= CURRENT_DATE - (%s::int - 1)
+            """,
+            (buyer_id, days),
+        )
+
     async def get_spend_totals(self, buyer_id: str, days: int) -> dict[str, Any] | None:
         return await pg_query_one(
             """
@@ -202,13 +217,14 @@ class AgentStatsService:
             raise HTTPException(status_code=404, detail="Buyer seat not found.")
 
         funnel_row = await self._repo.get_funnel_totals(buyer_id, safe_days) or {}
+        auction_row = await self._repo.get_auction_totals(buyer_id, safe_days) or {}
         spend_row = await self._repo.get_spend_totals(buyer_id, safe_days) or {}
         top_publishers = await self._repo.get_top_publishers(buyer_id, safe_days, safe_limit)
         top_geos = await self._repo.get_top_geos(buyer_id, safe_days, safe_limit)
         top_configs = await self._repo.get_top_configs(buyer_id, safe_days, safe_limit)
         top_apps = await self._repo.get_top_apps(buyer_id, safe_days, safe_limit)
 
-        totals = self._build_totals(funnel_row, spend_row)
+        totals = self._build_totals(funnel_row, spend_row, auction_row)
         freshness = self._build_freshness(funnel_row, spend_row)
         has_data = bool(totals["reached_queries"] or totals["impressions"] or totals["spend_micros"])
         warnings = self._build_warnings(has_data=has_data, freshness=freshness)
@@ -259,13 +275,20 @@ class AgentStatsService:
             },
         }
 
-    def _build_totals(self, funnel_row: dict[str, Any], spend_row: dict[str, Any]) -> dict[str, Any]:
+    def _build_totals(
+        self,
+        funnel_row: dict[str, Any],
+        spend_row: dict[str, Any],
+        auction_row: dict[str, Any],
+    ) -> dict[str, Any]:
         reached_queries = _int(funnel_row.get("reached_queries"))
         impressions = _int(funnel_row.get("impressions"))
         bids = _int(funnel_row.get("bids"))
         successful_responses = _int(funnel_row.get("successful_responses"))
         bid_requests = _int(funnel_row.get("bid_requests"))
         auctions_won = _int(funnel_row.get("auctions_won"))
+        bids_in_auction = _int(auction_row.get("bids_in_auction"))
+        auction_wins = _int(auction_row.get("auctions_won"))
         spend_micros = _int(spend_row.get("spend_micros"))
         clicks = _int(spend_row.get("clicks"))
         spend_impressions = _int(spend_row.get("impressions"))
@@ -276,11 +299,15 @@ class AgentStatsService:
             "bids": bids,
             "successful_responses": successful_responses,
             "auctions_won": auctions_won,
+            "bids_in_auction": bids_in_auction,
             "impressions": impressions,
             "clicks": clicks,
             "spend_micros": spend_micros,
             "spend_usd": _money_from_micros(spend_micros),
-            "win_rate_pct": _rate(impressions, reached_queries),
+            # Win rate per METRICS_GUIDE.md: Auctions Won / Bids in Auction.
+            # Both terms come from home_config_daily so the ratio is consistent.
+            "win_rate_pct": _rate(auction_wins, bids_in_auction),
+            "efficiency_rate_pct": _rate(impressions, reached_queries),
             "bid_rate_pct": _rate(bids, reached_queries),
             "response_rate_pct": _rate(successful_responses, bid_requests),
             "ctr_pct": _rate(clicks, spend_impressions or impressions),
@@ -316,39 +343,47 @@ class AgentStatsService:
     def _publisher_payload(self, row: dict[str, Any]) -> dict[str, Any]:
         reached = _int(row.get("reached_queries"))
         impressions = _int(row.get("impressions"))
+        bids = _int(row.get("bids"))
+        auctions_won = _int(row.get("auctions_won"))
         return {
             "publisher_id": row.get("publisher_id"),
             "publisher_name": row.get("publisher_name"),
             "reached_queries": reached,
             "impressions": impressions,
-            "bids": _int(row.get("bids")),
-            "auctions_won": _int(row.get("auctions_won")),
-            "win_rate_pct": _rate(impressions, reached),
+            "bids": bids,
+            "auctions_won": auctions_won,
+            # home_publisher_daily has no bids_in_auction; auctions_won/bids is
+            # the nearest computable win rate at this grain.
+            "win_rate_pct": _rate(auctions_won, bids),
         }
 
     def _geo_payload(self, row: dict[str, Any]) -> dict[str, Any]:
         reached = _int(row.get("reached_queries"))
         impressions = _int(row.get("impressions"))
+        bids = _int(row.get("bids"))
+        auctions_won = _int(row.get("auctions_won"))
         return {
             "country": row.get("country"),
             "reached_queries": reached,
             "impressions": impressions,
-            "bids": _int(row.get("bids")),
-            "auctions_won": _int(row.get("auctions_won")),
-            "win_rate_pct": _rate(impressions, reached),
+            "bids": bids,
+            "auctions_won": auctions_won,
+            "win_rate_pct": _rate(auctions_won, bids),
         }
 
     def _config_payload(self, row: dict[str, Any]) -> dict[str, Any]:
         reached = _int(row.get("reached_queries"))
         impressions = _int(row.get("impressions"))
+        bids_in_auction = _int(row.get("bids_in_auction"))
+        auctions_won = _int(row.get("auctions_won"))
         return {
             "billing_id": row.get("billing_id"),
             "display_name": row.get("display_name"),
             "reached_queries": reached,
             "impressions": impressions,
-            "bids_in_auction": _int(row.get("bids_in_auction")),
-            "auctions_won": _int(row.get("auctions_won")),
-            "win_rate_pct": _rate(impressions, reached),
+            "bids_in_auction": bids_in_auction,
+            "auctions_won": auctions_won,
+            "win_rate_pct": _rate(auctions_won, bids_in_auction),
         }
 
     def _app_payload(self, row: dict[str, Any]) -> dict[str, Any]:
