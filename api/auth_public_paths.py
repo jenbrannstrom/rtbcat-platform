@@ -28,6 +28,8 @@ PUBLIC_PREFIXES = (
     "/conversions/generic/postback",
     "/conversions/redtrack/postback",
     "/conversions/voluum/postback",
+    "/conversions/adjust/callback",
+    "/conversions/branch/webhook",
     "/conversions/pixel",
 )
 

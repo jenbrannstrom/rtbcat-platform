@@ -11,6 +11,8 @@ from storage.postgres_repositories.creative_performance_repo import (
 
 logger = logging.getLogger(__name__)
 
+ZERO_ENGAGEMENT_MIN_IMPRESSIONS = 1000
+
 
 class CreativePerformanceService:
     """Service layer for creative performance and activity flags."""
@@ -39,14 +41,26 @@ class CreativePerformanceService:
 
         perf_data: dict[str, dict[str, Any]] = {}
         try:
-            rows = await self._repo.get_rtb_daily_perf(creative_ids, days)
+            rows = await self._repo.get_precomputed_perf(creative_ids, days)
             perf_data = {
                 row["creative_id"]: {
                     "impressions": row.get("total_impressions") or 0,
-                    "clicks": row.get("total_clicks") or 0,
+                    "clicks": 0,
                 }
                 for row in rows
             }
+            # Clicks only exist in rtb_daily; fetch them just for the creatives
+            # where the zero-engagement flag depends on them.
+            needs_clicks = [
+                cid
+                for cid, perf in perf_data.items()
+                if perf["impressions"] > ZERO_ENGAGEMENT_MIN_IMPRESSIONS
+            ]
+            for row in await self._repo.get_rtb_daily_clicks(needs_clicks, days):
+                if row["creative_id"] in perf_data:
+                    perf_data[row["creative_id"]]["clicks"] = (
+                        row.get("total_clicks") or 0
+                    )
         except Exception as e:
             logger.debug("Could not fetch performance data: %s", e, exc_info=True)
 
@@ -62,7 +76,9 @@ class CreativePerformanceService:
                 and ts.get("status") == "failed"
                 and impressions > 0
             )
-            zero_engagement = impressions > 1000 and clicks == 0
+            zero_engagement = (
+                impressions > ZERO_ENGAGEMENT_MIN_IMPRESSIONS and clicks == 0
+            )
 
             result[cid] = {
                 "broken_video": broken_video,

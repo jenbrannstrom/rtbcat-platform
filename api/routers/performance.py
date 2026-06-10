@@ -231,6 +231,8 @@ async def import_performance_metrics(
 
     except HTTPException:
         raise
+    except NotImplementedError as e:
+        raise HTTPException(status_code=501, detail=str(e))
     except Exception as e:
         logger.error(f"Performance import failed: {e}")
         raise HTTPException(status_code=500, detail=f"Performance import failed: {str(e)}")
@@ -351,6 +353,8 @@ async def list_performance_metrics(
 
     except HTTPException:
         raise
+    except NotImplementedError as e:
+        raise HTTPException(status_code=501, detail=str(e))
     except Exception as e:
         logger.error(f"Performance metrics query failed: {e}")
         raise HTTPException(status_code=500, detail=f"Performance query failed: {str(e)}")

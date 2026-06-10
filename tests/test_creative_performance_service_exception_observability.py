@@ -14,9 +14,13 @@ class _FailingRepo:
         del creative_ids, days
         raise RuntimeError("active ids failed")
 
-    async def get_rtb_daily_perf(self, creative_ids: list[str], days: int):
+    async def get_precomputed_perf(self, creative_ids: list[str], days: int):
         del creative_ids, days
         raise RuntimeError("perf failed")
+
+    async def get_rtb_daily_clicks(self, creative_ids: list[str], days: int):
+        del creative_ids, days
+        raise RuntimeError("clicks failed")
 
     async def get_primary_countries(self, creative_ids: list[str], days: int):
         del creative_ids, days

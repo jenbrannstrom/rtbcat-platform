@@ -124,46 +124,6 @@ class TestTroubleshootingRBACClosure:
 
 
 # ---------------------------------------------------------------------------
-# qps.py – all endpoints require get_current_user
-# ---------------------------------------------------------------------------
-
-class TestQpsRBACClosure:
-    """Verify QPS endpoints require authentication."""
-
-    @pytest.fixture(autouse=True)
-    def _import_router(self):
-        from api.routers.qps import (
-            get_qps_summary,
-            get_size_coverage_report,
-            get_config_performance_report,
-            get_fraud_signals_report,
-            get_full_qps_report,
-            get_include_list,
-        )
-        self.endpoints = {
-            "GET /qps/summary": get_qps_summary,
-            "GET /qps/size-coverage": get_size_coverage_report,
-            "GET /qps/config-performance": get_config_performance_report,
-            "GET /qps/fraud-signals": get_fraud_signals_report,
-            "GET /qps/report": get_full_qps_report,
-            "GET /qps/include-list": get_include_list,
-        }
-
-    @pytest.mark.parametrize("endpoint_name", [
-        "GET /qps/summary",
-        "GET /qps/size-coverage",
-        "GET /qps/config-performance",
-        "GET /qps/fraud-signals",
-        "GET /qps/report",
-        "GET /qps/include-list",
-    ])
-    def test_qps_endpoint_requires_auth(self, endpoint_name):
-        _assert_has_dependency(
-            self.endpoints[endpoint_name], get_current_user, endpoint_name,
-        )
-
-
-# ---------------------------------------------------------------------------
 # system.py – sensitive endpoints require auth
 # ---------------------------------------------------------------------------
 

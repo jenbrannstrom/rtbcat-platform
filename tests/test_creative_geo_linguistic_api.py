@@ -91,11 +91,11 @@ class TestRouterRegistered:
 
     def test_has_analyze_endpoint(self):
         routes = [r.path for r in router.routes]
-        assert "/creatives/{creative_id}/analyze-geo-linguistic" in routes
+        assert "/creatives/{creative_id:path}/analyze-geo-linguistic" in routes
 
     def test_has_report_endpoint(self):
         routes = [r.path for r in router.routes]
-        assert "/creatives/{creative_id}/geo-linguistic-report" in routes
+        assert "/creatives/{creative_id:path}/geo-linguistic-report" in routes
 
     def test_analyze_is_post(self):
         for r in router.routes:
