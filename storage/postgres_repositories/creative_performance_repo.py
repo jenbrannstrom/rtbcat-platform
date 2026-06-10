@@ -10,7 +10,7 @@ from storage.postgres_database import pg_query
 class CreativePerformanceRepository:
     """SQL-only repository for creative performance lookups."""
 
-    async def get_rtb_daily_perf(
+    async def get_precomputed_perf(
         self, creative_ids: list[str], days: int
     ) -> list[dict[str, Any]]:
         if not creative_ids:
@@ -18,8 +18,26 @@ class CreativePerformanceRepository:
         return await pg_query(
             """
             SELECT creative_id,
-                   SUM(impressions) as total_impressions,
-                   SUM(clicks) as total_clicks
+                   COALESCE(SUM(impressions), 0) as total_impressions
+            FROM config_creative_daily
+            WHERE creative_id = ANY(%s)
+              AND metric_date >= CURRENT_DATE - make_interval(days => %s)
+            GROUP BY creative_id
+            """,
+            (creative_ids, days),
+        )
+
+    async def get_rtb_daily_clicks(
+        self, creative_ids: list[str], days: int
+    ) -> list[dict[str, Any]]:
+        # Clicks are not in any precompute table; callers must keep this id
+        # list narrow (rtb_daily has 138M+ rows).
+        if not creative_ids:
+            return []
+        return await pg_query(
+            """
+            SELECT creative_id,
+                   COALESCE(SUM(clicks), 0) as total_clicks
             FROM rtb_daily
             WHERE creative_id = ANY(%s)
               AND metric_date >= CURRENT_DATE - make_interval(days => %s)
@@ -36,10 +54,10 @@ class CreativePerformanceRepository:
         rows = await pg_query(
             """
             SELECT DISTINCT creative_id
-            FROM rtb_daily
+            FROM config_creative_daily
             WHERE creative_id = ANY(%s)
               AND metric_date >= CURRENT_DATE - make_interval(days => %s)
-              AND (impressions > 0 OR clicks > 0 OR spend_micros > 0)
+              AND (impressions > 0 OR spend_micros > 0)
             """,
             (creative_ids, days),
         )

@@ -2,8 +2,9 @@
 
 ## Current Production Handover
 
-This is the current handover as of **May 20, 2026**. It supersedes the older
-April creatives QA notes lower in this file.
+This is the current handover as of **June 7, 2026**, with a **June 10, 2026**
+language-flags RCA addendum below. It supersedes the older May/April creatives
+QA notes lower in this file.
 
 The user wants GitHub to be the source of truth. Production must be recoverable
 from GitHub, Terraform, Google Secret Manager, Cloud SQL, Cloud Scheduler,
@@ -14,13 +15,15 @@ expensive staging VM.
 
 - GCP project: `catscan-prod-202601`
 - Production URL: `https://scan.rtb.cat`
-- Current deployed commit: `857915b2`
-- Production health: `/api/health` returns 200 with `git_sha: 857915b2`
-  and `version: sha-857915b`
-- Latest production deploy: GitHub Actions run `26146469928`, success
-- Latest image build: GitHub Actions run `26146272312`, success
-- GitHub `main` and Gitee `main` both point at
-  `857915b28b701aaa5adbeeee94aacd254a4b7c31`
+- Current deployed commit: `983f1d9a`
+- Production health: `/api/health` returns 200 with `git_sha: 983f1d9a`,
+  `version: sha-983f1d9`, and `release_version: 0.9.5`
+- Latest production deploy: GitHub Actions run `27075147141`, success
+- Latest image build: GitHub Actions run `27075145733`, success after rerun
+  from a transient Docker Hub timeout during Buildx setup
+- GitHub `main` points at
+  `983f1d9ab400bad5f3f70fb4258af18b0c36364a`; Gitee was not verified in this
+  handover
 - Production VM: `catscan-production-sg`, `RUNNING`, IP `34.143.222.60`
 - Staging/old VM: `catscan-production-sg2`, `TERMINATED`, IP `34.143.231.235`
 - Staging snapshot: `catscan-production-sg2-retirement-20260506-0327`
@@ -34,6 +37,12 @@ stopped, but not deleted.
 
 Already pushed to `main` and deployed where noted:
 
+- `89aa1729` `Fix HTML language coverage evidence fallbacks`
+- `b3c5516d` `Preserve Google creative preview URL evidence`
+- `680a146d` `Improve HTML creative language script evidence`
+- `e1bc3c6c` `Upscale small creative screenshots for OCR`
+- `76c3ee02` `Ignore advertiser-only text in HTML language scans`
+- `983f1d9a` `Accept English creatives serving India`
 - `1247b971` `Make production recovery GitHub sourced`
 - `1ed1336f` `Fix dependency audit findings`
 - `9ccd4780` `Update dashboard dependencies for audit`
@@ -48,7 +57,101 @@ Already pushed to `main` and deployed where noted:
 
 ## What Changed
 
-Latest deployed creative live-refetch patch (`857915b2`):
+Latest deployed language detection / market flag patch series (`983f1d9a`
+latest):
+
+- Fixed the coverage endpoint row drop caused by datetime serialization in
+  `geo_linguistic_completed_at`.
+- Fixed thumbnail status fallback so stored `gcs_path` is returned as
+  `thumbnail_url`.
+- Forced/missing language scans now best-effort refresh the live Google FULL
+  creative payload before analysis.
+- The collector/parser/storage path now preserves Google `previewUrl`,
+  `renderUrl`, `creativeServingDecision`, and detected-language metadata.
+- HTML creative evidence now uses direct image hints, safe public
+  `previewUrl`/`renderUrl` screenshots, a 10 second render wait, OCR, and
+  higher device-scale screenshots for small banners before sending image
+  evidence to Gemini.
+- The analyzer adds script heuristics for Devanagari/Hindi (`hi`) and Myanmar
+  (`my`), asks the vision model for visible text, and avoids letting partial
+  chrome/`AD` text override obvious non-Latin creative text.
+- HTML/video language analysis no longer treats advertiser name alone as
+  creative language evidence. This prevents advertisers like `Amazing Design
+  Tools` from turning no-content HTML into English.
+- The deterministic market flag layer now accepts English creatives serving
+  India (`IN`), matching the existing behavior for other primary English
+  markets.
+- The reported India creative `2014265280192819202` no longer appears in the
+  remaining language-market alert list after the `983f1d9a` deploy.
+
+June 10 language-flags RCA addendum:
+
+- User reported buyer `299038253` creative `216139` as a false positive:
+  visible video copy is Vietnamese and serving Vietnam, but Language Flags shows
+  `ZH mismatches VNM`.
+- Production API diagnostic workflow `27271278231` confirmed this is not a
+  single UI display issue. The API returned `216139 red ZH mismatches VNM
+  detected=zh`, plus adjacent `216xxx` creatives with the same `zh` vs `VNM`
+  pattern and a separate `zh` vs `THA` cluster.
+- Revised RCA: do **not** assume Gemini misread Vietnamese. The more plausible
+  fault is upstream evidence selection. For `VIDEO`, `LanguageAnalyzer` first
+  extracts VAST metadata text (`AdTitle`, `Description`, `HTMLResource`) and
+  sends that text to the language model. If that returns a successful language,
+  the analyzer returns immediately and never reaches video-frame OCR/vision
+  evidence.
+- Relevant code path:
+  - `api/analysis/language_analyzer.py`: `extract_text_from_creative()` reads
+    VAST metadata for `VIDEO`; `analyze_creative()` returns on the first
+    successful text result before rendered evidence.
+  - `services/creative_evidence_service.py`: video frame extraction/OCR exists,
+    but only runs later through rendered evidence fallback.
+- Likely failure mode for `216139`: Gemini may have correctly classified the
+  text it was given, but Cat-Scan likely gave it non-visible/stale/generated VAST
+  metadata rather than the visible Vietnamese video frames. The stored `zh` then
+  became authoritative for deterministic market flagging.
+- Pipeline fix direction:
+  - For `VIDEO`, prefer visible evidence first: video frames OCR/vision.
+  - Treat VAST `AdTitle`, `Description`, and `HTMLResource` as metadata, not
+    dominant creative language.
+  - If visible frame evidence exists, it should override VAST metadata.
+  - Store and expose the evidence source (`video_frame_ocr`,
+    `video_frame_vision`, `vast_metadata`, `google_detected_language`, etc.)
+    and confidence in the Language Flags page/modal.
+- Important nuance: backend coverage rows already include `language_source` and
+  `language_confidence` in `api/schemas/creatives.py`, but the dashboard
+  `CreativeLanguageFlagCoverageRow` type and page currently do not surface them.
+  This should be fixed so future RCA can see whether a row came from visible
+  evidence, VAST metadata, or Google metadata.
+
+Amazing Design Tools batch retest:
+
+- Seat: `Amazing Design Tools LLC`, buyer ID `1487810529`
+- Batch refresh workflow: run `27075424571`, success
+- Status workflow: run `27075439811`, success
+- Creatives returned: `350`
+- Creatives analyzed: `350`
+- Missing analysis: `0`
+- Detected language: `143`
+- Analysis errors: `207`, all currently `no content`
+- `/creatives/v2` market alerts: `350` total, `25` language-market alerts,
+  `325` geo-market alerts
+- Coverage summary: `74` language green, `251` language orange, `25` language
+  red, `350` geo orange
+
+Current residual work:
+
+- `25` language-market alerts remain for Amazing Design Tools in the latest
+  `/creatives/v2` status run.
+- `207` creatives still report language analysis error `no content`; these are
+  likely creatives where no useful text/image evidence was available after the
+  current best-effort render path.
+- Geo alerts are still broad for this seat: `325` geo-market alerts in
+  `/creatives/v2` and `350` geo orange in coverage.
+- One adjacent broader test file still has unrelated route-string expectations
+  for `{creative_id}` vs `{creative_id:path}` and was not part of the final
+  language patch validation.
+
+Older deployed creative live-refetch patch (`857915b2`):
 
 - Fixed FastAPI route matching for creative IDs that contain `/`, `+`, `=`, or
   URL-encoded path characters. The frontend now uses non-ambiguous live/detail
@@ -133,6 +236,27 @@ Older deployed creative/RCA patch:
 
 Key changed files in the latest deployed patch:
 
+- `services/creative_language_analyzer.py`
+- `services/creative_language_flag_service.py`
+- `services/creative_language_service.py`
+- `services/creative_evidence_service.py`
+- `services/creative_response_builder.py`
+- `services/creative_preview_assets.py`
+- `collectors/creatives/client.py`
+- `collectors/creatives/parsers.py`
+- `storage/postgres_store.py`
+- `api/schemas/creatives.py`
+- `api/routers/creatives.py`
+- `tests/test_language_analyzer_providers.py`
+- `tests/test_creative_language_flag_service.py`
+- `tests/test_creative_evidence_service.py`
+- `tests/test_creative_language_service.py`
+- `tests/test_creatives_language_flag_coverage_api.py`
+- `tests/test_postgres_store_thumbnails.py`
+- `tests/test_creatives_client.py`
+
+Key changed files from older creative live-refetch/cache patches:
+
 - `collectors/creatives/client.py`
 - `collectors/creatives/parsers.py`
 - `services/creative_cache_service.py`
@@ -161,7 +285,33 @@ Key changed files from the earlier production recovery work:
 
 ## Live Checks Completed
 
-Latest local checks before `bd40328b`:
+Latest production verification for `983f1d9a`:
+
+- `CI Build and Push Images`: run `27075145733`, success after rerun from a
+  transient Docker Hub timeout.
+- `CD Manual Deploy to GCP`: run `27075147141`, success.
+- `/api/health`: 200,
+  `{"status":"healthy","release_version":"0.9.5","version":"sha-983f1d9","git_sha":"983f1d9a","configured":true,"has_credentials":true,"database_exists":true}`.
+- Post-deploy contract summary:
+  - `C-ING-001`: PASS, `2462` run(s), `0` stuck
+  - `C-ING-002`: PASS, all `4` buyers have imports in 48h
+  - `C-EPT-001`: PASS, all `13` endpoints have current observations
+  - `C-PRE-002`: PASS, all ACTIVE configs have rows in `pretarg_daily`
+  - `C-PRE-003`: WARN, all covered with `1` justified no-`publisher_id`
+    exception: `299038253`
+  - `C-WEB-001` / `C-WEB-002`: SKIP
+  - Total: `4` PASS, `1` WARN, `0` FAIL, `2` SKIP
+
+Latest local checks for the final language patch:
+
+- Focused pytest suite passed: `47 passed, 9 warnings`:
+  `tests/test_creative_language_flag_service.py`,
+  `tests/test_language_analyzer_providers.py`,
+  `tests/test_creative_evidence_service.py`,
+  `tests/test_creative_language_service.py`, and
+  `tests/test_creatives_language_flag_coverage_api.py`.
+
+Older local checks before `bd40328b`:
 
 - Python compile check passed for the changed backend modules.
 - Targeted pytest suite passed: `12 passed`.
@@ -171,7 +321,7 @@ Latest local checks before `bd40328b`:
 - Migration `067_normalize_encoded_creative_ids.sql` syntax was checked against
   production PostgreSQL inside a transaction and rolled back successfully.
 
-Latest GitHub/deploy checks:
+Older GitHub/deploy checks:
 
 - `CI Build and Push Images`: run `25534183448`, success.
 - `CD Manual Deploy to GCP`: run `25534186240`, success.
@@ -179,7 +329,7 @@ Latest GitHub/deploy checks:
 - `/api/health`: 200,
   `{"status":"healthy","release_version":"0.9.4","version":"sha-bd40328","git_sha":"bd40328b","configured":true,"has_credentials":true,"database_exists":true}`.
 
-Known residual CI issue:
+Known residual CI issue from the older May deploy:
 
 - Separate `Security Checks` run `25534183443` failed in `Dependency Scan`
   (`pip-audit`). `tfsec` and `gitleaks` passed. This did not block the manual
