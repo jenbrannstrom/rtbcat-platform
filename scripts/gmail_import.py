@@ -202,6 +202,8 @@ def update_status(
     rows_on_latest_metric_date: int = 0,
     unread_report_emails: Optional[int] = None,
     file_failures: Optional[List[Dict[str, str]]] = None,
+    emails_skipped: int = 0,
+    skipped_seat_ids: Optional[List[str]] = None,
 ):
     """Update the import status after a run."""
     status = load_status()
@@ -225,6 +227,8 @@ def update_status(
     if file_failures is not None:
         status["last_file_failures"] = file_failures
         status["last_file_failure_count"] = len(file_failures)
+    status["last_emails_skipped"] = int(emails_skipped)
+    status["last_skipped_seat_ids"] = sorted(set(skipped_seat_ids or []))
 
     # Keep last 50 history entries
     status["history"].insert(0, {
@@ -1375,6 +1379,8 @@ def run_import(
             rows_on_latest_metric_date=result["rows_on_latest_metric_date"],
             unread_report_emails=result.get("unread_report_emails"),
             file_failures=result.get("file_failures", []),
+            emails_skipped=result.get("emails_skipped", 0),
+            skipped_seat_ids=result.get("skipped_seat_ids", []),
         )
         finish_scheduler_ingestion_run(
             scheduler_run_id,
@@ -1458,7 +1464,11 @@ def run_import(
                         result["skipped_seat_ids"].append(seat_id)
                     if verbose:
                         print(f"  Skipped seat_id={seat_id or 'unknown'} subject='{subject}'")
-                    mark_as_read(service, message_id)
+                    # Deliberately NOT marked as read: leaving allowlist-skipped
+                    # emails unread means adding the seat to
+                    # CATSCAN_GMAIL_SEAT_IDS later auto-imports the backlog.
+                    # Marking them read silently destroyed weeks of reports for
+                    # seat 7942355670 (June 2026).
                     continue
 
                 if not downloaded_files:
