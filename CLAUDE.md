@@ -34,7 +34,7 @@ middleware files.
 ## Deployment
 
 - Deploy workflow is manual-only (GitHub Actions `workflow_dispatch`)
-- Must deploy to staging first, then production
+- Production is the only deploy target (staging retired May 2026; VM
+  `catscan-production-sg2` is TERMINATED, snapshot kept)
 - Production VM: `catscan-production-sg` (asia-southeast1-b)
-- Staging VM: `catscan-production-sg2`
 - Hot-patching via `docker cp` + `docker restart` is acceptable for urgent API fixes when Docker Hub rate limits block builds
