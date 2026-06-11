@@ -237,10 +237,10 @@ def _refresh_canonical_reconciliation(
             country,
             '',
             '',
-            SUM(reached_queries),
-            SUM(impressions),
+            COALESCE(SUM(reached_queries), 0),
+            COALESCE(SUM(impressions), 0),
             COALESCE(SUM(clicks), 0),
-            SUM(spend_micros),
+            COALESCE(SUM(spend_micros), 0),
             'csv',
             1,
             'billing',
@@ -270,10 +270,10 @@ def _refresh_canonical_reconciliation(
             '',
             publisher_id,
             COALESCE(MAX(publisher_name), ''),
-            SUM(reached_queries),
-            SUM(impressions),
+            COALESCE(SUM(reached_queries), 0),
+            COALESCE(SUM(impressions), 0),
             COALESCE(SUM(clicks), 0),
-            SUM(spend_micros),
+            COALESCE(SUM(spend_micros), 0),
             'csv',
             1,
             'billing',
@@ -450,9 +450,9 @@ async def refresh_config_breakdowns(
                 buyer_account_id,
                 billing_id,
                 creative_size,
-                SUM(reached_queries) AS reached_queries,
-                SUM(impressions) AS impressions,
-                SUM(spend_micros) AS spend_micros
+                COALESCE(SUM(reached_queries), 0) AS reached_queries,
+                COALESCE(SUM(impressions), 0) AS impressions,
+                COALESCE(SUM(spend_micros), 0) AS spend_micros
             FROM `{rtb_daily_table}`
             WHERE metric_date IN UNNEST(@dates)
               AND billing_id IS NOT NULL
@@ -480,9 +480,9 @@ async def refresh_config_breakdowns(
                 buyer_account_id,
                 billing_id,
                 country,
-                SUM(reached_queries) AS reached_queries,
-                SUM(impressions) AS impressions,
-                SUM(spend_micros) AS spend_micros
+                COALESCE(SUM(reached_queries), 0) AS reached_queries,
+                COALESCE(SUM(impressions), 0) AS impressions,
+                COALESCE(SUM(spend_micros), 0) AS spend_micros
             FROM `{rtb_daily_table}`
             WHERE metric_date IN UNNEST(@dates)
               AND billing_id IS NOT NULL
@@ -550,9 +550,9 @@ async def refresh_config_breakdowns(
                 billing_id,
                 creative_id,
                 ANY_VALUE(creative_size) AS creative_size,
-                SUM(reached_queries) AS reached_queries,
-                SUM(impressions) AS impressions,
-                SUM(spend_micros) AS spend_micros
+                COALESCE(SUM(reached_queries), 0) AS reached_queries,
+                COALESCE(SUM(impressions), 0) AS impressions,
+                COALESCE(SUM(spend_micros), 0) AS spend_micros
             FROM `{rtb_daily_table}`
             WHERE metric_date IN UNNEST(@dates)
               AND billing_id IS NOT NULL
@@ -678,9 +678,9 @@ async def refresh_config_breakdowns(
                 billing_id,
                 publisher_id,
                 MAX(publisher_name),
-                SUM(reached_queries),
-                SUM(impressions),
-                SUM(spend_micros)
+                COALESCE(SUM(reached_queries), 0),
+                COALESCE(SUM(impressions), 0),
+                COALESCE(SUM(spend_micros), 0)
             FROM rtb_daily
             WHERE metric_date::text = ANY(%s)
               AND billing_id IS NOT NULL AND billing_id != ''
@@ -726,9 +726,9 @@ async def refresh_config_breakdowns(
                 billing_id,
                 creative_id,
                 MAX(NULLIF(creative_size, '')),
-                SUM(reached_queries),
-                SUM(impressions),
-                SUM(spend_micros)
+                COALESCE(SUM(reached_queries), 0),
+                COALESCE(SUM(impressions), 0),
+                COALESCE(SUM(spend_micros), 0)
             FROM rtb_daily
             WHERE metric_date::text = ANY(%s)
               AND billing_id IS NOT NULL AND billing_id != ''
