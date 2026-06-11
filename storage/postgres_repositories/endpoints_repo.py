@@ -95,7 +95,10 @@ class EndpointsRepository:
         """Derive observed QPS from bidstream data and populate rtb_endpoints_current.
 
         For each configured endpoint in rtb_endpoints, computes observed QPS by:
-        1. Summing reached_queries from seat_daily over lookback_days
+        1. Summing bid_requests from seat_daily over lookback_days
+           (bid_requests = callouts Google actually sent to the endpoint;
+           reached_queries is a post-bid funnel stage and undercounts
+           endpoint traffic by orders of magnitude)
         2. Converting to average QPS (total / window_seconds)
         3. Distributing across endpoints proportionally by maximum_qps
 
@@ -128,7 +131,7 @@ class EndpointsRepository:
             LEFT JOIN (
                 SELECT
                     COALESCE(bs.bidder_id, hsd.buyer_account_id) AS bidder_id,
-                    SUM(hsd.reached_queries)::real
+                    SUM(hsd.bid_requests)::real
                         / GREATEST(COUNT(DISTINCT hsd.metric_date), 1)
                         / 86400 AS observed_qps
                 FROM seat_daily hsd

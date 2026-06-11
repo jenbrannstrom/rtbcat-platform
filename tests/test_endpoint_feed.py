@@ -25,7 +25,7 @@ class StubEndpointsRepo:
         self.endpoints: list[dict[str, Any]] = []
         # rtb_endpoints_current: keyed by (bidder_id, endpoint_id)
         self.current: dict[tuple[str, str], dict[str, Any]] = {}
-        # home_seat_daily: list of dicts with buyer_account_id, reached_queries, metric_date
+        # home_seat_daily: list of dicts with buyer_account_id, bid_requests, metric_date
         self.seat_daily: list[dict[str, Any]] = []
         # buyer_seats: list of dicts with buyer_id, bidder_id
         self.buyer_seats: list[dict[str, Any]] = []
@@ -73,7 +73,7 @@ class StubEndpointsRepo:
                     mapped_bidder = bs["bidder_id"]
                     break
             bidder_traffic.setdefault(mapped_bidder, 0.0)
-            bidder_traffic[mapped_bidder] += row.get("reached_queries", 0)
+            bidder_traffic[mapped_bidder] += row.get("bid_requests", 0)
 
         # Convert to avg QPS (total / days / 86400)
         days_seen: dict[str, set] = {}
@@ -155,7 +155,7 @@ async def test_refresh_inserts_new_rows():
     ])
     repo.buyer_seats = [{"buyer_id": "bidder-1", "bidder_id": "bidder-1"}]
     repo.seat_daily = [
-        {"buyer_account_id": "bidder-1", "reached_queries": 86400 * 30000, "metric_date": "2026-02-10"},
+        {"buyer_account_id": "bidder-1", "bid_requests": 86400 * 30000, "metric_date": "2026-02-10"},
     ]
 
     count = await svc.refresh_endpoints_current()
@@ -183,7 +183,7 @@ async def test_refresh_updates_idempotently():
     await svc.sync_endpoints("bidder-1", [_make_endpoint("ep-1", 50000)])
     repo.buyer_seats = [{"buyer_id": "bidder-1", "bidder_id": "bidder-1"}]
     repo.seat_daily = [
-        {"buyer_account_id": "bidder-1", "reached_queries": 86400 * 10000, "metric_date": "2026-02-10"},
+        {"buyer_account_id": "bidder-1", "bid_requests": 86400 * 10000, "metric_date": "2026-02-10"},
     ]
 
     # First refresh
@@ -194,7 +194,7 @@ async def test_refresh_updates_idempotently():
 
     # Update traffic data
     repo.seat_daily = [
-        {"buyer_account_id": "bidder-1", "reached_queries": 86400 * 25000, "metric_date": "2026-02-10"},
+        {"buyer_account_id": "bidder-1", "bid_requests": 86400 * 25000, "metric_date": "2026-02-10"},
     ]
 
     # Second refresh: should update, not duplicate
@@ -223,8 +223,8 @@ async def test_refresh_handles_multiple_bidders():
         {"buyer_id": "bidder-B", "bidder_id": "bidder-B"},
     ]
     repo.seat_daily = [
-        {"buyer_account_id": "bidder-A", "reached_queries": 86400 * 15000, "metric_date": "2026-02-10"},
-        {"buyer_account_id": "bidder-B", "reached_queries": 86400 * 50000, "metric_date": "2026-02-10"},
+        {"buyer_account_id": "bidder-A", "bid_requests": 86400 * 15000, "metric_date": "2026-02-10"},
+        {"buyer_account_id": "bidder-B", "bid_requests": 86400 * 50000, "metric_date": "2026-02-10"},
     ]
 
     count = await svc.refresh_endpoints_current()
@@ -268,7 +268,7 @@ async def test_refresh_sets_observed_at_timestamp():
     await svc.sync_endpoints("bidder-1", [_make_endpoint("ep-1", 50000)])
     repo.buyer_seats = [{"buyer_id": "bidder-1", "bidder_id": "bidder-1"}]
     repo.seat_daily = [
-        {"buyer_account_id": "bidder-1", "reached_queries": 86400 * 5000, "metric_date": "2026-02-10"},
+        {"buyer_account_id": "bidder-1", "bid_requests": 86400 * 5000, "metric_date": "2026-02-10"},
     ]
 
     await svc.refresh_endpoints_current()
