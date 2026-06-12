@@ -169,6 +169,16 @@ class TestLanguageAnalyzerProviders:
         assert result.language_code == "hi"
         assert result.source == "script_heuristic"
 
+    def test_detect_language_uses_vietnamese_diacritic_heuristic(self):
+        analyzer = LanguageAnalyzer(provider="gemini", api_key="test-gemini-key")
+
+        result = analyzer.detect_language("THỨ 4 SIÊU RẺ ĐỘC QUYỀN 1.000Đ")
+
+        assert result.success
+        assert result.language == "Vietnamese"
+        assert result.language_code == "vi"
+        assert result.source == "script_heuristic"
+
     def test_parse_response_uses_visible_text_script_signal(self):
         analyzer = LanguageAnalyzer(provider="gemini", api_key="test-gemini-key")
 
@@ -182,6 +192,21 @@ class TestLanguageAnalyzerProviders:
         assert result.success
         assert result.language == "Hindi"
         assert result.language_code == "hi"
+        assert result.source == "gemini_script_heuristic"
+
+    def test_parse_response_uses_visible_vietnamese_over_provider_label(self):
+        analyzer = LanguageAnalyzer(provider="gemini", api_key="test-gemini-key")
+
+        result = analyzer._parse_response(
+            (
+                '{"visible_text":"THỨ 4 SIÊU RẺ ĐỘC QUYỀN 1.000Đ",'
+                '"language":"Chinese","language_code":"zh","confidence":0.92}'
+            )
+        )
+
+        assert result.success
+        assert result.language == "Vietnamese"
+        assert result.language_code == "vi"
         assert result.source == "gemini_script_heuristic"
 
     @pytest.mark.asyncio
@@ -217,7 +242,35 @@ class TestLanguageAnalyzerProviders:
         assert result.source == "script_heuristic_rendered_evidence"
 
     @pytest.mark.asyncio
-    async def test_html_analysis_uses_google_detected_language_metadata(self, monkeypatch):
+    async def test_native_analysis_can_use_google_detected_language_metadata(self, monkeypatch):
+        analyzer = LanguageAnalyzer(provider="gemini", api_key="test-gemini-key")
+
+        monkeypatch.setattr(
+            "services.creative_evidence_service.CreativeEvidenceService.collect_evidence",
+            lambda *args, **kwargs: SimpleNamespace(
+                text_content="",
+                ocr_texts=[],
+                screenshot_path=None,
+                video_frames=[],
+            ),
+        )
+
+        result = await analyzer.analyze_creative(
+            "creative-1",
+            {
+                "native": {},
+                "creativeServingDecision": {"detectedLanguages": ["hi"]},
+            },
+            "NATIVE",
+        )
+
+        assert result.success
+        assert result.language == "Hindi"
+        assert result.language_code == "hi"
+        assert result.source == "google_detected_language"
+
+    @pytest.mark.asyncio
+    async def test_html_analysis_does_not_use_google_metadata_as_visible_language(self, monkeypatch):
         analyzer = LanguageAnalyzer(provider="gemini", api_key="test-gemini-key")
 
         monkeypatch.setattr(
@@ -234,12 +287,46 @@ class TestLanguageAnalyzerProviders:
             "creative-1",
             {
                 "html": {"snippet": ""},
-                "creativeServingDecision": {"detectedLanguages": ["hi"]},
+                "creativeServingDecision": {"detectedLanguages": ["zh"]},
             },
             "HTML",
         )
 
+        assert not result.success
+        assert result.language_code is None
+        assert result.source == "gemini"
+
+    @pytest.mark.asyncio
+    async def test_video_analysis_prefers_rendered_evidence_over_metadata_text(self, monkeypatch):
+        analyzer = LanguageAnalyzer(provider="gemini", api_key="test-gemini-key")
+
+        monkeypatch.setattr(
+            analyzer,
+            "_detect_from_rendered_evidence",
+            lambda *args, **kwargs: analyzer._script_language_result(
+                "THỨ 4 SIÊU RẺ ĐỘC QUYỀN",
+                source="script_heuristic_rendered_evidence",
+            ),
+        )
+        monkeypatch.setattr(
+            analyzer,
+            "detect_language",
+            lambda text: analyzer._parse_response(
+                '{"language":"Chinese","language_code":"zh","confidence":0.9}'
+            ),
+        )
+
+        result = await analyzer.analyze_creative(
+            "creative-1",
+            {
+                "video": {
+                    "vastXml": "<VAST><AdTitle>metadata title</AdTitle></VAST>",
+                }
+            },
+            "VIDEO",
+        )
+
         assert result.success
-        assert result.language == "Hindi"
-        assert result.language_code == "hi"
-        assert result.source == "google_detected_language"
+        assert result.language == "Vietnamese"
+        assert result.language_code == "vi"
+        assert result.source == "script_heuristic_rendered_evidence"

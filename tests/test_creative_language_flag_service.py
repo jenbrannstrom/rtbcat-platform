@@ -149,6 +149,41 @@ def test_build_creative_language_flag_row_matches_burmese_in_myanmar() -> None:
     assert row["language_flag_reason"] == "MY matches MMR"
 
 
+def test_build_creative_language_flag_row_overrides_bad_google_zh_with_vietnamese_text() -> None:
+    creative = SimpleNamespace(
+        id="216139",
+        name="Vietnamese sale creative",
+        buyer_id="8087233591",
+        format="HTML",
+        approval_status="APPROVED",
+        advertiser_name=None,
+        detected_language="Chinese",
+        detected_language_code="zh",
+        language_source="google_detected_language",
+        raw_data={
+            "html": {
+                "snippet": "<div>THỨ 4 SIÊU RẺ ĐỘC QUYỀN THỨ 4 DEAL 1.000Đ</div>",
+            }
+        },
+    )
+
+    row = build_creative_language_flag_row(
+        creative=creative,
+        serving_countries=["IND"],
+        latest_geo_run=None,
+    )
+
+    assert row["detected_language_code"] == "zh"
+    assert row["heuristic_language_code"] == "vi"
+    assert row["effective_language_code"] == "vi"
+    assert row["language_flag_status"] == "red"
+    assert row["language_flag_reason"] == "VI mismatches IND"
+    assert row["language_flag_source"] == "heuristic_override_google_detected_language"
+    assert row["currency_flag_status"] == "red"
+    assert row["currency_flag_reason"] == "Currency VND conflicts with IND"
+    assert row["detected_currencies"] == ["VND"]
+
+
 def test_build_creative_language_flag_row_surfaces_geo_secondary_language_finding() -> None:
     creative = SimpleNamespace(
         id="2028723258945941508",

@@ -30,6 +30,7 @@ logger = logging.getLogger(__name__)
 _SCRIPT_LANGUAGE_PATTERNS: tuple[tuple[re.Pattern[str], str, str], ...] = (
     (re.compile(r"[\u0900-\u097F]"), "Hindi", "hi"),
     (re.compile(r"[\u1000-\u109F]"), "Burmese", "my"),
+    (re.compile(r"[ăắằẳẵặđơớờởỡợưứừửữựĂẮẰẲẴẶĐƠỚỜỞỠỢƯỨỪỬỮỰ]"), "Vietnamese", "vi"),
 )
 
 
@@ -277,6 +278,7 @@ Rules:
 - Do not ignore short CTA/button text like "instalar", "download", or "comprar ahora"
 - For short creatives, a single readable CTA/button word is enough to determine the language
 - Non-Latin scripts are strong signals: Devanagari text is Hindi ("hi") and Myanmar script is Burmese ("my") unless other readable ad copy clearly dominates
+- Vietnamese-specific letters such as Đ/đ, ă, ơ, and ư are strong Vietnamese ("vi") signals
 - If the text mixes multiple languages, still return the dominant language but lower confidence below 0.8
 - If the text is too short or ambiguous, set confidence below 0.5
 - If you cannot determine the language, respond with: {{"language": null, "language_code": null, "confidence": 0.0}}
@@ -555,6 +557,7 @@ Rules:
 - For short creatives, a single readable CTA/button word is enough to determine the language
 - Ignore tiny/partial ad chrome such as "AD", clipped labels, file names, or UI boilerplate unless there is no readable ad copy
 - Non-Latin scripts are strong signals: Devanagari text is Hindi ("hi") and Myanmar script is Burmese ("my") unless other readable ad copy clearly dominates
+- Vietnamese-specific letters such as Đ/đ, ă, ơ, and ư are strong Vietnamese ("vi") signals
 - If the image shows mixed languages, still return the dominant language but lower confidence below 0.8
 - If you cannot see any text in the image, respond with: {"language": null, "language_code": null, "confidence": 0.0}
 """
@@ -676,25 +679,19 @@ Rules:
     ) -> LanguageDetectionResult:
         """Analyze a creative and detect its language.
 
-        Tries text extraction first, falls back to vision-based detection
-        when text content is insufficient (common for image-based HTML ads
-        and video creatives).
+        Prefer visible evidence for visual formats, then fall back to static
+        metadata/text. Google detectedLanguages is intentionally not used as a
+        primary-language fallback for visual creatives because it has produced
+        false ZH labels for visibly Vietnamese ads.
         """
         text = self.extract_text_from_creative(raw_data, creative_format)
 
-        if text:
-            logger.debug("Analyzing language for creative %s with %s (text)", creative_id, self.provider)
-            result = self.detect_language(text)
-            if result.success:
-                return result
-
-        # Vision fallback: use thumbnail or extracted image URL
         image_source = self._resolve_image_for_creative(creative_id, raw_data, creative_format)
         if image_source:
-            logger.debug("Falling back to vision for creative %s with %s", creative_id, self.provider)
+            logger.debug("Analyzing language for creative %s with %s (vision)", creative_id, self.provider)
             result = self.detect_language_from_image(image_source)
             if result.success:
-                if creative_format == "HTML" and (result.language_code or "").lower() == "en":
+                if creative_format in {"HTML", "VIDEO"} and (result.language_code or "").lower() == "en":
                     evidence_result = self._detect_from_rendered_evidence(
                         creative_id,
                         raw_data,
@@ -707,19 +704,25 @@ Rules:
                         return evidence_result
                 return result
 
-        # Rendered evidence fallback: HTML ads often hide visible text in
-        # CSS backgrounds, canvas, JS-built DOM, or image assets.
-        evidence_result = self._detect_from_rendered_evidence(
-            creative_id,
-            raw_data,
-            creative_format,
-        )
-        if evidence_result.success:
-            return evidence_result
+        if creative_format in {"HTML", "VIDEO"}:
+            evidence_result = self._detect_from_rendered_evidence(
+                creative_id,
+                raw_data,
+                creative_format,
+            )
+            if evidence_result.success:
+                return evidence_result
 
-        google_result = self._google_detected_language_result(raw_data)
-        if google_result.success:
-            return google_result
+        if text:
+            logger.debug("Analyzing language for creative %s with %s (text)", creative_id, self.provider)
+            result = self.detect_language(text)
+            if result.success:
+                return result
+
+        if creative_format not in {"HTML", "VIDEO", "IMAGE"}:
+            google_result = self._google_detected_language_result(raw_data)
+            if google_result.success:
+                return google_result
 
         return LanguageDetectionResult(
             source=self.provider,
