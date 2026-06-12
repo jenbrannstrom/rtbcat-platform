@@ -17,6 +17,7 @@ _CURRENCY_PATTERNS = re.compile(
     r"\b(?:USD|EUR|GBP|JPY|INR|KRW|AED|SAR|MYR|SGD|THB|IDR|PHP|VND|BRL|AUD|CAD|CNY)\b)",
     re.IGNORECASE,
 )
+_VND_SUFFIX_PATTERN = re.compile(r"\d(?:[\d.,\s]*\d)?\s*[Đđ]\b")
 
 _CURRENCY_NORMALIZATION = {
     "$": "USD",
@@ -53,6 +54,10 @@ _CURRENCY_TO_COUNTRIES = {
     "USD": ["US"],
     "VND": ["VN"],
 }
+
+_VIETNAMESE_DISTINCT_RE = re.compile(
+    r"[ăắằẳẵặđơớờởỡợưứừửữựĂẮẰẲẴẶĐƠỚỜỞỠỢƯỨỪỬỮỰ]"
+)
 
 _PRIMARY_ENGLISH_MARKETS = {"US", "GB", "CA", "AU", "NZ", "IE", "ZA", "SG", "IN"}
 _ENGLISH_HINT_WORDS = {
@@ -97,10 +102,30 @@ _SPANISH_HINT_WORDS = {
     "mas",
 }
 
+_VIETNAMESE_HINT_WORDS = {
+    "chinh",
+    "con",
+    "den",
+    "doc",
+    "giam",
+    "hang",
+    "mua",
+    "ngay",
+    "phi",
+    "quyen",
+    "re",
+    "sau",
+    "sieu",
+    "thu",
+    "tra",
+    "truoc",
+}
+
 _LANGUAGE_NAMES = {
     "en": "English",
     "es": "Spanish",
     "hi": "Hindi",
+    "vi": "Vietnamese",
 }
 
 
@@ -180,6 +205,8 @@ def detect_currencies(text: str) -> list[str]:
         value = _CURRENCY_NORMALIZATION.get(token, token.upper())
         if value:
             normalized.add(value)
+    if _VND_SUFFIX_PATTERN.search(text or ""):
+        normalized.add("VND")
     return sorted(normalized)
 
 
@@ -196,9 +223,14 @@ def _detect_obvious_language_code(text: str) -> Optional[str]:
     words = re.findall(r"[A-Za-z]{2,}", text or "")
     if re.search(r"[\u0900-\u097F]", text or ""):
         return "hi"
+    if _VIETNAMESE_DISTINCT_RE.search(text or ""):
+        return "vi"
     if len(words) < 4:
         short_words = re.findall(r"[A-Za-z]{2,}", _normalize_token_text(text or ""))
         lowered_short = [word.lower() for word in short_words]
+        vietnamese_short_hits = sum(1 for word in lowered_short if word in _VIETNAMESE_HINT_WORDS)
+        if vietnamese_short_hits >= 2:
+            return "vi"
         if any(word in _SPANISH_HINT_WORDS for word in lowered_short):
             return "es"
         if any(word in _ENGLISH_HINT_WORDS for word in lowered_short):
@@ -208,7 +240,10 @@ def _detect_obvious_language_code(text: str) -> Optional[str]:
     lowered = [word.lower() for word in re.findall(r"[A-Za-z]{2,}", _normalize_token_text(text or ""))]
     english_hits = sum(1 for word in lowered if word in _ENGLISH_HINT_WORDS)
     spanish_hits = sum(1 for word in lowered if word in _SPANISH_HINT_WORDS)
+    vietnamese_hits = sum(1 for word in lowered if word in _VIETNAMESE_HINT_WORDS)
 
+    if vietnamese_hits >= 2 and vietnamese_hits >= english_hits and vietnamese_hits >= spanish_hits:
+        return "vi"
     if english_hits >= 2 and english_hits > spanish_hits:
         return "en"
     if spanish_hits >= 1 and spanish_hits >= english_hits:
@@ -506,13 +541,32 @@ def build_creative_language_flag_row(
 ) -> dict[str, Any]:
     serving_countries = _normalize_country_list(serving_countries)
     text = extract_creative_market_text(creative)
-    heuristic_language_code = infer_language_code(text) if not getattr(creative, "detected_language_code", None) else None
+    heuristic_language_code = infer_language_code(text)
+    detected_language_code = getattr(creative, "detected_language_code", None)
+    language_source = getattr(creative, "language_source", None)
+    effective_detected_language_code = detected_language_code
+    language_flag_source_override = None
+    if (
+        detected_language_code
+        and heuristic_language_code
+        and heuristic_language_code != str(detected_language_code).lower()
+        and language_source == "google_detected_language"
+    ):
+        stored_match = check_language_country_match(detected_language_code, serving_countries)
+        heuristic_match = check_language_country_match(heuristic_language_code, serving_countries)
+        if heuristic_language_code in {"hi", "vi"} or (
+            heuristic_match["matching_countries"] and not stored_match["matching_countries"]
+        ):
+            effective_detected_language_code = None
+            language_flag_source_override = "heuristic_override_google_detected_language"
     detected_currencies = detect_currencies(text)
     language_flag = assess_language_market_flag(
-        getattr(creative, "detected_language_code", None),
+        effective_detected_language_code,
         serving_countries,
         heuristic_language_code=heuristic_language_code,
     )
+    if language_flag_source_override:
+        language_flag = {**language_flag, "source": language_flag_source_override}
     plaintext_language_signal = _build_native_plaintext_language_signal(
         creative=creative,
         serving_countries=serving_countries,
