@@ -16,10 +16,15 @@ This file is not the source of truth for deployment architecture. Use [ARCHITECT
 
 ## Current schema source of truth
 
-The canonical schema file in this repo is:
-- [storage/postgres_schema.sql](storage/postgres_schema.sql)
+The deployed schema is the result of applying
+[storage/postgres_migrations/](storage/postgres_migrations/) in order — the
+migrations are authoritative.
 
-That file currently defines `41` tables.
+[storage/postgres_schema.sql](storage/postgres_schema.sql) is a convenience
+snapshot and is incomplete: it omits tables created only by migrations or
+created dynamically by the importer (e.g. `rtb_daily`, `rtb_bidstream`,
+`users`, `user_sessions`, `system_settings`, conversion tables). Do not treat
+it as canonical.
 
 ## CSV import reference
 
@@ -636,9 +641,8 @@ Granular performance data per creative.
 | geography | TEXT | Country code (ISO 3166-1) |
 | device_type | TEXT | Device type |
 | placement | TEXT | Placement info |
-| seat_id | INTEGER | Seat ID |
-| billing_id | TEXT | Billing ID |
-| reached_queries | INTEGER | Bid requests reached |
+| seat_id | INTEGER | Seat ID (join to `seats` for billing attribution) |
+| reached_queries | INTEGER | Reached queries |
 | created_at | TIMESTAMP | Creation time |
 | updated_at | TIMESTAMP | Last update time |
 
@@ -1200,31 +1204,6 @@ Publisher registry.
 | publisher_id | TEXT | Publisher ID (unique) |
 | publisher_name | TEXT | Publisher name |
 | first_seen | TIMESTAMP | First seen time |
-
-### geographies
-
-Geography lookup table.
-
-| Column | Type | Description |
-|--------|------|-------------|
-| id | INTEGER | Primary key |
-| country_code | VARCHAR(2) | ISO country code |
-| country_name | VARCHAR(100) | Country name |
-| city_name | VARCHAR(100) | City name |
-| created_at | TIMESTAMP | Creation time |
-
-**Unique Constraint:** (country_code, city_name)
-
-### billing_accounts
-
-Billing account lookup table.
-
-| Column | Type | Description |
-|--------|------|-------------|
-| id | INTEGER | Primary key |
-| billing_id | TEXT | Billing ID (unique) |
-| name | TEXT | Account name |
-| created_at | TIMESTAMP | Creation time |
 
 ### recommendations
 

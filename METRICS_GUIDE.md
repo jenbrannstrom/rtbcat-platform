@@ -63,38 +63,47 @@ This guide explains how to interpret and use this data for QPS optimization.
 
 ### Funnel Metrics
 
+Order verified against production seat data, June 2026 (7-day averages for
+seat `1487810529` shown for scale):
+
 ```
-Bid Requests          (from Google to your bidder)
+Inventory Matches     (~1M QPS — auction queries matching your pretargeting)
+      │  Google throttles to your endpoint QPS quota
+      ▼
+Bid Requests          (39,074 QPS — callouts actually sent to your endpoint)
       │
       ▼
-Inventory Matches     (matches pretargeting rules)
+Successful Responses  (38,029 QPS — your endpoint answered without error)
       │
       ▼
-Reached Queries       (reached your bidder)
+Bids                  (53 QPS — responses that contained a bid)
       │
       ▼
-Bids                  (your bidder decided to bid)
+Bids in Auction       (bids that survived filtering into the auction)
       │
       ▼
-Bids in Auction       (entered the auction)
-      │
-      ▼
-Auctions Won          (you won)
+Auctions Won          (19.6 QPS)
       │
       ▼
 Impressions           (ad served)
 ```
 
+**`Reached Queries` is NOT endpoint traffic.** In the creative performance
+reports it is attributed per creative and lands near the bids/won level
+(21.5 QPS in the example above, vs 39,074 QPS of real callouts). Never use it
+to measure endpoint load or QPS-quota utilization — use `Bid Requests`
+(this is what Observed QPS in the endpoints UI is derived from).
+
 ### Efficiency Rates
 
 | Metric | Formula | Target | Meaning |
 |--------|---------|--------|---------|
-| **Pretargeting Filter Rate** | `1 - (Inventory Matches / Bid Requests)` | Minimize | Traffic filtered by pretargeting |
-| **Reach Rate** | `Reached Queries / Bid Requests` | Maximize | Traffic that reaches your bidder |
-| **Bid Rate** | `Bids / Reached Queries` | Maximize | % of requests your bidder bids on |
+| **Callout Rate** | `Bid Requests / Inventory Matches` | Context | Share of matched inventory Google actually sends (QPS-quota throttling) |
+| **Response Rate** | `Successful Responses / Bid Requests` | Maximize | Endpoint reliability |
+| **Bid Rate** | `Bids / Bid Requests` | Maximize | % of received callouts your bidder bids on |
 | **Auction Participation** | `Bids in Auction / Bids` | Maximize | Bids that enter auction |
 | **Win Rate** | `Auctions Won / Bids in Auction` | Optimize | % of auctions won |
-| **Efficiency Rate** | `Impressions / Reached Queries` | Maximize | Overall funnel efficiency |
+| **Efficiency Rate** (legacy) | `Impressions / Reached Queries` | — | Exposed as `efficiency_rate_pct` in agent stats; near-1 by construction since reached_queries is post-bid |
 
 ### Cost Metrics
 
@@ -189,16 +198,8 @@ Impressions           (ad served)
 | **Low Viewability** | Viewability < 50% | Wasted impressions | Block placements |
 | **Regional Waste** | Region CTR < average | Poor targeting | Exclude regions |
 
-### Waste Signals Table
-
-Cat-Scan stores detected waste in `inefficiency_signals`:
-
-```sql
-SELECT signal_type, segment_type, segment_value, waste_pct, wasted_qps
-FROM inefficiency_signals
-WHERE detected_at > date('now', '-7 days')
-ORDER BY wasted_qps DESC
-```
+Waste signals are computed on demand by the analytics endpoints (there is no
+persisted `inefficiency_signals` table).
 
 ---
 
