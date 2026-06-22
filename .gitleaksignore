@@ -6,3 +6,4 @@
 2535b4916e32269786d70850c963e2bc1cbe4a4d:terraform/terraform.tfstate:aws-access-token:273
 2535b4916e32269786d70850c963e2bc1cbe4a4d:terraform/terraform.tfstate:aws-access-token:319
 7988bdbc58a49955bfc6e22de961eeda494c4466:tests/test_language_ai_config.py:generic-api-key:108
+cfdfd4e9e6bdf430aa7bb280ac086e12ba2ac328:MCP_INTEGRATION.md:curl-auth-header:41
