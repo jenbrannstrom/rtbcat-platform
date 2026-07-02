@@ -174,6 +174,35 @@ class AgentStatsRepository:
             statement_timeout_ms=self.statement_timeout_ms,
         )
 
+    async def get_daily_spend_rows(self, buyer_id: str, days: int) -> list[dict[str, Any]]:
+        return await pg_query_with_timeout(
+            """
+            SELECT
+                metric_date,
+                COALESCE(SUM(spend_micros), 0) AS spend_micros,
+                COALESCE(SUM(impressions), 0) AS impressions,
+                COUNT(DISTINCT creative_id) AS active_creatives,
+                COUNT(DISTINCT billing_id) AS active_billing_ids
+            FROM config_creative_daily
+            WHERE buyer_account_id = %s
+              AND metric_date >= CURRENT_DATE - (%s::int - 1)
+            GROUP BY metric_date
+            ORDER BY metric_date
+            """,
+            (buyer_id, days),
+            statement_timeout_ms=self.statement_timeout_ms,
+        )
+
+    async def get_spend_freshness(self, buyer_id: str) -> dict[str, Any] | None:
+        return await pg_query_one(
+            """
+            SELECT MAX(metric_date) AS latest_metric_date
+            FROM config_creative_daily
+            WHERE buyer_account_id = %s
+            """,
+            (buyer_id,),
+        )
+
     async def get_top_apps(self, buyer_id: str, days: int, limit: int) -> list[dict[str, Any]]:
         return await pg_query_with_timeout(
             """
@@ -275,6 +304,78 @@ class AgentStatsService:
                 ],
                 "precomputed_only": True,
             },
+        }
+
+    async def get_daily_spend(
+        self,
+        *,
+        buyer_id: str,
+        days: int,
+    ) -> dict[str, Any]:
+        safe_days = max(1, min(days, 90))
+
+        buyer = await self._repo.get_buyer(buyer_id)
+        if not buyer:
+            raise HTTPException(status_code=404, detail="Buyer seat not found.")
+
+        rows = await self._repo.get_daily_spend_rows(buyer_id, safe_days)
+        freshness_row = await self._repo.get_spend_freshness(buyer_id) or {}
+
+        daily_spend = [self._daily_spend_payload(row) for row in rows]
+        spend_micros = sum(row["spend_micros"] for row in daily_spend)
+        impressions = sum(row["impressions"] for row in daily_spend)
+
+        latest = freshness_row.get("latest_metric_date")
+        days_behind = (date.today() - latest).days if isinstance(latest, date) else None
+        if days_behind is None:
+            data_status = "missing"
+        elif days_behind <= 2:
+            data_status = "fresh"
+        elif days_behind <= 7:
+            data_status = "stale"
+        else:
+            data_status = "very_stale"
+
+        return {
+            "api_version": "agent.v1",
+            "buyer": {
+                "buyer_id": str(buyer["buyer_id"]),
+                "bidder_id": buyer.get("bidder_id"),
+                "display_name": buyer.get("display_name"),
+                "active": bool(buyer.get("active", True)),
+                "last_synced": str(buyer.get("last_synced")) if buyer.get("last_synced") else None,
+            },
+            "period": {
+                "days": safe_days,
+                "start_date": daily_spend[0]["metric_date"] if daily_spend else None,
+                "end_date": daily_spend[-1]["metric_date"] if daily_spend else None,
+            },
+            "daily_spend": daily_spend,
+            "totals": {
+                "spend_micros": spend_micros,
+                "spend_usd": _money_from_micros(spend_micros),
+                "impressions": impressions,
+            },
+            "freshness": {
+                "latest_metric_date": _date_str(latest),
+                "days_behind": days_behind,
+                "data_status": data_status,
+            },
+            "data_sources": {
+                "tables": ["config_creative_daily", "buyer_seats"],
+                "precomputed_only": True,
+            },
+        }
+
+    def _daily_spend_payload(self, row: dict[str, Any]) -> dict[str, Any]:
+        spend_micros = _int(row.get("spend_micros"))
+        return {
+            "metric_date": _date_str(row.get("metric_date")),
+            "spend_micros": spend_micros,
+            "spend_usd": _money_from_micros(spend_micros),
+            "impressions": _int(row.get("impressions")),
+            "active_creatives": _int(row.get("active_creatives")),
+            "active_billing_ids": _int(row.get("active_billing_ids")),
         }
 
     def _build_totals(

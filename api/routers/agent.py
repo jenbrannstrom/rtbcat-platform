@@ -265,6 +265,42 @@ async def get_agent_stats_summary(
     return payload
 
 
+@router.get("/daily-spend")
+async def get_agent_daily_spend(
+    request: Request,
+    buyer_id: str | None = Query(None, description="Buyer seat ID. Optional for one-buyer agent users."),
+    days: int = Query(30, ge=1, le=90),
+    store=Depends(get_store),
+    context: AgentAuthContext = Depends(require_agent_context),
+    stats_service: AgentStatsService = Depends(get_agent_stats_service),
+    auth_service: AuthService = Depends(get_auth_service),
+) -> dict[str, Any]:
+    """Return neutral buyer-scoped daily spend rows with data-freshness status."""
+    resolved_buyer_id = await resolve_buyer_id(buyer_id, store=store, user=context.user)
+    if not resolved_buyer_id:
+        raise HTTPException(status_code=400, detail="buyer_id is required.")
+    if context.token.buyer_id and context.token.buyer_id != resolved_buyer_id:
+        raise HTTPException(
+            status_code=403,
+            detail="Agent token is not scoped to this buyer.",
+        )
+
+    payload = await stats_service.get_daily_spend(
+        buyer_id=resolved_buyer_id,
+        days=days,
+    )
+    await auth_service.log_audit(
+        audit_id=str(uuid.uuid4()),
+        action="agent_daily_spend_read",
+        user_id=context.user.id,
+        resource_type="agent_api",
+        resource_id=resolved_buyer_id,
+        details=f"token_id={context.token.id}; buyer_id={resolved_buyer_id}; days={days}",
+        ip_address=request.client.host if request.client else None,
+    )
+    return payload
+
+
 @router.post("/tokens", response_model=AgentTokenCreateResponse)
 async def create_agent_token(
     payload: AgentTokenCreateRequest,
