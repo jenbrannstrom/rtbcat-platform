@@ -174,33 +174,33 @@ class AgentStatsRepository:
             statement_timeout_ms=self.statement_timeout_ms,
         )
 
-    async def get_daily_spend_rows(self, buyer_id: str, days: int) -> list[dict[str, Any]]:
+    async def get_daily_spend_rows(
+        self, buyer_id: str, start_date: date, end_date: date
+    ) -> list[dict[str, Any]]:
+        # One row per requested date via generate_series so callers can tell
+        # "no source rows" apart from a true zero-spend day with source rows.
         return await pg_query_with_timeout(
             """
+            WITH requested_dates AS (
+                SELECT generate_series(%s::date, %s::date, interval '1 day')::date AS metric_date
+            )
             SELECT
-                metric_date,
-                COALESCE(SUM(spend_micros), 0) AS spend_micros,
-                COALESCE(SUM(impressions), 0) AS impressions,
-                COUNT(DISTINCT creative_id) AS active_creatives,
-                COUNT(DISTINCT billing_id) AS active_billing_ids
-            FROM config_creative_daily
-            WHERE buyer_account_id = %s
-              AND metric_date >= CURRENT_DATE - (%s::int - 1)
-            GROUP BY metric_date
-            ORDER BY metric_date
+                requested_dates.metric_date,
+                COALESCE(SUM(r.impressions), 0)::bigint AS impressions,
+                COALESCE(SUM(r.clicks), 0)::bigint AS clicks,
+                COALESCE(SUM(r.spend_micros), 0)::bigint AS spend_micros,
+                COUNT(r.metric_date)::int AS source_row_count,
+                COUNT(DISTINCT NULLIF(r.app_name, ''))::int AS app_count,
+                COUNT(DISTINCT NULLIF(r.billing_id, ''))::int AS billing_count
+            FROM requested_dates
+            LEFT JOIN rtb_app_daily r
+              ON r.metric_date = requested_dates.metric_date
+             AND r.buyer_account_id = %s
+            GROUP BY requested_dates.metric_date
+            ORDER BY requested_dates.metric_date
             """,
-            (buyer_id, days),
+            (start_date, end_date, buyer_id),
             statement_timeout_ms=self.statement_timeout_ms,
-        )
-
-    async def get_spend_freshness(self, buyer_id: str) -> dict[str, Any] | None:
-        return await pg_query_one(
-            """
-            SELECT MAX(metric_date) AS latest_metric_date
-            FROM config_creative_daily
-            WHERE buyer_account_id = %s
-            """,
-            (buyer_id,),
         )
 
     async def get_top_apps(self, buyer_id: str, days: int, limit: int) -> list[dict[str, Any]]:
@@ -310,31 +310,31 @@ class AgentStatsService:
         self,
         *,
         buyer_id: str,
-        days: int,
+        start_date: date,
+        end_date: date,
+        include_empty: bool = True,
     ) -> dict[str, Any]:
-        safe_days = max(1, min(days, 90))
+        if end_date < start_date:
+            raise HTTPException(
+                status_code=400, detail="end_date must be on or after start_date."
+            )
+        requested_days = (end_date - start_date).days + 1
+        if requested_days > 90:
+            raise HTTPException(
+                status_code=400,
+                detail="Date range is limited to 90 days per request. Backfills can call in chunks.",
+            )
 
         buyer = await self._repo.get_buyer(buyer_id)
         if not buyer:
             raise HTTPException(status_code=404, detail="Buyer seat not found.")
 
-        rows = await self._repo.get_daily_spend_rows(buyer_id, safe_days)
-        freshness_row = await self._repo.get_spend_freshness(buyer_id) or {}
+        raw_rows = await self._repo.get_daily_spend_rows(buyer_id, start_date, end_date)
+        rows = [self._daily_spend_payload(row, buyer_id) for row in raw_rows]
 
-        daily_spend = [self._daily_spend_payload(row) for row in rows]
-        spend_micros = sum(row["spend_micros"] for row in daily_spend)
-        impressions = sum(row["impressions"] for row in daily_spend)
-
-        latest = freshness_row.get("latest_metric_date")
-        days_behind = (date.today() - latest).days if isinstance(latest, date) else None
-        if days_behind is None:
-            data_status = "missing"
-        elif days_behind <= 2:
-            data_status = "fresh"
-        elif days_behind <= 7:
-            data_status = "stale"
-        else:
-            data_status = "very_stale"
+        missing_dates = [row["metric_date"] for row in rows if row["source_status"] == "missing"]
+        if not include_empty:
+            rows = [row for row in rows if row["source_status"] == "present"]
 
         return {
             "api_version": "agent.v1",
@@ -346,36 +346,43 @@ class AgentStatsService:
                 "last_synced": str(buyer.get("last_synced")) if buyer.get("last_synced") else None,
             },
             "period": {
-                "days": safe_days,
-                "start_date": daily_spend[0]["metric_date"] if daily_spend else None,
-                "end_date": daily_spend[-1]["metric_date"] if daily_spend else None,
+                "start_date": start_date.isoformat(),
+                "end_date": end_date.isoformat(),
+                "days": requested_days,
             },
-            "daily_spend": daily_spend,
-            "totals": {
-                "spend_micros": spend_micros,
-                "spend_usd": _money_from_micros(spend_micros),
-                "impressions": impressions,
-            },
-            "freshness": {
-                "latest_metric_date": _date_str(latest),
-                "days_behind": days_behind,
-                "data_status": data_status,
-            },
-            "data_sources": {
-                "tables": ["config_creative_daily", "buyer_seats"],
+            "data_source": {
+                "table": "rtb_app_daily",
                 "precomputed_only": True,
+                "source_metric": "Spend (buyer currency)",
+                # RTBcat does not store report currency; consumers map it externally.
+                "currency": None,
             },
+            "rows": rows,
+            "summary": {
+                "requested_days": requested_days,
+                "days_with_source_rows": requested_days - len(missing_dates),
+                "total_impressions": sum(_int(row.get("impressions")) for row in raw_rows),
+                "total_clicks": sum(_int(row.get("clicks")) for row in raw_rows),
+                "total_spend_micros": sum(_int(row.get("spend_micros")) for row in raw_rows),
+            },
+            "warnings": [
+                f"No RTBcat spend source rows found for {missing_date}."
+                for missing_date in missing_dates
+            ],
         }
 
-    def _daily_spend_payload(self, row: dict[str, Any]) -> dict[str, Any]:
-        spend_micros = _int(row.get("spend_micros"))
+    def _daily_spend_payload(self, row: dict[str, Any], buyer_id: str) -> dict[str, Any]:
+        source_row_count = _int(row.get("source_row_count"))
         return {
             "metric_date": _date_str(row.get("metric_date")),
-            "spend_micros": spend_micros,
-            "spend_usd": _money_from_micros(spend_micros),
+            "buyer_account_id": buyer_id,
             "impressions": _int(row.get("impressions")),
-            "active_creatives": _int(row.get("active_creatives")),
-            "active_billing_ids": _int(row.get("active_billing_ids")),
+            "clicks": _int(row.get("clicks")),
+            "spend_micros": _int(row.get("spend_micros")),
+            "source_row_count": source_row_count,
+            "app_count": _int(row.get("app_count")),
+            "billing_count": _int(row.get("billing_count")),
+            "source_status": "present" if source_row_count > 0 else "missing",
         }
 
     def _build_totals(

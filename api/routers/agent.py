@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from datetime import date
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -268,14 +269,16 @@ async def get_agent_stats_summary(
 @router.get("/daily-spend")
 async def get_agent_daily_spend(
     request: Request,
+    start_date: date = Query(..., description="Inclusive start metric date (YYYY-MM-DD)."),
+    end_date: date = Query(..., description="Inclusive end metric date (YYYY-MM-DD). Must be >= start_date."),
     buyer_id: str | None = Query(None, description="Buyer seat ID. Optional for one-buyer agent users."),
-    days: int = Query(30, ge=1, le=90),
+    include_empty: bool = Query(True, description="Return a row for every requested date, even without source rows."),
     store=Depends(get_store),
     context: AgentAuthContext = Depends(require_agent_context),
     stats_service: AgentStatsService = Depends(get_agent_stats_service),
     auth_service: AuthService = Depends(get_auth_service),
 ) -> dict[str, Any]:
-    """Return neutral buyer-scoped daily spend rows with data-freshness status."""
+    """Return date-explicit, buyer-scoped daily spend rows from precomputed data."""
     resolved_buyer_id = await resolve_buyer_id(buyer_id, store=store, user=context.user)
     if not resolved_buyer_id:
         raise HTTPException(status_code=400, detail="buyer_id is required.")
@@ -287,7 +290,9 @@ async def get_agent_daily_spend(
 
     payload = await stats_service.get_daily_spend(
         buyer_id=resolved_buyer_id,
-        days=days,
+        start_date=start_date,
+        end_date=end_date,
+        include_empty=include_empty,
     )
     await auth_service.log_audit(
         audit_id=str(uuid.uuid4()),
@@ -295,7 +300,11 @@ async def get_agent_daily_spend(
         user_id=context.user.id,
         resource_type="agent_api",
         resource_id=resolved_buyer_id,
-        details=f"token_id={context.token.id}; buyer_id={resolved_buyer_id}; days={days}",
+        details=(
+            f"token_id={context.token.id}; buyer_id={resolved_buyer_id}; "
+            f"start_date={start_date.isoformat()}; end_date={end_date.isoformat()}; "
+            f"include_empty={include_empty}"
+        ),
         ip_address=request.client.host if request.client else None,
     )
     return payload
