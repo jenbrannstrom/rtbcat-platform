@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import date
 from types import SimpleNamespace
 
 from fastapi import FastAPI
@@ -34,23 +35,33 @@ class _StubStatsService:
         return {
             "api_version": "agent.v1",
             "buyer": {"buyer_id": kwargs["buyer_id"]},
-            "period": {"days": kwargs["days"]},
-            "daily_spend": [
+            "period": {
+                "start_date": kwargs["start_date"].isoformat(),
+                "end_date": kwargs["end_date"].isoformat(),
+                "days": 1,
+            },
+            "data_source": {"table": "rtb_app_daily", "precomputed_only": True},
+            "rows": [
                 {
-                    "metric_date": "2026-07-01",
-                    "spend_micros": 12_500_000,
-                    "spend_usd": 12.5,
+                    "metric_date": kwargs["start_date"].isoformat(),
+                    "buyer_account_id": kwargs["buyer_id"],
                     "impressions": 4200,
-                    "active_creatives": 3,
-                    "active_billing_ids": 1,
+                    "clicks": 17,
+                    "spend_micros": 12_500_000,
+                    "source_row_count": 3,
+                    "app_count": 2,
+                    "billing_count": 1,
+                    "source_status": "present",
                 }
             ],
-            "totals": {"spend_micros": 12_500_000, "spend_usd": 12.5, "impressions": 4200},
-            "freshness": {
-                "latest_metric_date": "2026-07-01",
-                "days_behind": 1,
-                "data_status": "fresh",
+            "summary": {
+                "requested_days": 1,
+                "days_with_source_rows": 1,
+                "total_impressions": 4200,
+                "total_clicks": 17,
+                "total_spend_micros": 12_500_000,
             },
+            "warnings": [],
         }
 
 
@@ -146,21 +157,32 @@ def test_stats_summary_rejects_buyer_outside_token_hard_scope() -> None:
     assert stats.calls == []
 
 
-def test_daily_spend_returns_neutral_payload_and_audits_read() -> None:
+def test_daily_spend_returns_date_explicit_payload_and_audits_read() -> None:
     stats = _StubStatsService()
     auth = _StubAuthService()
     client = _client(stats, auth, _context())
 
-    response = client.get("/api/agent/v1/daily-spend?buyer_id=buyer-1&days=30")
+    response = client.get(
+        "/api/agent/v1/daily-spend?buyer_id=buyer-1&start_date=2026-07-01&end_date=2026-07-01"
+    )
 
     assert response.status_code == 200
     payload = response.json()
     assert payload["api_version"] == "agent.v1"
-    assert payload["daily_spend"][0]["metric_date"] == "2026-07-01"
-    assert payload["freshness"]["data_status"] == "fresh"
-    assert stats.daily_spend_calls == [{"buyer_id": "buyer-1", "days": 30}]
+    assert payload["rows"][0]["metric_date"] == "2026-07-01"
+    assert payload["rows"][0]["source_status"] == "present"
+    assert payload["summary"]["total_spend_micros"] == 12_500_000
+    assert stats.daily_spend_calls == [
+        {
+            "buyer_id": "buyer-1",
+            "start_date": date(2026, 7, 1),
+            "end_date": date(2026, 7, 1),
+            "include_empty": True,
+        }
+    ]
     assert auth.audit_calls[0]["action"] == "agent_daily_spend_read"
     assert auth.audit_calls[0]["resource_id"] == "buyer-1"
+    assert "start_date=2026-07-01" in auth.audit_calls[0]["details"]
 
 
 def test_daily_spend_rejects_buyer_outside_token_hard_scope() -> None:
@@ -168,10 +190,25 @@ def test_daily_spend_rejects_buyer_outside_token_hard_scope() -> None:
     auth = _StubAuthService()
     client = _client(stats, auth, _context(token_buyer_id="buyer-2"))
 
-    response = client.get("/api/agent/v1/daily-spend?buyer_id=buyer-1")
+    response = client.get(
+        "/api/agent/v1/daily-spend?buyer_id=buyer-1&start_date=2026-07-01&end_date=2026-07-01"
+    )
 
     assert response.status_code == 403
     assert response.json()["detail"] == "Agent token is not scoped to this buyer."
+    assert stats.daily_spend_calls == []
+
+
+def test_daily_spend_rejects_invalid_date_format_with_422() -> None:
+    stats = _StubStatsService()
+    auth = _StubAuthService()
+    client = _client(stats, auth, _context())
+
+    response = client.get(
+        "/api/agent/v1/daily-spend?buyer_id=buyer-1&start_date=not-a-date&end_date=2026-07-01"
+    )
+
+    assert response.status_code == 422
     assert stats.daily_spend_calls == []
 
 
