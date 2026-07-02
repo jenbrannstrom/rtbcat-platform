@@ -13,6 +13,7 @@ from tests.support.asgi_client import SyncASGIClient
 class _StubStatsService:
     def __init__(self) -> None:
         self.calls: list[dict] = []
+        self.daily_spend_calls: list[dict] = []
 
     async def get_stats_summary(self, **kwargs):
         self.calls.append(kwargs)
@@ -25,6 +26,30 @@ class _StubStatsService:
                 "subject": "Buyer 7-day Cat-Scan performance summary",
                 "bullets": ["Reached 1,000 queries."],
                 "markdown": "- Reached 1,000 queries.",
+            },
+        }
+
+    async def get_daily_spend(self, **kwargs):
+        self.daily_spend_calls.append(kwargs)
+        return {
+            "api_version": "agent.v1",
+            "buyer": {"buyer_id": kwargs["buyer_id"]},
+            "period": {"days": kwargs["days"]},
+            "daily_spend": [
+                {
+                    "metric_date": "2026-07-01",
+                    "spend_micros": 12_500_000,
+                    "spend_usd": 12.5,
+                    "impressions": 4200,
+                    "active_creatives": 3,
+                    "active_billing_ids": 1,
+                }
+            ],
+            "totals": {"spend_micros": 12_500_000, "spend_usd": 12.5, "impressions": 4200},
+            "freshness": {
+                "latest_metric_date": "2026-07-01",
+                "days_behind": 1,
+                "data_status": "fresh",
             },
         }
 
@@ -119,6 +144,35 @@ def test_stats_summary_rejects_buyer_outside_token_hard_scope() -> None:
     assert response.status_code == 403
     assert response.json()["detail"] == "Agent token is not scoped to this buyer."
     assert stats.calls == []
+
+
+def test_daily_spend_returns_neutral_payload_and_audits_read() -> None:
+    stats = _StubStatsService()
+    auth = _StubAuthService()
+    client = _client(stats, auth, _context())
+
+    response = client.get("/api/agent/v1/daily-spend?buyer_id=buyer-1&days=30")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["api_version"] == "agent.v1"
+    assert payload["daily_spend"][0]["metric_date"] == "2026-07-01"
+    assert payload["freshness"]["data_status"] == "fresh"
+    assert stats.daily_spend_calls == [{"buyer_id": "buyer-1", "days": 30}]
+    assert auth.audit_calls[0]["action"] == "agent_daily_spend_read"
+    assert auth.audit_calls[0]["resource_id"] == "buyer-1"
+
+
+def test_daily_spend_rejects_buyer_outside_token_hard_scope() -> None:
+    stats = _StubStatsService()
+    auth = _StubAuthService()
+    client = _client(stats, auth, _context(token_buyer_id="buyer-2"))
+
+    response = client.get("/api/agent/v1/daily-spend?buyer_id=buyer-1")
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Agent token is not scoped to this buyer."
+    assert stats.daily_spend_calls == []
 
 
 def test_create_token_defaults_to_single_buyer_hard_scope() -> None:
