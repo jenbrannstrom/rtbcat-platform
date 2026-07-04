@@ -58,6 +58,7 @@ from api.session_middleware import SessionAuthMiddleware
 from api.auth_bootstrap import router as bootstrap_router, _auto_heal_bootstrap_status
 from api.auth_oauth_proxy import router as auth_router, cleanup_sessions
 from api.auth_authing import router as authing_router
+from services.agent_token_service import AgentTokenService
 from api.auth_password import router as password_router
 from config import ConfigManager
 from storage.postgres_store import PostgresStore
@@ -201,6 +202,14 @@ async def lifespan(app: FastAPI):
             logger.info(f"Cleaned up {cleanup_result['sessions_deleted']} expired sessions")
     except Exception as e:
         logger.warning(f"Failed to cleanup sessions: {e}")
+
+    # Cleanup expired agent tokens on startup (mirrors session cleanup above)
+    try:
+        agent_tokens_revoked = await AgentTokenService().cleanup_expired_tokens()
+        if agent_tokens_revoked > 0:
+            logger.info(f"Revoked {agent_tokens_revoked} expired agent tokens")
+    except Exception as e:
+        logger.warning(f"Failed to cleanup agent tokens: {e}")
 
     logger.info("Cat-Scan API started")
 

@@ -159,3 +159,22 @@ class AgentTokensRepository:
             (revoked_by, token_id),
         )
         return rowcount > 0
+
+    async def cleanup_expired_tokens(self) -> int:
+        """Revoke tokens whose expiry has passed but were never revoked.
+
+        Returns the number of rows revoked. ``revoked_by`` is left NULL to mark
+        these as system-initiated rather than attributed to a user. The
+        ``::timestamptz`` cast keeps the comparison correct whether ``expires_at``
+        is stored as timestamptz or as an ISO-8601 string (the service writes
+        ``expires_at.isoformat()`` on insert).
+        """
+        return await pg_execute(
+            """
+            UPDATE agent_api_tokens
+            SET is_active = FALSE,
+                revoked_at = NOW()
+            WHERE revoked_at IS NULL
+              AND expires_at::timestamptz < NOW()
+            """,
+        )
