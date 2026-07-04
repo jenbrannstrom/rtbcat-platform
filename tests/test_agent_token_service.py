@@ -67,6 +67,21 @@ class _FakeAgentTokenRepo:
     async def mark_token_used(self, **kwargs) -> None:
         self.last_used.append(kwargs)
 
+    async def cleanup_expired_tokens(self) -> int:
+        now = datetime.now(UTC)
+        revoked = 0
+        for row in self.rows_by_id.values():
+            if row.get("revoked_at") is not None:
+                continue
+            expires_at = row["expires_at"]
+            if isinstance(expires_at, str):
+                expires_at = datetime.fromisoformat(expires_at)
+            if expires_at <= now:
+                row["is_active"] = False
+                row["revoked_at"] = now.isoformat()
+                revoked += 1
+        return revoked
+
 
 @pytest.mark.asyncio
 async def test_create_token_returns_plaintext_once_and_stores_hash() -> None:
@@ -171,3 +186,37 @@ async def test_authenticate_token_rejects_expired_token() -> None:
 
     assert exc.value.status_code == 401
     assert "expired" in str(exc.value.detail)
+
+
+@pytest.mark.asyncio
+async def test_cleanup_expired_tokens_revokes_only_expired_unrevoked() -> None:
+    repo = _FakeAgentTokenRepo()
+    service = AgentTokenService(repo=repo, auth_service=_FakeAuthService())
+    valid = await service.create_token(
+        name="Still valid",
+        user_id="agent-user",
+        buyer_id="buyer-1",
+        scopes=[AGENT_STATS_READ_SCOPE],
+        expires_in_days=30,
+        created_by="admin-user",
+    )
+    expired = await service.create_token(
+        name="Long expired",
+        user_id="agent-user",
+        buyer_id="buyer-1",
+        scopes=[AGENT_STATS_READ_SCOPE],
+        expires_in_days=1,
+        created_by="admin-user",
+    )
+    repo.rows_by_id[expired.record.id]["expires_at"] = datetime.now(UTC) - timedelta(seconds=1)
+
+    revoked = await service.cleanup_expired_tokens()
+
+    assert revoked == 1
+    assert repo.rows_by_id[expired.record.id]["is_active"] is False
+    assert repo.rows_by_id[expired.record.id]["revoked_at"] is not None
+    # the still-valid token is untouched
+    assert repo.rows_by_id[valid.record.id]["is_active"] is True
+    assert repo.rows_by_id[valid.record.id]["revoked_at"] is None
+    # idempotent: a second sweep revokes nothing
+    assert await service.cleanup_expired_tokens() == 0
