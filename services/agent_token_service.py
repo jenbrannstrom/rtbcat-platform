@@ -273,3 +273,13 @@ class AgentTokenService:
 
     async def revoke_token(self, *, token_id: str, revoked_by: str | None) -> bool:
         return await self._repo.revoke_token(token_id=token_id, revoked_by=revoked_by)
+
+    async def cleanup_expired_tokens(self) -> int:
+        """Revoke expired-but-not-revoked agent tokens; returns the count revoked.
+
+        Mirrors ``AuthService.cleanup_expired_sessions``. Token expiry is already
+        enforced fail-closed at authentication time, so this is purely hygiene:
+        it stops expired rows from lingering with ``is_active`` still TRUE and no
+        ``revoked_at``. Safe to call repeatedly (e.g. on startup).
+        """
+        return await self._repo.cleanup_expired_tokens()
