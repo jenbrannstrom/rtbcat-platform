@@ -255,16 +255,34 @@ def is_auth_blocked_http_response(status_code: int, detail: str) -> bool:
     return False
 
 
+def build_primary_auth_headers(token: str | None, token_auth_header: str) -> dict[str, str]:
+    value = (token or "").strip()
+    if not value:
+        return {}
+    normalized_header = token_auth_header.strip().lower()
+    if normalized_header == "auto":
+        normalized_header = "x-email" if "@" in value else "authorization"
+    if normalized_header == "authorization":
+        return {"Authorization": f"Bearer {value}"}
+    if normalized_header == "x-email":
+        return {"X-Email": value}
+    raise SmokeFailure("--token-auth-header must be auto, authorization, or x-email")
+
+
 class SmokeClient:
-    def __init__(self, *, base_url: str, token: str | None, cookie: str | None, timeout: float):
+    def __init__(
+        self,
+        *,
+        base_url: str,
+        token: str | None,
+        cookie: str | None,
+        timeout: float,
+        token_auth_header: str = "auto",
+    ):
         self.base_url = base_url
         self.timeout = timeout
-        self.default_headers: dict[str, str] = {}
-        if token:
-            # Token is the trusted email identity passed via X-Email header
-            # (same mechanism the OAuth2 Proxy uses after authentication).
-            self.default_headers["X-Email"] = token
-        if cookie:
+        self.default_headers: dict[str, str] = build_primary_auth_headers(token, token_auth_header)
+        if cookie and "Authorization" not in self.default_headers:
             self.default_headers["Cookie"] = cookie
 
     def request(
@@ -922,6 +940,19 @@ def main() -> int:
     parser.add_argument("--model-id", default=os.getenv("CATSCAN_MODEL_ID"))
     parser.add_argument("--proposal-id", default=os.getenv("CATSCAN_PROPOSAL_ID"))
     parser.add_argument("--token", default=os.getenv("CATSCAN_BEARER_TOKEN"))
+    parser.add_argument(
+        "--token-auth-header",
+        choices=("auto", "authorization", "x-email"),
+        default=(
+            os.getenv("CATSCAN_TOKEN_AUTH_HEADER")
+            or os.getenv("CATSCAN_CANARY_TOKEN_AUTH_HEADER")
+            or "auto"
+        ).strip().lower(),
+        help=(
+            "Header style for --token. auto uses X-Email for email-shaped values "
+            "and Authorization: Bearer otherwise (default: auto)."
+        ),
+    )
     parser.add_argument("--cookie", default=os.getenv("CATSCAN_SESSION_COOKIE"))
     parser.add_argument(
         "--run-agent-api-check",
@@ -1295,6 +1326,8 @@ def main() -> int:
         parser.error("--agent-days must be between 1 and 90")
     if args.agent_token_header not in {"x-catscan-agent-token", "authorization"}:
         parser.error("--agent-token-header must be x-catscan-agent-token or authorization")
+    if args.token_auth_header not in {"auto", "authorization", "x-email"}:
+        parser.error("--token-auth-header must be auto, authorization, or x-email")
     if args.workflow_score_limit < 1 or args.workflow_score_limit > 5000:
         parser.error("--workflow-score-limit must be between 1 and 5000")
     if args.workflow_proposal_limit < 1 or args.workflow_proposal_limit > 2000:
@@ -1390,6 +1423,7 @@ def main() -> int:
     client = SmokeClient(
         base_url=args.base_url,
         token=args.token,
+        token_auth_header=args.token_auth_header,
         cookie=args.cookie,
         timeout=args.timeout,
     )

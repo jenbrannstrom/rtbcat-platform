@@ -14,6 +14,7 @@ from scripts.v1_canary_smoke import (
     SmokeClient,
     build_agent_daily_spend_params,
     build_agent_headers,
+    build_primary_auth_headers,
     build_conversion_readiness_params,
     build_qps_load_latency_requests,
     build_qps_page_slo_params,
@@ -383,6 +384,46 @@ def test_build_agent_headers_supports_authorization_header():
     assert build_agent_headers("cat_agent_abc", "authorization") == {
         "Authorization": "Bearer cat_agent_abc",
     }
+
+
+def test_build_primary_auth_headers_auto_uses_email_header_for_email_identity():
+    assert build_primary_auth_headers("canary@example.com", "auto") == {
+        "X-Email": "canary@example.com",
+    }
+
+
+def test_build_primary_auth_headers_auto_uses_bearer_for_api_key():
+    assert build_primary_auth_headers("abc123", "auto") == {
+        "Authorization": "Bearer abc123",
+    }
+
+
+def test_build_primary_auth_headers_supports_explicit_x_email():
+    assert build_primary_auth_headers("not-an-email-token", "x-email") == {
+        "X-Email": "not-an-email-token",
+    }
+
+
+def test_smoke_client_uses_primary_auth_headers():
+    client = SmokeClient(
+        base_url="http://127.0.0.1:8000",
+        token="abc123",
+        token_auth_header="authorization",
+        cookie=None,
+        timeout=1.0,
+    )
+    assert client.default_headers == {"Authorization": "Bearer abc123"}
+
+
+def test_smoke_client_ignores_cookie_when_using_bearer_token():
+    client = SmokeClient(
+        base_url="http://127.0.0.1:8000",
+        token="abc123",
+        token_auth_header="authorization",
+        cookie="rtbcat_session=stale",
+        timeout=1.0,
+    )
+    assert client.default_headers == {"Authorization": "Bearer abc123"}
 
 
 def test_validate_agent_stats_summary_payload_passes_valid_payload():
