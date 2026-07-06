@@ -92,21 +92,40 @@ class AgentStatsRepository:
         )
 
     async def get_spend_totals(self, buyer_id: str, days: int) -> dict[str, Any] | None:
+        # Spend/impressions/clicks come from the buyer-level rtb_buyer_spend_daily
+        # (sourced from rtb_daily). app_count/billing_count stay sourced from
+        # rtb_app_daily and remain 0 until the upstream app-name ETL gap is fixed.
         return await pg_query_one(
             """
             SELECT
-                MIN(metric_date) AS start_date,
-                MAX(metric_date) AS end_date,
-                COALESCE(SUM(impressions), 0) AS impressions,
-                COALESCE(SUM(clicks), 0) AS clicks,
-                COALESCE(SUM(spend_micros), 0) AS spend_micros,
-                COUNT(DISTINCT app_name) AS app_count,
-                COUNT(DISTINCT billing_id) AS billing_count
-            FROM rtb_app_daily
-            WHERE buyer_account_id = %s
-              AND metric_date >= CURRENT_DATE - (%s::int - 1)
+                s.start_date,
+                s.end_date,
+                s.impressions,
+                s.clicks,
+                s.spend_micros,
+                COALESCE(a.app_count, 0) AS app_count,
+                COALESCE(a.billing_count, 0) AS billing_count
+            FROM (
+                SELECT
+                    MIN(metric_date) AS start_date,
+                    MAX(metric_date) AS end_date,
+                    COALESCE(SUM(impressions), 0) AS impressions,
+                    COALESCE(SUM(clicks), 0) AS clicks,
+                    COALESCE(SUM(spend_micros), 0) AS spend_micros
+                FROM rtb_buyer_spend_daily
+                WHERE buyer_account_id = %s
+                  AND metric_date >= CURRENT_DATE - (%s::int - 1)
+            ) s
+            CROSS JOIN (
+                SELECT
+                    COUNT(DISTINCT app_name) AS app_count,
+                    COUNT(DISTINCT billing_id) AS billing_count
+                FROM rtb_app_daily
+                WHERE buyer_account_id = %s
+                  AND metric_date >= CURRENT_DATE - (%s::int - 1)
+            ) a
             """,
-            (buyer_id, days),
+            (buyer_id, days, buyer_id, days),
         )
 
     async def get_top_publishers(self, buyer_id: str, days: int, limit: int) -> list[dict[str, Any]]:
@@ -179,27 +198,43 @@ class AgentStatsRepository:
     ) -> list[dict[str, Any]]:
         # One row per requested date via generate_series so callers can tell
         # "no source rows" apart from a true zero-spend day with source rows.
+        #
+        # Spend/impressions/clicks come from rtb_buyer_spend_daily (buyer-level,
+        # sourced from rtb_daily). The app-dimension columns app_count/billing_count
+        # come from rtb_app_daily, which is currently empty because the upstream ETL
+        # does not populate app_name/app_id on rtb_daily; they light up automatically
+        # once that gap is fixed, without any further code change here.
         return await pg_query_with_timeout(
             """
             WITH requested_dates AS (
                 SELECT generate_series(%s::date, %s::date, interval '1 day')::date AS metric_date
+            ),
+            app_dims AS (
+                SELECT
+                    metric_date,
+                    COUNT(DISTINCT NULLIF(app_name, ''))::int AS app_count,
+                    COUNT(DISTINCT NULLIF(billing_id, ''))::int AS billing_count
+                FROM rtb_app_daily
+                WHERE buyer_account_id = %s
+                GROUP BY metric_date
             )
             SELECT
                 requested_dates.metric_date,
-                COALESCE(SUM(r.impressions), 0)::bigint AS impressions,
-                COALESCE(SUM(r.clicks), 0)::bigint AS clicks,
-                COALESCE(SUM(r.spend_micros), 0)::bigint AS spend_micros,
-                COUNT(r.metric_date)::int AS source_row_count,
-                COUNT(DISTINCT NULLIF(r.app_name, ''))::int AS app_count,
-                COUNT(DISTINCT NULLIF(r.billing_id, ''))::int AS billing_count
+                COALESCE(s.impressions, 0)::bigint AS impressions,
+                COALESCE(s.clicks, 0)::bigint AS clicks,
+                COALESCE(s.spend_micros, 0)::bigint AS spend_micros,
+                (s.metric_date IS NOT NULL)::int AS source_row_count,
+                COALESCE(app_dims.app_count, 0)::int AS app_count,
+                COALESCE(app_dims.billing_count, 0)::int AS billing_count
             FROM requested_dates
-            LEFT JOIN rtb_app_daily r
-              ON r.metric_date = requested_dates.metric_date
-             AND r.buyer_account_id = %s
-            GROUP BY requested_dates.metric_date
+            LEFT JOIN rtb_buyer_spend_daily s
+              ON s.metric_date = requested_dates.metric_date
+             AND s.buyer_account_id = %s
+            LEFT JOIN app_dims
+              ON app_dims.metric_date = requested_dates.metric_date
             ORDER BY requested_dates.metric_date
             """,
-            (start_date, end_date, buyer_id),
+            (start_date, end_date, buyer_id, buyer_id),
             statement_timeout_ms=self.statement_timeout_ms,
         )
 
@@ -351,7 +386,7 @@ class AgentStatsService:
                 "days": requested_days,
             },
             "data_source": {
-                "table": "rtb_app_daily",
+                "table": "rtb_buyer_spend_daily",
                 "precomputed_only": True,
                 "source_metric": "Spend (buyer currency)",
                 # RTBcat does not store report currency; consumers map it externally.

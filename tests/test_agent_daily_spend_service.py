@@ -77,7 +77,7 @@ async def test_daily_spend_distinguishes_missing_from_present_and_totals() -> No
         "total_spend_micros": 12_500_000,
     }
     assert payload["warnings"] == ["No RTBcat spend source rows found for 2026-07-02."]
-    assert payload["data_source"]["table"] == "rtb_app_daily"
+    assert payload["data_source"]["table"] == "rtb_buyer_spend_daily"
     assert repo.row_calls == [("buyer-1", date(2026, 7, 1), date(2026, 7, 2))]
 
 
