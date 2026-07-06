@@ -40,7 +40,7 @@ class _StubStatsService:
                 "end_date": kwargs["end_date"].isoformat(),
                 "days": 1,
             },
-            "data_source": {"table": "rtb_app_daily", "precomputed_only": True},
+            "data_source": {"table": "rtb_buyer_spend_daily", "precomputed_only": True},
             "rows": [
                 {
                     "metric_date": kwargs["start_date"].isoformat(),

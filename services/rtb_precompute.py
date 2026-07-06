@@ -68,6 +68,17 @@ RTB_TABLES_SQL = [
     )
     """,
     """
+    CREATE TABLE IF NOT EXISTS rtb_buyer_spend_daily (
+        metric_date DATE NOT NULL,
+        buyer_account_id TEXT NOT NULL,
+        reached_queries BIGINT DEFAULT 0,
+        impressions BIGINT DEFAULT 0,
+        clicks BIGINT DEFAULT 0,
+        spend_micros BIGINT DEFAULT 0,
+        PRIMARY KEY (metric_date, buyer_account_id)
+    )
+    """,
+    """
     CREATE TABLE IF NOT EXISTS rtb_app_daily (
         metric_date TEXT NOT NULL,
         buyer_account_id TEXT NOT NULL,
@@ -200,6 +211,32 @@ async def refresh_rtb_summaries(
                 SUM(bid_requests) AS bid_requests,
                 SUM(auctions_won) AS auctions_won
             FROM `{bidstream_table}`
+            WHERE metric_date BETWEEN @start_date AND @end_date{buyer_clause}
+            GROUP BY metric_date, COALESCE(buyer_account_id, '')
+        """,
+        params=[
+            bigquery.ScalarQueryParameter("start_date", "DATE", start_date_value),
+            bigquery.ScalarQueryParameter("end_date", "DATE", end_date_value),
+            *(
+                [bigquery.ScalarQueryParameter("buyer_account_id", "STRING", buyer_account_id)]
+                if buyer_account_id
+                else []
+            ),
+        ],
+    )
+    # Buyer-level spend, sourced from rtb_daily WITHOUT the app_name filter the
+    # app-dimension tables use. rtb_daily has spend_micros populated per buyer/day
+    # but no app breakdown, so this is the only in-house source for daily spend.
+    buyer_spend_rows = _run_rtb_query(
+        sql=f"""
+            SELECT
+                metric_date,
+                COALESCE(buyer_account_id, '') AS buyer_account_id,
+                SUM(reached_queries) AS reached_queries,
+                SUM(impressions) AS impressions,
+                SUM(clicks) AS clicks,
+                SUM(spend_micros) AS spend_micros
+            FROM `{rtb_daily_table}`
             WHERE metric_date BETWEEN @start_date AND @end_date{buyer_clause}
             GROUP BY metric_date, COALESCE(buyer_account_id, '')
         """,
@@ -412,6 +449,7 @@ async def refresh_rtb_summaries(
 
         for table in (
             "rtb_funnel_daily",
+            "rtb_buyer_spend_daily",
             "rtb_publisher_daily",
             "rtb_geo_daily",
             "rtb_app_daily",
@@ -444,6 +482,25 @@ async def refresh_rtb_summaries(
                     row.auctions_won,
                 )
                 for row in funnel_rows
+            ],
+        )
+        execute_many(
+            conn,
+            sql=(
+                "INSERT INTO rtb_buyer_spend_daily "
+                "(metric_date, buyer_account_id, reached_queries, impressions, clicks, spend_micros) "
+                "VALUES (%s, %s, %s, %s, %s, %s)"
+            ),
+            rows=[
+                (
+                    _format_date(row.metric_date),
+                    row.buyer_account_id,
+                    row.reached_queries or 0,
+                    row.impressions or 0,
+                    row.clicks or 0,
+                    row.spend_micros or 0,
+                )
+                for row in buyer_spend_rows
             ],
         )
         execute_many(
@@ -605,6 +662,7 @@ async def refresh_rtb_summaries(
             "dates": date_list,
             "row_counts": {
                 "rtb_funnel_daily": len(funnel_rows),
+                "rtb_buyer_spend_daily": len(buyer_spend_rows),
                 "rtb_publisher_daily": len(publisher_rows),
                 "rtb_geo_daily": len(geo_rows),
                 "rtb_app_daily": len(app_rows),
