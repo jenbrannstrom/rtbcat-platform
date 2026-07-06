@@ -1,0 +1,239 @@
+name: Live Major Smoke
+run-name: >-
+  Live Major Smoke (buyer=${{ github.event.inputs.buyer_id || vars.CATSCAN_RUNTIME_HEALTH_PILOT_BUYER_ID || '1111111111' }})
+
+on:
+  workflow_dispatch:
+    inputs:
+      api_base_url:
+        description: "API base URL (include /api path)"
+        required: false
+        default: ""
+      buyer_id:
+        description: "Buyer ID for app smoke checks"
+        required: false
+        default: ""
+      agent_buyer_id:
+        description: "Buyer ID for /agent/v1 checks. Defaults to buyer_id."
+        required: false
+        default: ""
+      canary_profile:
+        description: "Guardrail profile for non-mutating smoke checks"
+        required: true
+        type: choice
+        default: "balanced"
+        options:
+          - safe
+          - balanced
+          - aggressive
+      run_agent_api:
+        description: "Run /agent/v1/me, stats-summary, and daily-spend checks."
+        required: true
+        type: boolean
+        default: true
+      run_optimizer_workflow:
+        description: "Also run score-and-propose workflow smoke. Does not run proposal lifecycle."
+        required: true
+        type: boolean
+        default: false
+      require_agent_source_rows:
+        description: "Fail if /agent/v1/daily-spend has zero source rows."
+        required: true
+        type: boolean
+        default: true
+      require_agent_positive_spend:
+        description: "Fail if /agent/v1/daily-spend total_spend_micros is zero."
+        required: true
+        type: boolean
+        default: true
+      agent_start_date:
+        description: "Optional /agent/v1/daily-spend start date (YYYY-MM-DD)."
+        required: false
+        default: ""
+      agent_end_date:
+        description: "Optional /agent/v1/daily-spend end date (YYYY-MM-DD). Defaults to yesterday UTC."
+        required: false
+        default: ""
+      timeout_seconds:
+        description: "Per-request timeout for live API calls."
+        required: false
+        default: "120"
+  schedule:
+    - cron: "20 4 * * *"
+
+concurrency:
+  group: live-major-smoke-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  live-major-smoke:
+    name: Run live major smoke checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CATSCAN_BEARER_TOKEN: ${{ secrets.CATSCAN_CANARY_BEARER_TOKEN }}
+      CATSCAN_SESSION_COOKIE: ${{ secrets.CATSCAN_CANARY_SESSION_COOKIE }}
+      CATSCAN_AGENT_TOKEN: ${{ secrets.CATSCAN_AGENT_TOKEN || secrets.CATSCAN_CANARY_AGENT_TOKEN }}
+      CATSCAN_API_BASE_URL_DEFAULT: ${{ vars.CATSCAN_LIVE_SMOKE_API_BASE_URL || vars.CATSCAN_RUNTIME_HEALTH_API_BASE_URL }}
+      CATSCAN_BUYER_ID_DEFAULT: ${{ vars.CATSCAN_LIVE_SMOKE_BUYER_ID || vars.CATSCAN_RUNTIME_HEALTH_PILOT_BUYER_ID }}
+      CATSCAN_AGENT_BUYER_ID_DEFAULT: ${{ vars.CATSCAN_LIVE_SMOKE_AGENT_BUYER_ID || vars.CATSCAN_LIVE_SMOKE_BUYER_ID || vars.CATSCAN_RUNTIME_HEALTH_PILOT_BUYER_ID }}
+      CATSCAN_MAX_HOME_ENDPOINT_EFFICIENCY_LATENCY_MS_DEFAULT: ${{ vars.CATSCAN_LIVE_SMOKE_MAX_HOME_ENDPOINT_EFFICIENCY_LATENCY_MS || vars.CATSCAN_RUNTIME_HEALTH_MAX_HOME_ENDPOINT_EFFICIENCY_LATENCY_MS || '12000' }}
+      CATSCAN_RUNTIME_HEALTH_BIDSTREAM_WAIVER_JSON: ${{ vars.CATSCAN_RUNTIME_HEALTH_BIDSTREAM_WAIVER_JSON }}
+      CATSCAN_RUNTIME_HEALTH_CONVERSION_READINESS_WAIVER_JSON: ${{ vars.CATSCAN_RUNTIME_HEALTH_CONVERSION_READINESS_WAIVER_JSON }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve smoke configuration
+        id: config
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          normalize_bool() {
+            case "${1,,}" in
+              1|true|yes|on) echo "1" ;;
+              0|false|no|off|"") echo "0" ;;
+              *)
+                echo "Invalid boolean: $1" >&2
+                exit 2
+                ;;
+            esac
+          }
+
+          api_base_url="${{ github.event.inputs.api_base_url || '' }}"
+          buyer_id="${{ github.event.inputs.buyer_id || '' }}"
+          agent_buyer_id="${{ github.event.inputs.agent_buyer_id || '' }}"
+          canary_profile="${{ github.event.inputs.canary_profile || vars.CATSCAN_LIVE_SMOKE_CANARY_PROFILE || 'balanced' }}"
+          timeout_seconds="${{ github.event.inputs.timeout_seconds || vars.CATSCAN_LIVE_SMOKE_TIMEOUT_SECONDS || '120' }}"
+          run_agent_api="$(normalize_bool "${{ github.event.inputs.run_agent_api || vars.CATSCAN_LIVE_SMOKE_RUN_AGENT_API || 'true' }}")"
+          run_optimizer_workflow="$(normalize_bool "${{ github.event.inputs.run_optimizer_workflow || vars.CATSCAN_LIVE_SMOKE_RUN_OPTIMIZER_WORKFLOW || 'false' }}")"
+          require_agent_source_rows="$(normalize_bool "${{ github.event.inputs.require_agent_source_rows || vars.CATSCAN_LIVE_SMOKE_REQUIRE_AGENT_SOURCE_ROWS || 'true' }}")"
+          require_agent_positive_spend="$(normalize_bool "${{ github.event.inputs.require_agent_positive_spend || vars.CATSCAN_LIVE_SMOKE_REQUIRE_AGENT_POSITIVE_SPEND || 'true' }}")"
+          agent_start_date="${{ github.event.inputs.agent_start_date || '' }}"
+          agent_end_date="${{ github.event.inputs.agent_end_date || '' }}"
+
+          if [[ -z "${api_base_url}" ]]; then
+            api_base_url="${CATSCAN_API_BASE_URL_DEFAULT:-}"
+          fi
+          if [[ -z "${buyer_id}" ]]; then
+            buyer_id="${CATSCAN_BUYER_ID_DEFAULT:-}"
+          fi
+          if [[ -z "${agent_buyer_id}" ]]; then
+            agent_buyer_id="${CATSCAN_AGENT_BUYER_ID_DEFAULT:-${buyer_id}}"
+          fi
+
+          missing=()
+          agent_missing=()
+          agent_skip_reason=""
+          if [[ -z "${api_base_url}" || "${api_base_url}" == "https://your-deployment.example.com/api" ]]; then
+            missing+=("CATSCAN_LIVE_SMOKE_API_BASE_URL or CATSCAN_RUNTIME_HEALTH_API_BASE_URL")
+          fi
+          if [[ -z "${buyer_id}" ]]; then
+            missing+=("CATSCAN_LIVE_SMOKE_BUYER_ID or CATSCAN_RUNTIME_HEALTH_PILOT_BUYER_ID")
+          fi
+          if [[ -z "${CATSCAN_BEARER_TOKEN:-}" && -z "${CATSCAN_SESSION_COOKIE:-}" ]]; then
+            missing+=("CATSCAN_CANARY_BEARER_TOKEN or CATSCAN_CANARY_SESSION_COOKIE")
+          fi
+          if [[ "${run_agent_api}" == "1" ]]; then
+            if [[ -z "${agent_buyer_id}" ]]; then
+              agent_missing+=("CATSCAN_LIVE_SMOKE_AGENT_BUYER_ID or buyer_id")
+            fi
+            if [[ -z "${CATSCAN_AGENT_TOKEN:-}" ]]; then
+              agent_missing+=("CATSCAN_AGENT_TOKEN or CATSCAN_CANARY_AGENT_TOKEN")
+            fi
+            if [[ "${#agent_missing[@]}" -gt 0 ]]; then
+              agent_skip_reason="Missing agent smoke configuration: $(IFS=', '; echo "${agent_missing[*]}")"
+              if [[ "${{ github.event_name }}" == "schedule" ]]; then
+                run_agent_api="0"
+              else
+                missing+=("${agent_missing[@]}")
+              fi
+            fi
+          fi
+
+          if [[ "${#missing[@]}" -gt 0 ]]; then
+            skip_reason="Missing required live smoke configuration: $(IFS=', '; echo "${missing[*]}")"
+            if [[ "${{ github.event_name }}" == "schedule" ]]; then
+              echo "should_run=false" >> "$GITHUB_OUTPUT"
+              echo "skip_reason=${skip_reason}" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            echo "${skip_reason}" >&2
+            exit 1
+          fi
+
+          {
+            echo "CATSCAN_API_BASE_URL=${api_base_url}"
+            echo "CATSCAN_BUYER_ID=${buyer_id}"
+            echo "CATSCAN_AGENT_BUYER_ID=${agent_buyer_id}"
+            echo "CATSCAN_CANARY_PROFILE=${canary_profile}"
+            echo "CATSCAN_CANARY_TIMEOUT_SECONDS=${timeout_seconds}"
+            echo "CATSCAN_CANARY_RUN_AGENT_API=${run_agent_api}"
+            echo "CATSCAN_CANARY_RUN_WORKFLOW=${run_optimizer_workflow}"
+            echo "CATSCAN_CANARY_RUN_QPS_LOAD_LATENCY=1"
+            echo "CATSCAN_CANARY_MAX_HOME_ENDPOINT_EFFICIENCY_LATENCY_MS=${CATSCAN_MAX_HOME_ENDPOINT_EFFICIENCY_LATENCY_MS_DEFAULT}"
+            echo "CATSCAN_ALLOW_NO_ACTIVE_MODEL=1"
+            echo "CATSCAN_AGENT_TOKEN_HEADER=x-catscan-agent-token"
+            echo "CATSCAN_AGENT_REQUIRE_SOURCE_ROWS=${require_agent_source_rows}"
+            echo "CATSCAN_AGENT_REQUIRE_POSITIVE_SPEND=${require_agent_positive_spend}"
+          } >> "$GITHUB_ENV"
+          if [[ -n "${agent_start_date}" ]]; then
+            echo "CATSCAN_AGENT_START_DATE=${agent_start_date}" >> "$GITHUB_ENV"
+          fi
+          if [[ -n "${agent_end_date}" ]]; then
+            echo "CATSCAN_AGENT_END_DATE=${agent_end_date}" >> "$GITHUB_ENV"
+          fi
+          if [[ -n "${CATSCAN_RUNTIME_HEALTH_BIDSTREAM_WAIVER_JSON:-}" ]]; then
+            echo "CATSCAN_CANARY_BIDSTREAM_DIMENSION_WAIVER_JSON=${CATSCAN_RUNTIME_HEALTH_BIDSTREAM_WAIVER_JSON}" >> "$GITHUB_ENV"
+          fi
+          if [[ -n "${CATSCAN_RUNTIME_HEALTH_CONVERSION_READINESS_WAIVER_JSON:-}" ]]; then
+            echo "CATSCAN_CANARY_CONVERSION_READINESS_WAIVER_JSON=${CATSCAN_RUNTIME_HEALTH_CONVERSION_READINESS_WAIVER_JSON}" >> "$GITHUB_ENV"
+          fi
+
+          echo "should_run=true" >> "$GITHUB_OUTPUT"
+          echo "skip_reason=" >> "$GITHUB_OUTPUT"
+          echo "agent_skip_reason=${agent_skip_reason}" >> "$GITHUB_OUTPUT"
+
+      - name: Run live major smoke
+        id: smoke
+        if: steps.config.outputs.should_run == 'true'
+        shell: bash
+        run: |
+          set -o pipefail
+          bash scripts/run_v1_canary_smoke.sh | tee /tmp/live_major_smoke.log
+
+      - name: Publish smoke summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "## Live Major Smoke"
+            echo
+            if [[ "${{ steps.config.outputs.should_run }}" != "true" ]]; then
+              echo "- Status: skipped"
+              echo "- Reason: ${{ steps.config.outputs.skip_reason }}"
+            elif [[ -f /tmp/live_major_smoke.log ]]; then
+              if [[ -n "${{ steps.config.outputs.agent_skip_reason }}" ]]; then
+                echo "- Agent API: skipped"
+                echo "- Agent reason: ${{ steps.config.outputs.agent_skip_reason }}"
+                echo
+              fi
+              echo '```text'
+              grep -E '^(PASS|FAIL|BLOCKED|INFO)[[:space:]]' /tmp/live_major_smoke.log || tail -n 120 /tmp/live_major_smoke.log
+              echo '```'
+            else
+              echo "- Status: log missing"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload smoke log
+        if: always() && steps.config.outputs.should_run == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-major-smoke-log
+          path: /tmp/live_major_smoke.log
+          if-no-files-found: warn

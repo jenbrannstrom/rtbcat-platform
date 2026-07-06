@@ -12,6 +12,8 @@ from scripts.v1_canary_smoke import (
     SmokeFailure,
     SmokeEnvironmentBlocked,
     SmokeClient,
+    build_agent_daily_spend_params,
+    build_agent_headers,
     build_conversion_readiness_params,
     build_qps_load_latency_requests,
     build_qps_page_slo_params,
@@ -22,6 +24,8 @@ from scripts.v1_canary_smoke import (
     build_workflow_request_params,
     is_auth_blocked_http_response,
     is_network_blocked_urlerror,
+    validate_agent_daily_spend_payload,
+    validate_agent_stats_summary_payload,
     validate_conversion_readiness_payload,
     validate_data_health_payload,
 )
@@ -53,6 +57,61 @@ def _base_conversion_readiness_payload(state: str = "ready") -> dict:
         "accepted_total": 5,
         "active_sources": 1,
         "reasons": [],
+    }
+
+
+def _base_agent_stats_payload() -> dict:
+    return {
+        "api_version": "agent.v1",
+        "buyer": {"buyer_id": "buyer-1"},
+        "totals": {
+            "reached_queries": 10,
+            "impressions": 3,
+            "spend_micros": 250000,
+        },
+        "data_sources": {
+            "tables": ["rtb_buyer_spend_daily"],
+            "precomputed_only": True,
+        },
+    }
+
+
+def _base_agent_daily_spend_payload() -> dict:
+    return {
+        "api_version": "agent.v1",
+        "buyer": {"buyer_id": "buyer-1"},
+        "period": {
+            "start_date": "2026-07-01",
+            "end_date": "2026-07-02",
+            "days": 2,
+        },
+        "data_source": {
+            "table": "rtb_buyer_spend_daily",
+            "precomputed_only": True,
+        },
+        "rows": [
+            {
+                "metric_date": "2026-07-01",
+                "impressions": 10,
+                "clicks": 1,
+                "spend_micros": 100000,
+                "source_row_count": 1,
+                "source_status": "present",
+            },
+            {
+                "metric_date": "2026-07-02",
+                "impressions": 20,
+                "clicks": 2,
+                "spend_micros": 200000,
+                "source_row_count": 1,
+                "source_status": "present",
+            },
+        ],
+        "summary": {
+            "requested_days": 2,
+            "days_with_source_rows": 2,
+            "total_spend_micros": 300000,
+        },
     }
 
 
@@ -297,6 +356,98 @@ def test_build_qps_page_slo_params_includes_expected_fields():
     assert params["since_hours"] == 24
     assert params["latest_limit"] == 7
     assert params["api_rollup_limit"] == 15
+
+
+def test_build_agent_daily_spend_params_uses_explicit_dates():
+    params = build_agent_daily_spend_params(
+        buyer_id="buyer-1",
+        start_date=date(2026, 7, 1),
+        end_date=date(2026, 7, 2),
+        include_empty=True,
+    )
+    assert params == {
+        "buyer_id": "buyer-1",
+        "start_date": "2026-07-01",
+        "end_date": "2026-07-02",
+        "include_empty": "true",
+    }
+
+
+def test_build_agent_headers_prefers_dedicated_header():
+    assert build_agent_headers("cat_agent_abc", "x-catscan-agent-token") == {
+        "X-CatScan-Agent-Token": "cat_agent_abc",
+    }
+
+
+def test_build_agent_headers_supports_authorization_header():
+    assert build_agent_headers("cat_agent_abc", "authorization") == {
+        "Authorization": "Bearer cat_agent_abc",
+    }
+
+
+def test_validate_agent_stats_summary_payload_passes_valid_payload():
+    validate_agent_stats_summary_payload(_base_agent_stats_payload(), buyer_id="buyer-1")
+
+
+def test_validate_agent_stats_summary_payload_rejects_wrong_buyer():
+    with pytest.raises(SmokeFailure, match="buyer_id mismatch"):
+        validate_agent_stats_summary_payload(_base_agent_stats_payload(), buyer_id="buyer-2")
+
+
+def test_validate_agent_daily_spend_payload_passes_valid_payload():
+    validate_agent_daily_spend_payload(
+        _base_agent_daily_spend_payload(),
+        buyer_id="buyer-1",
+        start_date=date(2026, 7, 1),
+        end_date=date(2026, 7, 2),
+        require_source_rows=True,
+        require_positive_spend=True,
+    )
+
+
+def test_validate_agent_daily_spend_payload_rejects_wrong_source_table():
+    payload = _base_agent_daily_spend_payload()
+    payload["data_source"]["table"] = "rtb_app_daily"
+
+    with pytest.raises(SmokeFailure, match="must read rtb_buyer_spend_daily"):
+        validate_agent_daily_spend_payload(
+            payload,
+            buyer_id="buyer-1",
+            start_date=date(2026, 7, 1),
+            end_date=date(2026, 7, 2),
+            require_source_rows=True,
+            require_positive_spend=True,
+        )
+
+
+def test_validate_agent_daily_spend_payload_rejects_zero_source_rows_when_required():
+    payload = _base_agent_daily_spend_payload()
+    payload["summary"]["days_with_source_rows"] = 0
+
+    with pytest.raises(SmokeFailure, match="zero days_with_source_rows"):
+        validate_agent_daily_spend_payload(
+            payload,
+            buyer_id="buyer-1",
+            start_date=date(2026, 7, 1),
+            end_date=date(2026, 7, 2),
+            require_source_rows=True,
+            require_positive_spend=True,
+        )
+
+
+def test_validate_agent_daily_spend_payload_rejects_zero_spend_when_required():
+    payload = _base_agent_daily_spend_payload()
+    payload["summary"]["total_spend_micros"] = 0
+
+    with pytest.raises(SmokeFailure, match="zero total_spend_micros"):
+        validate_agent_daily_spend_payload(
+            payload,
+            buyer_id="buyer-1",
+            start_date=date(2026, 7, 1),
+            end_date=date(2026, 7, 2),
+            require_source_rows=True,
+            require_positive_spend=True,
+        )
 
 
 def test_build_webhook_postback_payload_includes_expected_fields():

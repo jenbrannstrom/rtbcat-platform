@@ -14,7 +14,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
 
@@ -56,6 +56,20 @@ def _join_url(base_url: str, path: str) -> str:
     base = base_url.rstrip("/")
     suffix = path if path.startswith("/") else f"/{path}"
     return f"{base}{suffix}"
+
+
+def _env_bool(name: str, default: bool = False) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _parse_iso_date(raw: str, *, option_name: str) -> date:
+    try:
+        return date.fromisoformat(raw)
+    except ValueError as exc:
+        raise ValueError(f"{option_name} must be YYYY-MM-DD") from exc
 
 
 def _parse_waiver_entries(raw_json: str | None) -> list[dict[str, Any]]:
@@ -260,12 +274,14 @@ class SmokeClient:
         *,
         params: dict[str, Any] | None = None,
         json_body: dict[str, Any] | None = None,
+        extra_headers: dict[str, str] | None = None,
     ) -> dict[str, Any]:
         headers, body = self.request_bytes(
             method,
             path,
             params=params,
             json_body=json_body,
+            extra_headers=extra_headers,
         )
         if not body:
             return {}
@@ -795,6 +811,106 @@ def build_qps_page_slo_params(
     }
 
 
+def build_agent_daily_spend_params(
+    *,
+    buyer_id: str | None,
+    start_date: date,
+    end_date: date,
+    include_empty: bool,
+) -> dict[str, Any]:
+    return {
+        "buyer_id": buyer_id,
+        "start_date": start_date.isoformat(),
+        "end_date": end_date.isoformat(),
+        "include_empty": "true" if include_empty else "false",
+    }
+
+
+def build_agent_headers(agent_token: str, agent_token_header: str) -> dict[str, str]:
+    token = agent_token.strip()
+    if not token:
+        raise SmokeEnvironmentBlocked("agent API token is required")
+    normalized_header = agent_token_header.strip().lower()
+    if normalized_header == "authorization":
+        return {"Authorization": f"Bearer {token}"}
+    return {"X-CatScan-Agent-Token": token}
+
+
+def validate_agent_stats_summary_payload(payload: dict[str, Any], *, buyer_id: str | None) -> None:
+    _assert(payload.get("api_version") == "agent.v1", "agent stats-summary api_version must be agent.v1")
+    buyer = payload.get("buyer")
+    _assert(isinstance(buyer, dict), "buyer missing from agent stats-summary")
+    if buyer_id:
+        _assert(str(buyer.get("buyer_id") or "") == str(buyer_id), "agent stats-summary buyer_id mismatch")
+    totals = payload.get("totals")
+    _assert(isinstance(totals, dict), "totals missing from agent stats-summary")
+    for field in ("reached_queries", "impressions", "spend_micros"):
+        _assert(field in totals, f"{field} missing from agent stats-summary totals")
+        _assert(int(totals.get(field) or 0) >= 0, f"{field} must be non-negative")
+    data_sources = payload.get("data_sources")
+    _assert(isinstance(data_sources, dict), "data_sources missing from agent stats-summary")
+    _assert(bool(data_sources.get("precomputed_only")), "agent stats-summary must use precomputed data")
+
+
+def validate_agent_daily_spend_payload(
+    payload: dict[str, Any],
+    *,
+    buyer_id: str | None,
+    start_date: date,
+    end_date: date,
+    require_source_rows: bool,
+    require_positive_spend: bool,
+) -> None:
+    _assert(payload.get("api_version") == "agent.v1", "agent daily-spend api_version must be agent.v1")
+    buyer = payload.get("buyer")
+    _assert(isinstance(buyer, dict), "buyer missing from agent daily-spend")
+    if buyer_id:
+        _assert(str(buyer.get("buyer_id") or "") == str(buyer_id), "agent daily-spend buyer_id mismatch")
+
+    period = payload.get("period")
+    _assert(isinstance(period, dict), "period missing from agent daily-spend")
+    _assert(period.get("start_date") == start_date.isoformat(), "agent daily-spend start_date mismatch")
+    _assert(period.get("end_date") == end_date.isoformat(), "agent daily-spend end_date mismatch")
+
+    data_source = payload.get("data_source")
+    _assert(isinstance(data_source, dict), "data_source missing from agent daily-spend")
+    _assert(
+        data_source.get("table") == "rtb_buyer_spend_daily",
+        "agent daily-spend must read rtb_buyer_spend_daily",
+    )
+    _assert(bool(data_source.get("precomputed_only")), "agent daily-spend must use precomputed data")
+
+    rows = payload.get("rows")
+    _assert(isinstance(rows, list), "rows missing from agent daily-spend")
+    expected_days = (end_date - start_date).days + 1
+    _assert(len(rows) == expected_days, f"agent daily-spend expected {expected_days} row(s), got {len(rows)}")
+    for row in rows:
+        _assert(isinstance(row, dict), "agent daily-spend row must be an object")
+        for field in ("metric_date", "impressions", "clicks", "spend_micros", "source_row_count", "source_status"):
+            _assert(field in row, f"{field} missing from agent daily-spend row")
+        _assert(str(row.get("source_status")) in {"present", "missing"}, "invalid source_status in agent daily-spend")
+        for field in ("impressions", "clicks", "spend_micros", "source_row_count"):
+            _assert(int(row.get(field) or 0) >= 0, f"{field} must be non-negative in agent daily-spend row")
+
+    summary = payload.get("summary")
+    _assert(isinstance(summary, dict), "summary missing from agent daily-spend")
+    _assert(int(summary.get("requested_days") or 0) == expected_days, "agent daily-spend requested_days mismatch")
+    days_with_source = int(summary.get("days_with_source_rows") or 0)
+    total_spend_micros = int(summary.get("total_spend_micros") or 0)
+    _assert(days_with_source >= 0, "agent daily-spend days_with_source_rows must be non-negative")
+    _assert(total_spend_micros >= 0, "agent daily-spend total_spend_micros must be non-negative")
+    if require_source_rows and days_with_source == 0:
+        raise SmokeFailure(
+            "agent daily-spend returned zero days_with_source_rows; "
+            "expected buyer-level rtb_buyer_spend_daily source rows"
+        )
+    if require_positive_spend and total_spend_micros <= 0:
+        raise SmokeFailure(
+            "agent daily-spend returned zero total_spend_micros; "
+            "expected positive buyer-level spend"
+        )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run v1 canary smoke checks against API.")
     parser.add_argument(
@@ -807,6 +923,71 @@ def main() -> int:
     parser.add_argument("--proposal-id", default=os.getenv("CATSCAN_PROPOSAL_ID"))
     parser.add_argument("--token", default=os.getenv("CATSCAN_BEARER_TOKEN"))
     parser.add_argument("--cookie", default=os.getenv("CATSCAN_SESSION_COOKIE"))
+    parser.add_argument(
+        "--run-agent-api-check",
+        action="store_true",
+        help="Run outside-agent /agent/v1/me, stats-summary, and daily-spend checks.",
+    )
+    parser.add_argument(
+        "--agent-token",
+        default=(
+            os.getenv("CATSCAN_AGENT_TOKEN")
+            or os.getenv("CATSCAN_CANARY_AGENT_TOKEN")
+            or os.getenv("CATSCAN_AGENT_BEARER_TOKEN")
+        ),
+        help="Outside-agent token for /agent/v1 checks.",
+    )
+    parser.add_argument(
+        "--agent-token-header",
+        choices=("x-catscan-agent-token", "authorization"),
+        default=os.getenv("CATSCAN_AGENT_TOKEN_HEADER", "x-catscan-agent-token").strip().lower(),
+        help="Header style for the agent token (default: x-catscan-agent-token).",
+    )
+    parser.add_argument(
+        "--agent-buyer-id",
+        default=os.getenv("CATSCAN_AGENT_BUYER_ID"),
+        help="Buyer ID for /agent/v1 checks. Defaults to --buyer-id when omitted.",
+    )
+    parser.add_argument(
+        "--agent-days",
+        type=int,
+        default=int(os.getenv("CATSCAN_AGENT_SMOKE_DAYS", "7")),
+        help="Lookback days for agent stats-summary and daily-spend (default: 7).",
+    )
+    parser.add_argument(
+        "--agent-start-date",
+        default=os.getenv("CATSCAN_AGENT_START_DATE"),
+        help="Inclusive daily-spend start date (YYYY-MM-DD). Defaults from --agent-days.",
+    )
+    parser.add_argument(
+        "--agent-end-date",
+        default=os.getenv("CATSCAN_AGENT_END_DATE"),
+        help="Inclusive daily-spend end date (YYYY-MM-DD). Defaults to yesterday UTC.",
+    )
+    parser.add_argument(
+        "--agent-require-source-rows",
+        action="store_true",
+        default=_env_bool("CATSCAN_AGENT_REQUIRE_SOURCE_ROWS", True),
+        help="Require daily-spend to return at least one source row (default: true).",
+    )
+    parser.add_argument(
+        "--agent-allow-empty-source",
+        dest="agent_require_source_rows",
+        action="store_false",
+        help="Allow daily-spend windows with zero source rows.",
+    )
+    parser.add_argument(
+        "--agent-require-positive-spend",
+        action="store_true",
+        default=_env_bool("CATSCAN_AGENT_REQUIRE_POSITIVE_SPEND", True),
+        help="Require daily-spend total_spend_micros > 0 (default: true).",
+    )
+    parser.add_argument(
+        "--agent-allow-zero-spend",
+        dest="agent_require_positive_spend",
+        action="store_false",
+        help="Allow daily-spend windows with zero spend.",
+    )
     parser.add_argument(
         "--timeout",
         type=float,
@@ -1110,6 +1291,10 @@ def main() -> int:
         parser.error("--optimizer-economics-days must be between 1 and 365")
     if args.timeout <= 0:
         parser.error("--timeout must be > 0")
+    if args.agent_days < 1 or args.agent_days > 90:
+        parser.error("--agent-days must be between 1 and 90")
+    if args.agent_token_header not in {"x-catscan-agent-token", "authorization"}:
+        parser.error("--agent-token-header must be x-catscan-agent-token or authorization")
     if args.workflow_score_limit < 1 or args.workflow_score_limit > 5000:
         parser.error("--workflow-score-limit must be between 1 and 5000")
     if args.workflow_proposal_limit < 1 or args.workflow_proposal_limit > 2000:
@@ -1165,6 +1350,23 @@ def main() -> int:
         parser.error("--max-qps-page-p95-hydrated-ms must be > 0")
     if args.qps_page_slo_only:
         args.run_qps_page_slo_check = True
+    try:
+        agent_end_date = (
+            _parse_iso_date(args.agent_end_date, option_name="--agent-end-date")
+            if args.agent_end_date
+            else datetime.now(timezone.utc).date() - timedelta(days=1)
+        )
+        agent_start_date = (
+            _parse_iso_date(args.agent_start_date, option_name="--agent-start-date")
+            if args.agent_start_date
+            else agent_end_date - timedelta(days=args.agent_days - 1)
+        )
+    except ValueError as exc:
+        parser.error(str(exc))
+    if agent_end_date < agent_start_date:
+        parser.error("--agent-end-date must be on or after --agent-start-date")
+    if (agent_end_date - agent_start_date).days + 1 > 90:
+        parser.error("agent daily-spend date range must be at most 90 days")
 
     try:
         bidstream_dimension_waivers = parse_bidstream_dimension_waivers(
@@ -1200,6 +1402,59 @@ def main() -> int:
         payload = client.request("GET", "/health")
         status = str(payload.get("status", "")).lower()
         _assert(status in {"healthy", "ok"}, "health status is not healthy/ok")
+
+    def check_agent_api() -> None:
+        if not args.run_agent_api_check:
+            return
+        agent_buyer_id = str(args.agent_buyer_id or args.buyer_id or "").strip()
+        if not agent_buyer_id:
+            raise SmokeEnvironmentBlocked("--run-agent-api-check requires --agent-buyer-id or --buyer-id")
+        headers = build_agent_headers(str(args.agent_token or ""), str(args.agent_token_header))
+
+        me = client.request("GET", "/agent/v1/me", extra_headers=headers)
+        _assert(me.get("authenticated") is True, "agent /me did not return authenticated=true")
+        scopes = me.get("scopes") or []
+        _assert(isinstance(scopes, list), "agent /me scopes must be a list")
+        _assert("agent:stats:read" in scopes, "agent token lacks agent:stats:read scope")
+        token_buyer_id = str(me.get("buyer_id") or "").strip()
+        if token_buyer_id:
+            _assert(token_buyer_id == agent_buyer_id, "agent token buyer_id does not match smoke buyer_id")
+
+        stats = client.request(
+            "GET",
+            "/agent/v1/stats-summary",
+            params={"buyer_id": agent_buyer_id, "days": args.agent_days, "top_limit": 10},
+            extra_headers=headers,
+        )
+        validate_agent_stats_summary_payload(stats, buyer_id=agent_buyer_id)
+
+        daily_spend = client.request(
+            "GET",
+            "/agent/v1/daily-spend",
+            params=build_agent_daily_spend_params(
+                buyer_id=agent_buyer_id,
+                start_date=agent_start_date,
+                end_date=agent_end_date,
+                include_empty=True,
+            ),
+            extra_headers=headers,
+        )
+        validate_agent_daily_spend_payload(
+            daily_spend,
+            buyer_id=agent_buyer_id,
+            start_date=agent_start_date,
+            end_date=agent_end_date,
+            require_source_rows=bool(args.agent_require_source_rows),
+            require_positive_spend=bool(args.agent_require_positive_spend),
+        )
+        summary = daily_spend.get("summary") or {}
+        print(
+            "INFO  Agent daily-spend -> "
+            f"buyer={agent_buyer_id}, "
+            f"window={agent_start_date.isoformat()}..{agent_end_date.isoformat()}, "
+            f"days_with_source_rows={int(summary.get('days_with_source_rows') or 0)}, "
+            f"total_spend_micros={int(summary.get('total_spend_micros') or 0)}"
+        )
 
     def check_data_health() -> None:
         payload = client.request(
@@ -1897,6 +2152,7 @@ def main() -> int:
         ]
     else:
         checks = [
+            ("Agent API stats/daily-spend (optional)", check_agent_api),
             ("Data health", check_data_health),
             ("Conversion health", check_conversion_health),
             ("Conversion readiness", check_conversion_readiness),
