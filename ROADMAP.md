@@ -1,6 +1,6 @@
 # Cat-Scan Roadmap
 
-Last updated: March 11, 2026
+Last updated: June 11, 2026
 
 This roadmap is forward-looking. It is not an internal incident diary.
 
@@ -101,6 +101,32 @@ Next steps:
 - keep dangerous credentials out of the early setup path
 - improve first-run checks and failure messages
 - make conversion setup less opaque
+
+### 6. Data accessibility for Dept 4 marketing and AEO tooling
+
+Why:
+- Dept 4 (Demand Generation) needs the best available live data to drive rtb.cat promotion via AEO/LLM visibility and client support.
+- Primary new source: Google Ads MCP (campaign performance, GAQL queries for keyword metrics from existing campaigns, account discovery).
+- Combine with GSC, GA4 (live MCP preferred), and Ahrefs for full organic + paid picture.
+- AEO work (atomic explainers, translations, freshness) benefits from tight coupling between platform changes and docs.
+
+Current state:
+- Guarded `google-ads-mcp` tool added to nanoclaw (following meta-ads/rumble pattern) and wired into Dept 4 agent skills/instructions.
+- `seo-operating-system` and `seo-check` skills updated to consume Google Ads MCP data (GAQL for performance/keyword data) alongside GSC/GA4/Ahrefs.
+- Cross-repo GitHub Actions: platform commits dispatch to docs repo, triggering rebuild with both docs and platform commit SHAs via `freshness.py` hook.
+- Full set of atomic Explainers (10 + index) on docs.rtb.cat with multi-language translations (including Chinese) and custom `nav_translations.py` hook for sidebar.
+- Enriched sitemaps (AEO-tuned priorities, changefreq, images, language alternates).
+- Reference docs added (including the official Google Ads MCP sub-page).
+- Developer token is currently Test-only; full Keyword Planner (volumes, ideas) postponed until Basic/Standard approval.
+
+Next steps:
+- Deploy/run the actual google-ads-mcp server (local pipx or Cloud Run per official docs) with credentials (GOOGLE_PROJECT_ID + DEVELOPER_TOKEN; OAuth for Cloud Run).
+- Wire the MCP server into the Dept 4 host (via self-mod add_mcp_server or nanoclaw config) so the guarded tool can reach it.
+- Re-run the Dept 4 init script to apply updated skills, instructions, and container config.
+- Confirm GSC + GA4 are live via MCP (not just CSVs) for the seo skill.
+- Make injected freshness SHAs visibly rendered on the docs site (e.g. small footer using config.extra.commit_sha_short and platform_commit_sha_short).
+- Commit/push the new mcp-tool + workflow + hook changes.
+- Once token is approved: revisit Keyword Planner integration for volumes/competition/ideas (update seo skills and possibly extend the MCP for planning services).
 
 ## Conversion and connector status
 

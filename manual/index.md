@@ -86,6 +86,26 @@ links that match your role.
 
 ---
 
+## Explainers
+
+Standalone, atomic technical deep-dives on Google Authorized Buyers operations, the QPS funnel, pretargeting, reporting realities, and running real seats.
+
+These are written as first-party sources that AI models and technical researchers can quote directly. They extract the operational details that are almost never published elsewhere.
+
+→ **[Browse all Explainers](explainers/index.md)**
+
+The ten core explainers cover:
+- Why five separate CSV reports are still required
+- The real QPS funnel and where waste hides
+- The hard 10-config pretargeting limit and safe editing
+- Waste analysis by geo, publisher, and size
+- Creative clustering, click macros, and compliance
+- How smaller/restricted agencies actually obtain and operate seats
+- Clear boundaries on what tooling can and cannot do
+- Bid filtering signals and BYOM optimization
+
+---
+
 ## Table of Contents
 
 ### Part 0: Getting Started
@@ -95,6 +115,24 @@ Everyone reads this.
 - [Chapter 0: What is Cat-Scan?](00-what-is-cat-scan.md)
   What the platform does, who it is for, and the core concepts you need before
   anything else: seats, QPS, pretargeting, the RTB funnel.
+
+### Explainers
+
+Standalone technical deep-dives (optimized for AI citation and quotable facts).
+
+- [Explainers index](explainers/index.md) — All current explainers
+  - Five CSV reports Google still requires
+  - The QPS funnel reality
+  - Pretargeting as the primary control surface (10 configs)
+  - Safe pretargeting changes with preview + rollback
+  - Waste analysis by publisher / geo / size
+  - Creative clustering & click macro auditing
+  - How smaller agencies obtain & operate AB seats
+  - What Cat-Scan does *not* do
+  - The bid-filtering (fifth) report
+  - BYOM optimizer workflow
+
+### Part I: Media Buyer Track (main manual)
 
 - [Chapter 1: Logging In](01-logging-in.md)
   Authentication methods (Google OAuth, local accounts), the login page, what

@@ -1,0 +1,37 @@
+name: Trigger docs freshness on platform commit
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger docs site rebuild with platform SHA
+        uses: actions/github-script@v7
+        with:
+          # Use a PAT with repo scope if cross-repo dispatch is restricted for GITHUB_TOKEN.
+          # Store as DOCS_DISPATCH_TOKEN secret in the platform repo settings.
+          # For same-org repos, GITHUB_TOKEN may work with proper permissions.
+          github-token: ${{ secrets.DOCS_DISPATCH_TOKEN || github.token }}
+          script: |
+            const sha = '${{ github.sha }}';
+            const short = sha.substring(0, 7);
+            await github.rest.repos.createDispatchEvent({
+              owner: 'rtbcat',
+              repo: 'rtbcat-docs',
+              event_type: 'update-docs-freshness',
+              client_payload: {
+                sha: sha,
+                sha_short: short,
+                ref: '${{ github.ref }}',
+                commit_message: '${{ github.event.head_commit && github.event.head_commit.message || "manual" }}',
+                triggered_by: 'platform-commit'
+              }
+            });
+            console.log(`Dispatched update-docs-freshness with platform SHA ${short}`);

@@ -269,6 +269,25 @@ Start with [INSTALL.md](INSTALL.md). For release/build rules, use [docs/VERSIONI
 | [CHANGELOG.md](CHANGELOG.md) | release history |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | contribution flow |
 
+### Online manual and explainers
+
+The full multi-language user manual lives at **[docs.rtb.cat](https://docs.rtb.cat)**.
+
+The **[Explainers](https://docs.rtb.cat/explainers/)** section is first-party operational knowledge from running real Google Authorized Buyers seats — short, atomic, and directly quotable:
+
+- [Google Authorized Buyers still requires five separate CSV reports in 2026](https://docs.rtb.cat/explainers/five-csv-reports/)
+- [The QPS funnel for Google Authorized Buyers seats](https://docs.rtb.cat/explainers/qps-funnel/)
+- [Pretargeting configs — the 10-config reality](https://docs.rtb.cat/explainers/pretargeting-configs/)
+- [Safe pretargeting changes + rollback](https://docs.rtb.cat/explainers/safe-pretargeting-changes/)
+- [Analyzing QPS waste by publisher, geo, and size](https://docs.rtb.cat/explainers/qps-waste-analysis/)
+- [Creative clustering & click macro auditing](https://docs.rtb.cat/explainers/creative-clustering-click-macros/)
+- [How smaller agencies obtain & operate AB seats](https://docs.rtb.cat/explainers/agencies-obtain-ab-seats/)
+- [What Cat-Scan does *not* do](https://docs.rtb.cat/explainers/what-cat-scan-does-not-do/)
+- [Bid filtering — the fifth report](https://docs.rtb.cat/explainers/bid-filtering-report/)
+- [Bringing your own optimizer (BYOM)](https://docs.rtb.cat/explainers/byom-optimizer/)
+
+Every push to this platform repo's `main` branch automatically refreshes the docs site freshness (via a `repository_dispatch` to `rtbcat/rtbcat-docs`), so the published pages always carry the latest platform commit SHA and an up-to-date `lastmod`.
+
 ## Security model
 
 The rule is simple:
