@@ -6,6 +6,7 @@ Tests verify the check logic, status assignment, and exit-code semantics.
 
 from __future__ import annotations
 
+from datetime import date, timedelta
 from typing import Any
 from unittest.mock import AsyncMock, patch
 
@@ -13,7 +14,10 @@ import pytest
 
 # Import the check functions under test.
 from scripts.contracts_check import (
+    MONITORED_COLUMNS,
     CheckResult,
+    check_dat_001,
+    check_dat_002,
     check_ept_001,
     check_ing_001,
     check_ing_002,
@@ -50,6 +54,22 @@ def _mock_pg(responses: dict[str, list[dict]]) -> AsyncMock:
     return mock
 
 
+def _dat_row(
+    win: str,
+    total: int = 100,
+    present: int = 100,
+    source_report: str = "quality",
+    **overrides: int,
+) -> dict[str, Any]:
+    """Build one C-DAT-002 window row; override per-column presence via
+    e.g. app_name_present=0."""
+    row: dict[str, Any] = {"win": win, "source_report": source_report, "total": total}
+    for col in MONITORED_COLUMNS:
+        row[f"{col}_present"] = present
+    row.update(overrides)
+    return row
+
+
 PG_QUERY = "scripts.contracts_check.pg_query"
 PG_EXECUTE = "scripts.contracts_check.pg_execute"
 
@@ -82,6 +102,13 @@ async def test_all_pass():
         # C-PRE-003: buyer has pretarg data AND publisher data
         "FROM pretarg_daily WHERE buyer_account_id": [{"cnt": 50}],
         "FROM pretarg_publisher_daily": [{"cnt": 30}],
+        # C-DAT-001: seat data is fresh (specific key before FROM rtb_daily)
+        "SELECT MAX(metric_date)": [{"latest": date.today()}],
+        # C-DAT-002: monitored columns populated in both windows
+        "GROUP BY 1, 2": [
+            _dat_row("current", present=100),
+            _dat_row("prior", present=100),
+        ],
     }
 
     with patch(PG_QUERY, new=_mock_pg(responses)):
@@ -91,6 +118,8 @@ async def test_all_pass():
             await check_ept_001(),
             await check_pre_002(7, _buyers("b1")),
             await check_pre_003(7, _buyers("b1")),
+            await check_dat_001(_buyers("b1")),
+            await check_dat_002(7, _buyers("b1")),
         ]
 
     for r in results:
@@ -381,3 +410,117 @@ async def test_ing_002_missing_buyers():
     assert result.status == "FAIL"
     assert "buyer-B" in result.details["missing_buyers"]
     assert "buyer-A" not in result.details["missing_buyers"]
+
+
+# ---------------------------------------------------------------------------
+# C-DAT-001: per-seat rtb_daily freshness
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_dat_001_stale_seat_warn():
+    """A seat whose newest row is past warn_days but within fail_days warns."""
+    responses = {
+        "SELECT MAX(metric_date)": [{"latest": date.today() - timedelta(days=4)}],
+    }
+
+    with patch(PG_QUERY, new=_mock_pg(responses)):
+        result = await check_dat_001(_buyers("b1"), warn_days=3, fail_days=5)
+
+    assert result.status == "WARN"
+    assert "b1" in result.details["stale"]
+
+
+@pytest.mark.asyncio
+async def test_dat_001_dead_seat_fail():
+    """A seat with no rtb_daily rows at all fails outright."""
+    responses = {
+        "SELECT MAX(metric_date)": [{"latest": None}],
+    }
+
+    with patch(PG_QUERY, new=_mock_pg(responses)):
+        result = await check_dat_001(_buyers("b1"))
+
+    assert result.status == "FAIL"
+    assert result.details["failed"] == {"b1": "no rows"}
+
+
+@pytest.mark.asyncio
+async def test_dat_001_beyond_fail_days_fail():
+    """A seat past fail_days is a FAIL, not a WARN."""
+    responses = {
+        "SELECT MAX(metric_date)": [{"latest": date.today() - timedelta(days=9)}],
+    }
+
+    with patch(PG_QUERY, new=_mock_pg(responses)):
+        result = await check_dat_001(_buyers("b1"), warn_days=3, fail_days=5)
+
+    assert result.status == "FAIL"
+    assert result.details["failed"] == {"b1": "9d old"}
+
+
+# ---------------------------------------------------------------------------
+# C-DAT-002: rtb_daily column completeness
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_dat_002_column_went_dark_fail():
+    """A column populated in the prior window but 100% empty now fails
+    (the app_name incident shape)."""
+    responses = {
+        "GROUP BY 1, 2": [
+            _dat_row("current", app_name_present=0),
+            _dat_row("prior", app_name_present=90),
+        ],
+    }
+
+    with patch(PG_QUERY, new=_mock_pg(responses)):
+        result = await check_dat_002(7, _buyers("b1"))
+
+    assert result.status == "FAIL"
+    assert result.details["went_dark"] == ["b1/quality/app_name"]
+
+
+@pytest.mark.asyncio
+async def test_dat_002_empty_everywhere_warn():
+    """A monitored column empty in both windows across all seats warns
+    (the permanently-empty-table incident shape)."""
+    responses = {
+        "GROUP BY 1, 2": [
+            _dat_row("current", app_name_present=0),
+            _dat_row("prior", app_name_present=0),
+        ],
+    }
+
+    with patch(PG_QUERY, new=_mock_pg(responses)):
+        result = await check_dat_002(7, _buyers("b1"))
+
+    assert result.status == "WARN"
+    assert result.details["empty_everywhere"] == ["app_name"]
+
+
+@pytest.mark.asyncio
+async def test_dat_002_no_rows_passes():
+    """No rtb_daily rows in either window is C-DAT-001's problem, not a
+    completeness failure."""
+    with patch(PG_QUERY, new=_mock_pg({})):
+        result = await check_dat_002(7, _buyers("b1"))
+
+    assert result.status == "PASS"
+
+
+@pytest.mark.asyncio
+async def test_dat_002_report_type_vanished_fail():
+    """A report type with prior-window rows and zero current rows fails."""
+    responses = {
+        "GROUP BY 1, 2": [
+            _dat_row("current", source_report="quality"),
+            _dat_row("prior", source_report="quality"),
+            _dat_row("prior", source_report="bidsinauction"),
+        ],
+    }
+
+    with patch(PG_QUERY, new=_mock_pg(responses)):
+        result = await check_dat_002(7, _buyers("b1"))
+
+    assert result.status == "FAIL"
+    assert result.details["went_dark"] == ["b1/bidsinauction/(report vanished)"]
