@@ -2,9 +2,10 @@
 
 ## Current Production Handover
 
-This is the current handover as of **June 12, 2026**. It supersedes the June
-7/June 10 language-flags notes and removes the archived April/May creative QA
-scope (see git history for those).
+This is the current handover as of **July 10, 2026**. It supersedes the June
+12 handover (which it extends; the June incident RCAs below are kept) and is
+the companion to `retirement-notes.md` (CTO retrospective + Hetzner migration
+opinion, 2026-07-09).
 
 The user wants GitHub to be the source of truth. Production must be recoverable
 from GitHub, Terraform, Google Secret Manager, Cloud SQL, Cloud Scheduler,
@@ -15,12 +16,10 @@ expensive staging VM.
 
 - GCP project: `catscan-prod-202601`
 - Production URL: `https://scan.rtb.cat`
-- Current deployed commit: `7d06facb`
-- Production health: `/api/health` returns 200 with `git_sha: 7d06facb`,
-  `version: sha-7d06fac`, and `release_version: 0.9.5`
-- Latest production deploy: GitHub Actions run `27403711752`, success — first
-  fully green contract gate in the June 11-12 sequence (no
-  `ALLOW_CONTRACT_FAILURE` bypass)
+- Current deployed commit: `6b3f2b19` (merge of PR #100, retirement-notes
+  findings), containers on image tag `sha-6b3f2b1`
+- Latest production deploy: 2026-07-09, GitHub Actions run `29045719643`,
+  success with green post-deploy contract gate
 - Production VM: `catscan-production-sg`, `RUNNING`, IP `34.143.222.60`
 - Staging/old VM: `catscan-production-sg2`, `TERMINATED` (retired May 2026,
   snapshot `catscan-production-sg2-retirement-20260506-0327` kept). The deploy
@@ -33,9 +32,45 @@ expensive staging VM.
 Do not restart or use `catscan-production-sg2` unless explicitly asked. It is
 stopped, but not deleted.
 
+## What Changed (July 9-10) — retirement-notes findings implemented
+
+PR #100 (`infra/retirement-findings`, four commits) merged and deployed:
+
+- **Daily data-trust contracts (notes §1).** `scripts/contracts_check.py`
+  gained `C-DAT-001` (per-seat rtb_daily freshness, WARN >3d / FAIL >5d) and
+  `C-DAT-002` (per-seat, per-report-type column completeness: fails when a
+  monitored column or whole report type goes dark vs the prior window, warns
+  when a column is empty everywhere). The repo's
+  `catscan-contracts-check.timer` is now **installed and enabled on the
+  production VM** — daily 04:00, runs inside `catscan-api`, JSON to
+  `/tmp/contracts_daily.json` in the container. Expect a standing C-DAT-002
+  WARN until upstream `app_name`/`app_id` emptiness is fixed (see Remaining
+  Work).
+- **rtb_daily partition migration kit (notes §3).** `scripts/partition_migration/`
+  contains a rehearsal-gated path to monthly partitions: DDL (BIGINT `id`,
+  dedup on `(metric_date, row_hash)`, 16 indexes → 7 on pg_stat evidence),
+  timed loader, per-month validation, instant cutover/rollback, and
+  retention-by-`DROP PARTITION` wired to `retention_config`. Importers detect
+  the table shape at connect time, so no deploy needs to synchronize with the
+  cutover. **Do not run against live prod without the rehearsal** — see the
+  kit README. Measured while building it: rtb_daily is 327 GB / ~467M rows
+  (2026-07-09), growing ~1.8 GB/day, and `rtb_daily_id_seq` is at 589.7M of
+  the INTEGER column max (~16 months to exhaustion; the kit's BIGINT rebuild
+  is the fix).
+- **Stale workflow purge (notes §2).** The eight `v1-*` pilot workflows are
+  deleted. An audit found all 34 routers mounted and real, so no code was
+  deleted; `cloudsql-logical-backup.yml` is healthy and stays.
+- **No-hot-patch invariant (notes §4).** CLAUDE.md now states: nothing serves
+  traffic that isn't a pushed, sha-tagged image. The old "docker cp is
+  acceptable" allowance is gone.
+
+Corrections to the retirement notes discovered while verifying: Cloud SQL is
+**Postgres 15.17** (not 16 — pin 15.17 for the migration) and the rtb_daily
+size figures in the notes (157 GB / 227M rows) were ~2x stale.
+
 ## Latest Production Commits (June 10-12)
 
-All pushed to `main` and deployed (`7d06facb` is live):
+All pushed to `main` and deployed:
 
 - `7d06facb` `Stop marking allowlist-skipped Gmail reports as read`
 - `7f605551` `Coalesce null aggregates in config precompute`
@@ -147,8 +182,17 @@ applies to all seats.
   `secretmanager.secrets.create`).
 - `docker restart` does NOT re-read `/opt/catscan/.env` — container env only
   updates on recreation (deploy or `refresh_gcp_vm_runtime_env.sh
-  --recreate-api`). Hot-patched files via `docker cp` DO survive restarts but
-  not recreation.
+  --recreate-api`). Hot-patching via `docker cp` is no longer acceptable
+  (CLAUDE.md invariant, July 2026): push the commit, let CI build, deploy that.
+- Daily contract validation runs on the VM via systemd
+  (`catscan-contracts-check.timer`, 04:00): check with
+  `systemctl status catscan-contracts-check.service` or
+  `journalctl -u catscan-contracts-check.service`. The unit files live in
+  `scripts/systemd/`; on a redeploy of the VM they must be reinstalled
+  (`cp` to `/etc/systemd/system/` + `systemctl enable --now`).
+- The `gh` CLI on the production VM is authenticated as `jenbrannstrom`
+  (device login, July 9). Run `gh auth logout` if credentials should not
+  live on the box.
 - Ad-hoc production DB access: run Python inside `catscan-api` using
   `storage.postgres_database` helpers — `pg_query` for SELECTs (it
   fetches and will roll back writes), `pg_execute` for writes.
@@ -159,6 +203,13 @@ applies to all seats.
 
 ## Remaining Work
 
+0. **Upstream `app_name`/`app_id` emptiness**: both columns are 100% empty
+   across all seats in rtb_daily (C-DAT-002 warns daily). The daily-spend
+   feature already works around it via `rtb_buyer_spend_daily`; fixing the
+   upstream mapping (or accepting and delisting the columns from
+   `MONITORED_COLUMNS` in `scripts/contracts_check.py`) clears the WARN.
+   Also: 2 stuck `ingestion_runs` rows keep C-ING-001 at WARN — clear with
+   `contracts_check.py --fail-stale-ingestion-runs` after a look.
 1. Implement the VIDEO evidence-priority fix and surface
    `language_source`/`language_confidence` in the Language Flags UI (see
    carried-over RCA above).
@@ -179,7 +230,14 @@ applies to all seats.
 8. Untracked local files not from this work: `manual/explainers/`,
    `manual/index.md` (modified), and
    `.github/workflows/trigger-docs-freshness.yml` — review and commit or
-   discard deliberately.
+   discard deliberately. (Also seen July 9: `.env.bak.20260521003359`,
+   `precompute_24h_monitor.pid`, `scripts/precompute_24h_monitor.sh` on the
+   VM — same treatment.)
+9. GCP → Hetzner migration: rehearse the rtb_daily restore into partitions
+   on the target box per `scripts/partition_migration/README.md`, and pin
+   Postgres **15.17**. Cut over onto partitions only if the rehearsal is
+   clean; wire `partition_retention.py --from-config --apply` as a daily
+   timer after cutover.
 
 ## Useful Commands
 
