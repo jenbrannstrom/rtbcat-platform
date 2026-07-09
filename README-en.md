@@ -131,7 +131,7 @@ Changes you make are staged first. Nothing is sent to Google until you review th
 
 ### Data retention
 
-Control how long raw and summary data is kept. Auto-aggregation compresses old data without losing trend visibility.
+Control how long raw and summary data is kept. Auto-aggregation compresses old data without losing trend visibility. For large installs, `scripts/partition_migration/` converts the raw fact table to monthly partitions so retention becomes an instant partition drop.
 
 ![Data retention settings](docs/screenshots/data-retention-config.png)
 
@@ -266,6 +266,7 @@ Start with [INSTALL.md](INSTALL.md). For release/build rules, use [docs/VERSIONI
 | [docs/OPTIMIZATION_LOGIC.md](docs/OPTIMIZATION_LOGIC.md) | what the optimizer uses and what it still lacks |
 | [METRICS_GUIDE.md](METRICS_GUIDE.md) | metric definitions |
 | [ROADMAP.md](ROADMAP.md) | what is built, what is partial, what comes next |
+| [scripts/partition_migration/README.md](scripts/partition_migration/README.md) | partitioning the raw fact table + retention at scale |
 | [CHANGELOG.md](CHANGELOG.md) | release history |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | contribution flow |
 
