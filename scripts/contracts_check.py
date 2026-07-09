@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Contract validation suite for CatScan platform.
 
-Machine-checks contracts: C-ING-001, C-ING-002, C-EPT-001, C-PRE-002, C-PRE-003.
+Machine-checks contracts: C-ING-001, C-ING-002, C-EPT-001, C-PRE-002,
+C-PRE-003, C-DAT-001 (per-seat freshness), C-DAT-002 (column completeness).
 
 Usage:
     python scripts/contracts_check.py --days 7
@@ -85,6 +86,18 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=24,
         help="Age threshold for --fail-stale-ingestion-runs (default: 24)",
+    )
+    parser.add_argument(
+        "--freshness-warn-days",
+        type=int,
+        default=3,
+        help="C-DAT-001: WARN when a seat's newest rtb_daily row is older (default: 3)",
+    )
+    parser.add_argument(
+        "--freshness-fail-days",
+        type=int,
+        default=5,
+        help="C-DAT-001: FAIL when a seat's newest rtb_daily row is older (default: 5)",
     )
     parser.add_argument("--json-out", help="Path to write JSON output")
     return parser.parse_args()
@@ -453,6 +466,156 @@ async def check_pre_003(
 
 
 # ---------------------------------------------------------------------------
+# Raw data trust checks (C-DAT-*)
+# ---------------------------------------------------------------------------
+
+# Columns whose silent disappearance has bitten before (app_name was 100%
+# NULL upstream for weeks; publisher_id gaps break pretarg_publisher_daily).
+MONITORED_COLUMNS = [
+    "app_name",
+    "app_id",
+    "publisher_id",
+    "creative_id",
+    "country",
+    "spend_micros",
+]
+
+
+async def check_dat_001(
+    buyers: list[dict], warn_days: int = 3, fail_days: int = 5,
+) -> CheckResult:
+    """C-DAT-001: every active seat has fresh rows in rtb_daily.
+
+    The Gmail importer incident "succeeded" for 3.5 weeks while destroying
+    reports; the signal that was missing is a seat's data going stale, not a
+    job failing. Google reporting lags 1-2 days, hence the default
+    thresholds.
+    """
+    stale: dict[str, str] = {}
+    dead: dict[str, str] = {}
+    for b in buyers:
+        rows = await pg_query(
+            "SELECT MAX(metric_date) AS latest FROM rtb_daily "
+            "WHERE buyer_account_id IN (%s, %s)",
+            (b["buyer_id"], b["bidder_id"]),
+        )
+        latest = rows[0]["latest"] if rows else None
+        if latest is None:
+            dead[b["buyer_id"]] = "no rows"
+            continue
+        age = (datetime.utcnow().date() - latest).days
+        if age > fail_days:
+            dead[b["buyer_id"]] = f"{age}d old"
+        elif age > warn_days:
+            stale[b["buyer_id"]] = f"{age}d old"
+
+    details = {
+        "buyers_checked": len(buyers),
+        "warn_days": warn_days,
+        "fail_days": fail_days,
+        "stale": stale,
+        "failed": dead,
+    }
+    if dead:
+        return CheckResult(
+            "C-DAT-001", "per-seat rtb_daily freshness", "FAIL",
+            f"{len(dead)} seat(s) beyond {fail_days}d freshness: {dead}",
+            details,
+        )
+    if stale:
+        return CheckResult(
+            "C-DAT-001", "per-seat rtb_daily freshness", "WARN",
+            f"{len(stale)} seat(s) beyond {warn_days}d freshness: {stale}",
+            details,
+        )
+    return CheckResult(
+        "C-DAT-001", "per-seat rtb_daily freshness", "PASS",
+        f"All {len(buyers)} seats within {warn_days}d freshness",
+        details,
+    )
+
+
+async def check_dat_002(days: int, buyers: list[dict]) -> CheckResult:
+    """C-DAT-002: monitored rtb_daily columns did not go dark.
+
+    Compares the last ``days`` days against the ``days`` before them, per
+    seat and per source report type. A column that had values in the prior
+    window and is 100% empty in the current one fails (the app_name
+    incident); a column empty everywhere in both windows warns (the
+    "feature reading a permanently empty table" incident).
+    """
+    presence_exprs = ", ".join(
+        f"COUNT({col}) FILTER (WHERE {col} IS NOT NULL) AS {col}_present"
+        if col == "spend_micros"
+        else f"COUNT(*) FILTER (WHERE COALESCE({col}, '') != '') AS {col}_present"
+        for col in MONITORED_COLUMNS
+    )
+    went_dark: list[str] = []
+    column_seen: dict[str, bool] = {c: False for c in MONITORED_COLUMNS}
+    any_rows = False
+
+    for b in buyers:
+        rows = await pg_query(
+            "SELECT CASE WHEN metric_date >= (CURRENT_DATE - %s) "
+            "THEN 'current' ELSE 'prior' END AS win, "
+            "COALESCE(source_report, '') AS source_report, "
+            f"COUNT(*) AS total, {presence_exprs} "
+            "FROM rtb_daily "
+            "WHERE buyer_account_id IN (%s, %s) "
+            "AND metric_date >= (CURRENT_DATE - %s) "
+            "GROUP BY 1, 2",
+            (days, b["buyer_id"], b["bidder_id"], days * 2),
+        )
+        by_report: dict[str, dict[str, dict]] = {}
+        for r in rows:
+            by_report.setdefault(r["source_report"], {})[r["win"]] = r
+        for report, wins in by_report.items():
+            cur, pri = wins.get("current"), wins.get("prior")
+            if not cur and pri and pri["total"] > 0:
+                went_dark.append(
+                    f"{b['buyer_id']}/{report or 'unknown'}/(report vanished)"
+                )
+                continue
+            for col in MONITORED_COLUMNS:
+                if cur and cur["total"] > 0:
+                    any_rows = True
+                    if cur[f"{col}_present"] > 0:
+                        column_seen[col] = True
+                    elif pri and pri[f"{col}_present"] > 0:
+                        went_dark.append(
+                            f"{b['buyer_id']}/{report or 'unknown'}/{col}"
+                        )
+                if pri and pri[f"{col}_present"] > 0:
+                    column_seen[col] = True
+
+    details = {
+        "window_days": days,
+        "columns": MONITORED_COLUMNS,
+        "went_dark": went_dark,
+        "empty_everywhere": [c for c, seen in column_seen.items() if not seen],
+    }
+    if went_dark:
+        return CheckResult(
+            "C-DAT-002", "rtb_daily column completeness", "FAIL",
+            f"{len(went_dark)} seat/report/column(s) had data in the prior "
+            f"{days}d window but are 100% empty now: {went_dark}",
+            details,
+        )
+    if any_rows and details["empty_everywhere"]:
+        return CheckResult(
+            "C-DAT-002", "rtb_daily column completeness", "WARN",
+            f"Column(s) empty across all seats in both {days}d windows: "
+            f"{details['empty_everywhere']}",
+            details,
+        )
+    return CheckResult(
+        "C-DAT-002", "rtb_daily column completeness", "PASS",
+        f"All monitored columns populated where expected ({days}d window)",
+        details,
+    )
+
+
+# ---------------------------------------------------------------------------
 # Web lane feature flag
 # ---------------------------------------------------------------------------
 
@@ -579,6 +742,8 @@ async def run_all_checks(
     refresh_endpoints: bool = False,
     fail_stale_ingestion: bool = False,
     stale_ingestion_hours: int = 24,
+    freshness_warn_days: int = 3,
+    freshness_fail_days: int = 5,
 ) -> list[CheckResult]:
     """Execute all contract checks and return results."""
     buyers = await discover_active_buyers(buyer_filter)
@@ -614,6 +779,8 @@ async def run_all_checks(
         await check_ept_001(),
         await check_pre_002(days, buyers),
         await check_pre_003(days, buyers, strict),
+        await check_dat_001(buyers, freshness_warn_days, freshness_fail_days),
+        await check_dat_002(days, buyers),
         await check_web_001(days),
         await check_web_002(days, buyers),
     ]
@@ -647,6 +814,8 @@ async def main() -> None:
         refresh_endpoints=args.refresh_endpoints_current,
         fail_stale_ingestion=args.fail_stale_ingestion_runs,
         stale_ingestion_hours=args.stale_ingestion_hours,
+        freshness_warn_days=args.freshness_warn_days,
+        freshness_fail_days=args.freshness_fail_days,
     )
 
     passes, warns, fails = print_summary(results)
