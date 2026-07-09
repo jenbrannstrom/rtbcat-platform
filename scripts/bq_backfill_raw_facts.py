@@ -282,6 +282,20 @@ def insert_to_postgres(
         raise ValueError(f"No insert config for table: {table_name}")
 
     cursor = pg_conn.cursor()
+
+    # Partitioned rtb_daily (scripts/partition_migration/) deduplicates via
+    # UNIQUE (metric_date, row_hash) — a partitioned unique index must include
+    # the partition key. metric_date leads every row_hash key list, so the
+    # constraint is equivalent; only the conflict target differs.
+    if table_name == "rtb_daily":
+        cursor.execute(
+            "SELECT EXISTS (SELECT 1 FROM pg_partitioned_table "
+            "WHERE partrelid = 'rtb_daily'::regclass)"
+        )
+        if cursor.fetchone()[0]:
+            insert_sql = insert_sql.replace(
+                "ON CONFLICT (row_hash)", "ON CONFLICT (metric_date, row_hash)"
+            )
     total_inserted = 0
 
     for i in range(0, len(rows), batch_size):
