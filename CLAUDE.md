@@ -2,7 +2,7 @@
 
 ## Performance: Precompute-first for analytics queries
 
-**Never query `rtb_daily` in batch.** This table has 138M+ rows and grows daily. Any endpoint that aggregates metrics for multiple creatives MUST use the precomputed tables first:
+**Never query `rtb_daily` in batch.** This table has 460M+ rows / 327 GB (2026-07) and grows ~2.6M rows a day. Any endpoint that aggregates metrics for multiple creatives MUST use the precomputed tables first:
 
 - `config_creative_daily` — creative-level daily spend/impressions (177K rows, sub-second)
 - `performance_metrics` — creative-level metrics with geography/device breakdowns
@@ -37,4 +37,8 @@ middleware files.
 - Production is the only deploy target (staging retired May 2026; VM
   `catscan-production-sg2` is TERMINATED, snapshot kept)
 - Production VM: `catscan-production-sg` (asia-southeast1-b)
-- Hot-patching via `docker cp` + `docker restart` is acceptable for urgent API fixes when Docker Hub rate limits block builds
+- **Nothing serves traffic that isn't a pushed, sha-tagged image.** No
+  hot-patching containers via `docker cp`, no unpushed commits on the VM,
+  no `/app` edits: they survive restarts but not recreation, and they make
+  the system's true state exist nowhere but on one box. For an urgent fix,
+  push the commit and let CI build the image — deploy that.
