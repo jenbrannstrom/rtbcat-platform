@@ -4,6 +4,32 @@ All notable changes to Cat-Scan are documented in this file.
 
 > Versioning note (March 5, 2026): canonical OSS release versions use `VERSION` + git tags (`vX.Y.Z`). Historical entries below with `10.x`-`17.x` were internal milestone labels and were not published semver release tags.
 
+## [Unreleased]
+
+### Added
+
+- Data-trust contracts `C-DAT-001` (per-seat rtb_daily freshness) and
+  `C-DAT-002` (per-seat, per-report-type column completeness) in
+  `scripts/contracts_check.py`, with tests. Designed to catch the
+  silent-data-loss incident class within a day instead of weeks.
+- `scripts/partition_migration/`: rehearsal-gated migration kit converting
+  `rtb_daily` to monthly partitions — BIGINT `id` (INTEGER sequence
+  exhaustion was ~16 months out), dedup unique index on
+  `(metric_date, row_hash)`, index set reduced 16 → 7 on usage evidence,
+  and retention via instant `DROP PARTITION` wired to `retention_config`.
+- Importers (`unified_importer.py`, `bq_backfill_raw_facts.py`) detect at
+  connect time whether `rtb_daily` is partitioned and pick the matching
+  `ON CONFLICT` target, so one build spans the partition cutover.
+
+### Removed
+
+- Eight stale `v1-*` pilot GitHub Actions workflows.
+
+### Changed
+
+- CLAUDE.md: production hot-patching allowance replaced with the
+  sha-tagged-image invariant; stale `rtb_daily` size guidance corrected.
+
 ## [0.9.4] - 2026-03-10
 
 ### Release
