@@ -4,6 +4,17 @@
 **Scope:** rtbcat-platform (Cat-Scan) retrospective + GCP → Hetzner migration opinion.
 **Context:** Written on handover/retirement. Companion to `handover.md` and the GCP Full Migration Inventory & Checklist.
 
+> **Status (2026-07-10):** the actionable findings are implemented and
+> deployed (PR #100, image `sha-6b3f2b1`): §1 daily per-seat
+> freshness/completeness contracts live via systemd timer on the VM; §2
+> stale `v1-*` workflows deleted (router audit found the rest of the repo
+> surface actually in use); §3 delivered as the rehearsal-gated
+> `scripts/partition_migration/` kit; §4 invariant written into CLAUDE.md.
+> Two corrections from live verification: Cloud SQL is **Postgres 15.17**
+> (pin that, not 16), and rtb_daily had grown to **327 GB / ~467M rows**
+> with the `id` INTEGER sequence ~16 months from exhaustion — fixed by the
+> kit's BIGINT rebuild. Current state lives in `handover.md`.
+
 ---
 
 ## Production state — verified at handover (2026-07-09)
