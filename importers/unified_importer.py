@@ -103,6 +103,24 @@ def compute_row_hash(row_data: Dict, keys: List[str]) -> str:
     return hashlib.md5(hash_input.encode()).hexdigest()
 
 
+def rtb_daily_conflict_target(cursor) -> str:
+    """Dedup conflict target for rtb_daily inserts.
+
+    The partitioned table (scripts/partition_migration/) deduplicates via
+    UNIQUE (metric_date, row_hash) because a partitioned unique index must
+    include the partition key; the legacy table uses UNIQUE (row_hash).
+    metric_date is the first compute_row_hash() key, so both enforce the
+    same rows. Probing lets one build span the partition cutover.
+    """
+    cursor.execute(
+        "SELECT EXISTS (SELECT 1 FROM pg_partitioned_table "
+        "WHERE partrelid = 'rtb_daily'::regclass) AS is_partitioned"
+    )
+    row = cursor.fetchone()
+    is_partitioned = row["is_partitioned"] if isinstance(row, dict) else row[0]
+    return "(metric_date, row_hash)" if is_partitioned else "(row_hash)"
+
+
 def sanitize_csv_text(value: Any) -> str:
     """Normalize CSV text before it reaches Postgres text fields."""
     if value is None:
@@ -547,7 +565,7 @@ def import_to_rtb_daily(
     min_date, max_date = None, None
     observed_dates: set = set()
 
-    insert_sql = """
+    insert_sql = f"""
         INSERT INTO rtb_daily (
             metric_date, hour, billing_id, creative_id, creative_size, creative_format,
             country, platform, environment, publisher_id, publisher_name, publisher_domain,
@@ -556,7 +574,7 @@ def import_to_rtb_daily(
             video_starts, video_completions, viewable_impressions, measurable_impressions,
             bidder_id, source_report, row_hash, import_batch_id
         ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-        ON CONFLICT (row_hash) DO NOTHING
+        ON CONFLICT {rtb_daily_conflict_target(cursor)} DO NOTHING
     """
     rows_to_insert: list[tuple] = []
 
