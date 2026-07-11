@@ -25,7 +25,7 @@ ROTATE_DB_PASSWORD="false"
 GITHUB_REPO=""
 SYNC_GITHUB_CANARY_SECRET="false"
 GMAIL_SCHEDULE="0 12 * * *"
-PRECOMPUTE_SCHEDULE="30 13 * * *"
+PRECOMPUTE_SCHEDULE="30 22 * * *"
 CREATIVE_CACHE_SCHEDULE="45 14 * * *"
 TIME_ZONE="Etc/UTC"
 
@@ -191,6 +191,10 @@ upsert_http_scheduler() {
       --time-zone="$TIME_ZONE" \
       --uri="$uri" \
       --http-method=POST \
+      --attempt-deadline=1800s \
+      --max-retry-attempts=3 \
+      --min-backoff=60s \
+      --max-backoff=600s \
       --update-headers="$headers" \
       --description="$description" \
       >/dev/null
@@ -203,6 +207,10 @@ upsert_http_scheduler() {
       --time-zone="$TIME_ZONE" \
       --uri="$uri" \
       --http-method=POST \
+      --attempt-deadline=1800s \
+      --max-retry-attempts=3 \
+      --min-backoff=60s \
+      --max-backoff=600s \
       --headers="$headers" \
       --description="$description" \
       >/dev/null

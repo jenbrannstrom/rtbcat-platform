@@ -62,6 +62,14 @@ async def refresh_precompute_scheduled(request: Request) -> PrecomputeRefreshRes
     if not secret or not header_secret or not hmac.compare_digest(header_secret, secret):
         raise HTTPException(status_code=403, detail="Invalid scheduler secret")
 
+    # The Gmail worker performs the causal refresh after a successful import.
+    # This scheduled run is a fallback; never compete with an active import for
+    # database and BigQuery capacity.
+    from scripts.gmail_import import get_status as get_gmail_import_status
+
+    if get_gmail_import_status().get("running"):
+        raise HTTPException(status_code=409, detail="Gmail import is still running")
+
     refresh_days = secrets_mgr.get_int("PRECOMPUTE_REFRESH_DAYS", 2)
     if refresh_days < 1:
         raise HTTPException(status_code=400, detail="PRECOMPUTE_REFRESH_DAYS must be >= 1")
