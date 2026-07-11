@@ -24,7 +24,8 @@ from psycopg.rows import dict_row
 from datetime import date, timedelta
 
 from importers.flexible_mapper import (
-    map_columns, detect_best_report_type, get_default_value, MappingResult
+    canonical_source_report, detect_best_report_type, get_default_value,
+    map_columns, MappingResult,
 )
 from importers.domain_rollup import rollup_domains
 from importers.parquet_pipeline import ParquetExportManager
@@ -658,7 +659,7 @@ def import_to_rtb_daily(
                         except Exception:
                             effective_bidder_id = None
                     row_data["bidder_id"] = effective_bidder_id
-                    row_data["source_report"] = report_type
+                    row_data["source_report"] = canonical_source_report(mapping, report_type)
 
                     # If buyer_account_id missing from CSV, use bidder_id from filename
                     if not row_data["buyer_account_id"] and effective_bidder_id:
@@ -683,7 +684,7 @@ def import_to_rtb_daily(
                                 **row_data,
                                 "spend_micros": row_data["spend_micros"],
                                 "bidder_id": row_data["bidder_id"],
-                                "report_type": report_type,
+                                "report_type": row_data["source_report"],
                                 "row_hash": row_hash,
                                 "import_batch_id": batch_id,
                             },

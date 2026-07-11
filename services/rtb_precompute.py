@@ -224,9 +224,9 @@ async def refresh_rtb_summaries(
             ),
         ],
     )
-    # Buyer-level spend, sourced from rtb_daily WITHOUT the app_name filter the
-    # app-dimension tables use. rtb_daily has spend_micros populated per buyer/day
-    # but no app breakdown, so this is the only in-house source for daily spend.
+    # Buyer-level spend comes only from the canonical Google buyer-auction report.
+    # Other performance report shapes also contain Spend but are dimensional
+    # subsets; adding them together double-counts the same buyer/day.
     buyer_spend_rows = _run_rtb_query(
         sql=f"""
             SELECT
@@ -237,7 +237,8 @@ async def refresh_rtb_summaries(
                 SUM(clicks) AS clicks,
                 SUM(spend_micros) AS spend_micros
             FROM `{rtb_daily_table}`
-            WHERE metric_date BETWEEN @start_date AND @end_date{buyer_clause}
+            WHERE metric_date BETWEEN @start_date AND @end_date
+              AND report_type = 'buyer_spend'{buyer_clause}
             GROUP BY metric_date, COALESCE(buyer_account_id, '')
         """,
         params=[
