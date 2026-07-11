@@ -28,16 +28,22 @@ def _run_import(*, verbose: bool, job_id: str, import_trigger: str) -> dict:
     )
 
 
-def _refresh_home_precompute(*, days: int) -> None:
+def _refresh_home_precompute(*, start_date: str, end_date: str) -> None:
     from services.home_precompute import refresh_home_summaries
 
-    asyncio.run(refresh_home_summaries(days=days))
+    asyncio.run(refresh_home_summaries(start_date=start_date, end_date=end_date))
 
 
-def _refresh_config_precompute(*, days: int) -> None:
+def _refresh_config_precompute(*, start_date: str, end_date: str) -> None:
     from services.config_precompute import refresh_config_breakdowns
 
-    asyncio.run(refresh_config_breakdowns(days=days))
+    asyncio.run(refresh_config_breakdowns(start_date=start_date, end_date=end_date))
+
+
+def _refresh_rtb_precompute(*, start_date: str, end_date: str) -> None:
+    from services.rtb_precompute import refresh_rtb_summaries
+
+    asyncio.run(refresh_rtb_summaries(start_date, end_date))
 
 
 def _refresh_endpoint_snapshot() -> None:
@@ -50,7 +56,12 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Detached Gmail import worker")
     parser.add_argument("--job-id", required=True, help="Job ID to track in status")
     parser.add_argument("--quiet", action="store_true", help="Suppress verbose importer output")
-    parser.add_argument("--refresh-days", type=int, default=30, help="Precompute refresh window")
+    parser.add_argument(
+        "--refresh-days",
+        type=int,
+        default=2,
+        help="Fallback precompute window when imported file dates are unavailable",
+    )
     parser.add_argument(
         "--import-trigger",
         choices=["gmail-auto", "gmail-manual"],
@@ -75,10 +86,20 @@ def main() -> int:
         return 0
 
     try:
-        _print(f"Refreshing home precompute (days={args.refresh_days})")
-        _refresh_home_precompute(days=args.refresh_days)
-        _print(f"Refreshing config precompute (days={args.refresh_days})")
-        _refresh_config_precompute(days=args.refresh_days)
+        start_date = result.get("imported_date_start")
+        end_date = result.get("imported_date_end")
+        if not start_date or not end_date:
+            from services.precompute_utils import normalize_refresh_dates, refresh_window
+
+            start_date, end_date = refresh_window(
+                normalize_refresh_dates(days=args.refresh_days)
+            )
+        _print(f"Refreshing home precompute ({start_date} to {end_date})")
+        _refresh_home_precompute(start_date=start_date, end_date=end_date)
+        _print(f"Refreshing config precompute ({start_date} to {end_date})")
+        _refresh_config_precompute(start_date=start_date, end_date=end_date)
+        _print(f"Refreshing RTB precompute ({start_date} to {end_date})")
+        _refresh_rtb_precompute(start_date=start_date, end_date=end_date)
         _print("Refreshing endpoint observed QPS snapshot")
         _refresh_endpoint_snapshot()
         _print("Worker finished successfully")
