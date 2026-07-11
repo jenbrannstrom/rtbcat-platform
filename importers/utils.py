@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 from datetime import datetime
 from typing import Optional
 
@@ -35,12 +36,19 @@ def parse_int(value, default: Optional[int] = 0) -> Optional[int]:
 
 
 def parse_float(value, default: Optional[float] = 0.0) -> Optional[float]:
-    """Parse float, returning default for empty/invalid."""
+    """Parse a numeric CSV value, including buyer-currency formatting.
+
+    Authorized Buyers emits the buyer currency symbol in some seats' Spend
+    columns (for example Uplivo's EUR seat).  Keep the numeric value verbatim
+    while removing presentation-only currency symbols and spacing.
+    """
     if value is None or value == "":
         return default
     if isinstance(value, (int, float)):
         return float(value)
     try:
-        return float(str(value).replace(",", "").replace("$", "").strip())
+        text = str(value).strip().replace(",", "").replace("\u00a0", "")
+        text = re.sub(r"^[\s$\u20ac\u00a3\u00a5]+|[\s$\u20ac\u00a3\u00a5]+$", "", text)
+        return float(text)
     except (ValueError, TypeError):
         return default
