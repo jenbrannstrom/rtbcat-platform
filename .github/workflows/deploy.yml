@@ -247,7 +247,8 @@ jobs:
               # Recreating that container mid-import leaves partial BigQuery
               # data and unread email backlog. Abort safely and deploy later.
               if sudo docker inspect catscan-api >/dev/null 2>&1; then
-                if ! sudo docker exec catscan-api python -c 'from scripts.gmail_import import get_status; import sys; status=get_status(); print("gmail_import_running", bool(status.get("running"))); sys.exit(1 if status.get("running") else 0)'; then
+                sudo docker cp scripts/check_gmail_import_idle.py catscan-api:/tmp/check_gmail_import_idle.py
+                if ! sudo docker exec catscan-api python /tmp/check_gmail_import_idle.py; then
                   echo 'FAIL: Gmail report import is active; refusing to restart catscan-api'
                   exit 1
                 fi
