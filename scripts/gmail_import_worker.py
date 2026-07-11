@@ -46,6 +46,12 @@ def _refresh_rtb_precompute(*, start_date: str, end_date: str) -> None:
     asyncio.run(refresh_rtb_summaries(start_date, end_date))
 
 
+def _refresh_legacy_performance(*, start_date: str, end_date: str) -> None:
+    from scripts.backfill_performance_metrics import backfill_range
+
+    backfill_range(start_date, end_date)
+
+
 def _refresh_endpoint_snapshot() -> None:
     from services.endpoints_service import EndpointsService
 
@@ -100,6 +106,8 @@ def main() -> int:
         _refresh_config_precompute(start_date=start_date, end_date=end_date)
         _print(f"Refreshing RTB precompute ({start_date} to {end_date})")
         _refresh_rtb_precompute(start_date=start_date, end_date=end_date)
+        _print(f"Refreshing legacy performance metrics ({start_date} to {end_date})")
+        _refresh_legacy_performance(start_date=start_date, end_date=end_date)
         _print("Refreshing endpoint observed QPS snapshot")
         _refresh_endpoint_snapshot()
         _print("Worker finished successfully")

@@ -129,6 +129,7 @@ def run_pipeline_for_file(filepath: Path, seat_id: Optional[str], verbose: bool 
             csv_path=str(filepath),
             buyer_id=buyer_id,
             metric_date=metric_date,
+            skip_aggregate=True,
         )
         
         if result.get("success"):
@@ -1122,7 +1123,7 @@ def import_to_catscan(filepath: Path) -> CatscanImportResult:
     try:
         from importers.unified_importer import unified_import
 
-        result = unified_import(str(filepath))
+        result = unified_import(str(filepath), sync_legacy_performance=False)
         columns_str = ",".join(result.columns_mapped.values()) if result.columns_mapped else None
 
         if result.success:

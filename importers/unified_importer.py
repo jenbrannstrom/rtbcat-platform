@@ -538,6 +538,7 @@ def import_to_rtb_daily(
     bidder_id: Optional[str] = None,
     parquet_exporter: Optional["ParquetExportManager"] = None,
     report_type: Optional[str] = None,
+    sync_legacy_performance: bool = True,
 ):
     """Import data to rtb_daily table (Postgres)."""
     conn = get_postgres_connection()
@@ -711,8 +712,10 @@ def import_to_rtb_daily(
                         result.errors.append(f"Row {row_num}: {str(e)}")
 
         flush_rows()
-        # Keep legacy performance_metrics populated from accepted rtb_daily rows.
-        sync_performance_metrics_from_rtb_daily_batch(cursor, batch_id)
+        # Interactive/manual imports preserve legacy hydration. Batch workers
+        # disable this full-table per-file scan and rebuild once after all files.
+        if sync_legacy_performance:
+            sync_performance_metrics_from_rtb_daily_batch(cursor, batch_id)
         conn.commit()
         result.success = True
         _apply_date_continuity(result, observed_dates, min_date, max_date)
@@ -1376,6 +1379,7 @@ def unified_import(
     csv_path: str,
     bidder_id: Optional[str] = None,
     source_filename: Optional[str] = None,
+    sync_legacy_performance: bool = True,
 ) -> UnifiedImportResult:
     """
     Import any CSV using flexible column mapping (Postgres).
@@ -1383,6 +1387,9 @@ def unified_import(
     Args:
         csv_path: Path to CSV file
         bidder_id: Optional bidder ID override
+        source_filename: Optional original filename used for report routing
+        sync_legacy_performance: Hydrate the legacy table for this file. Batch
+            workers should disable this and rebuild once after all files.
 
     Returns:
         UnifiedImportResult with success status and details
@@ -1475,6 +1482,7 @@ def unified_import(
                 bidder_id=bidder_id,
                 parquet_exporter=parquet_exporter,
                 report_type=report_type,
+                sync_legacy_performance=sync_legacy_performance,
             )
         elif target_table == "rtb_bidstream":
             import_to_rtb_bidstream(

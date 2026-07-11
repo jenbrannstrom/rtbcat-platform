@@ -62,25 +62,16 @@ def resolve_range(args: argparse.Namespace) -> tuple[str, str]:
     return start_date.isoformat(), end_date.isoformat()
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description="Backfill performance_metrics from rtb_daily")
-    parser.add_argument("--start-date", help="YYYY-MM-DD")
-    parser.add_argument("--end-date", help="YYYY-MM-DD")
-    parser.add_argument("--days", type=int, default=60, help="Lookback window if no explicit dates")
-    parser.add_argument("--buyer-id", help="Optional buyer_account_id filter")
-    args = parser.parse_args()
-
-    start_date, end_date = resolve_range(args)
-
-    where = ["metric_date::date BETWEEN %s AND %s", "COALESCE(creative_id, '') <> ''"]
+def backfill_range(start_date: str, end_date: str, buyer_id: str | None = None) -> int:
+    """Rebuild legacy performance metrics once for an imported date range."""
+    where = ["metric_date BETWEEN %s::date AND %s::date", "COALESCE(creative_id, '') <> ''"]
     params: list[object] = [start_date, end_date]
-    if args.buyer_id:
+    if buyer_id:
         where.append("buyer_account_id = %s")
-        params.append(args.buyer_id)
+        params.append(buyer_id)
 
     with get_conn() as conn:
         ensure_performance_metrics_table(conn)
-
         sql = f"""
             INSERT INTO performance_metrics (
                 creative_id, campaign_id, metric_date,
@@ -91,7 +82,7 @@ def main() -> int:
             SELECT
                 creative_id,
                 MAX(NULLIF(billing_id, '')) AS campaign_id,
-                metric_date::date AS metric_date,
+                metric_date,
                 COALESCE(SUM(impressions), 0) AS impressions,
                 COALESCE(SUM(clicks), 0) AS clicks,
                 COALESCE(SUM(spend_micros), 0) AS spend_micros,
@@ -102,7 +93,7 @@ def main() -> int:
                 NOW() AS updated_at
             FROM rtb_daily
             WHERE {' AND '.join(where)}
-            GROUP BY creative_id, metric_date::date,
+            GROUP BY creative_id, metric_date,
                      COALESCE(NULLIF(country, ''), ''),
                      COALESCE(NULLIF(platform, ''), ''),
                      COALESCE(NULLIF(environment, ''), '')
@@ -115,18 +106,31 @@ def main() -> int:
                 campaign_id = COALESCE(EXCLUDED.campaign_id, performance_metrics.campaign_id),
                 updated_at = NOW()
         """
-
         cur = conn.execute(sql, tuple(params))
         conn.commit()
-        print(
-            {
-                "status": "ok",
-                "start_date": start_date,
-                "end_date": end_date,
-                "buyer_id": args.buyer_id,
-                "rows_upserted": cur.rowcount,
-            }
-        )
+        return cur.rowcount
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Backfill performance_metrics from rtb_daily")
+    parser.add_argument("--start-date", help="YYYY-MM-DD")
+    parser.add_argument("--end-date", help="YYYY-MM-DD")
+    parser.add_argument("--days", type=int, default=60, help="Lookback window if no explicit dates")
+    parser.add_argument("--buyer-id", help="Optional buyer_account_id filter")
+    args = parser.parse_args()
+
+    start_date, end_date = resolve_range(args)
+
+    rows_upserted = backfill_range(start_date, end_date, args.buyer_id)
+    print(
+        {
+            "status": "ok",
+            "start_date": start_date,
+            "end_date": end_date,
+            "buyer_id": args.buyer_id,
+            "rows_upserted": rows_upserted,
+        }
+    )
     return 0
 
 
