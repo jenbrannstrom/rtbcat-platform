@@ -791,6 +791,54 @@ def get_email_subject(payload: Dict) -> str:
     return ""
 
 
+def _report_message_priority(subject: str) -> int:
+    """Put the canonical buyer-spend feed ahead of large diagnostic reports."""
+    return 0 if "catscan-bidsinauction-" in (subject or "").lower() else 1
+
+
+def prioritize_report_messages(service, messages: List[Dict]) -> List[Dict]:
+    """Return Gmail messages in serving-value order, preserving order within a tier.
+
+    Gmail does not guarantee the order returned by search.  Fetching only Subject
+    metadata is cheap and prevents multi-hundred-megabyte quality reports from
+    delaying the small reports that power customer balances.
+    """
+    ranked = []
+    for position, message in enumerate(messages):
+        subject = ""
+        try:
+            metadata = service.users().messages().get(
+                userId="me",
+                id=message["id"],
+                format="metadata",
+                metadataHeaders=["Subject"],
+            ).execute()
+            subject = get_email_subject(metadata.get("payload", {}))
+        except Exception as exc:
+            print(
+                f"  Warning: could not read subject metadata for {message.get('id')}: {exc}",
+                flush=True,
+            )
+        ranked.append((_report_message_priority(subject), position, message))
+    ranked.sort(key=lambda item: (item[0], item[1]))
+    return [item[2] for item in ranked]
+
+
+def publish_buyer_spend_range(*, start_date: str, end_date: str, seat_id: str) -> None:
+    """Publish one canonical spend report immediately after its pipeline load."""
+    import asyncio
+
+    from services.rtb_precompute import refresh_rtb_summaries
+
+    asyncio.run(
+        refresh_rtb_summaries(
+            start_date,
+            end_date,
+            buyer_account_id=seat_id,
+        )
+    )
+
+
 def extract_seat_id(subject: str) -> Optional[str]:
     """Extract seat ID from report subject lines."""
     if not subject:
@@ -1488,7 +1536,7 @@ def run_import(
             )
             return result
 
-        messages = find_report_emails(service)
+        messages = prioritize_report_messages(service, find_report_emails(service))
         result["unread_report_emails"] = len(messages)
 
         if not messages:
@@ -1594,6 +1642,36 @@ def run_import(
                             )
                             if verbose:
                                 print(f"  Pipeline failed: {filepath.name}")
+                        elif (
+                            report_kind == "catscan-bidsinauction"
+                            and seat_id
+                            and imp.date_range_start
+                            and imp.date_range_end
+                        ):
+                            try:
+                                publish_buyer_spend_range(
+                                    start_date=str(imp.date_range_start),
+                                    end_date=str(imp.date_range_end),
+                                    seat_id=seat_id,
+                                )
+                                if verbose:
+                                    print(
+                                        f"  Published buyer spend for {seat_id} "
+                                        f"({imp.date_range_start} to {imp.date_range_end})"
+                                    )
+                            except Exception as exc:
+                                message_fully_processed = False
+                                failure = {
+                                    "message_id": message_id,
+                                    "filename": filepath.name,
+                                    "seat_id": seat_id,
+                                    "report_kind": report_kind,
+                                    "error": f"buyer_spend_publish_failed: {exc}",
+                                }
+                                result["file_failures"].append(failure)
+                                result["errors"].append(
+                                    f"Buyer spend publish failed for {filepath.name}: {exc}"
+                                )
                     else:
                         message_fully_processed = False
                         failure = {
