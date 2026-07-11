@@ -84,6 +84,28 @@ def test_gmail_status_includes_file_failures(tmp_path, monkeypatch):
     assert status["recent_history"][0]["file_failures"] == [failure]
 
 
+def test_dead_worker_lock_is_recovered_immediately(tmp_path, monkeypatch):
+    _stub_google_modules()
+
+    from scripts import gmail_import
+
+    status_path = tmp_path / "gmail_import_status.json"
+    lock_path = tmp_path / "gmail_import.lock"
+    lock_path.write_text(
+        '{"pid": 999999, "job_id": "dead-job", "started_at": "2026-07-11T12:00:00"}',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(gmail_import, "STATUS_PATH", status_path)
+    monkeypatch.setattr(gmail_import, "LOCK_PATH", lock_path)
+    monkeypatch.setattr(gmail_import, "_lock_owner_alive", lambda _data: False)
+    monkeypatch.setattr(gmail_import, "_get_sync_connection", lambda: None)
+
+    assert gmail_import.get_status()["running"] is False
+    assert gmail_import.acquire_lock("replacement-job") is True
+    assert gmail_import._read_lock_payload()["job_id"] == "replacement-job"
+    assert gmail_import.load_status()["last_reason"] == "worker_abandoned"
+
+
 def test_run_import_records_failed_file_in_result_and_status(tmp_path, monkeypatch):
     _stub_google_modules()
 

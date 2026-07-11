@@ -61,7 +61,7 @@ TOKEN_PATH = CREDENTIALS_DIR / 'gmail-token.json'
 CLIENT_SECRET_PATH = CREDENTIALS_DIR / 'gmail-oauth-client.json'
 STATUS_PATH = CATSCAN_DIR / 'gmail_import_status.json'
 LOCK_PATH = CATSCAN_DIR / 'gmail_import.lock'
-LOCK_STALE_SECONDS = 6 * 60 * 60
+LOCK_STALE_SECONDS = 12 * 60 * 60
 
 # S3 Archive Configuration (disabled by default)
 S3_BUCKET = os.environ.get('CATSCAN_S3_BUCKET', '')
@@ -177,12 +177,7 @@ def load_status() -> Dict[str, Any]:
 
 
 def _is_lock_active() -> bool:
-    if not LOCK_PATH.exists():
-        return False
-    try:
-        return (time.time() - LOCK_PATH.stat().st_mtime) <= LOCK_STALE_SECONDS
-    except Exception:
-        return False
+    return LOCK_PATH.exists() and not _lock_is_stale()
 
 
 def save_status(status: Dict[str, Any]):
@@ -1249,8 +1244,13 @@ def process_message(
 def _lock_is_stale() -> bool:
     if not LOCK_PATH.exists():
         return False
+    data = _read_lock_payload()
+    # New lock files identify the exact worker. A dead/mismatched process means
+    # the container or VM restarted, so recover immediately instead of blocking
+    # the next scheduler run for a fixed six-hour timeout.
+    if data.get("pid"):
+        return not _lock_owner_alive(data)
     try:
-        data = json.loads(LOCK_PATH.read_text())
         started_at = data.get("started_at")
         if started_at:
             started_time = datetime.fromisoformat(started_at)
@@ -1261,6 +1261,64 @@ def _lock_is_stale() -> bool:
         return (time.time() - LOCK_PATH.stat().st_mtime) > LOCK_STALE_SECONDS
     except Exception:
         return False
+
+
+def _read_lock_payload() -> Dict[str, Any]:
+    try:
+        data = json.loads(LOCK_PATH.read_text())
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def _lock_owner_alive(data: Dict[str, Any]) -> bool:
+    """Return true only when the lock belongs to the expected live worker."""
+    try:
+        pid = int(data.get("pid") or 0)
+        job_id = str(data.get("job_id") or "")
+        if pid <= 0 or not job_id:
+            return False
+        cmdline = Path(f"/proc/{pid}/cmdline").read_bytes().replace(b"\x00", b" ").decode(
+            errors="replace"
+        )
+        return "gmail_import_worker.py" in cmdline and job_id in cmdline
+    except (FileNotFoundError, ProcessLookupError, PermissionError, ValueError, OSError):
+        return False
+
+
+def _record_abandoned_import(data: Dict[str, Any]) -> None:
+    job_id = str(data.get("job_id") or "")
+    if not job_id:
+        return
+    error = "Import worker exited before finalization; recovered stale lock"
+    update_status(
+        False,
+        files_imported=0,
+        error=error,
+        running=False,
+        current_job_id=None,
+        reason="worker_abandoned",
+        file_failures=[],
+    )
+    conn = _get_sync_connection()
+    if conn is None:
+        return
+    try:
+        with conn:
+            conn.execute(
+                """
+                UPDATE ingestion_runs
+                SET status = 'failed',
+                    error_summary = %s,
+                    finished_at = CURRENT_TIMESTAMP
+                WHERE filename = %s AND finished_at IS NULL
+                """,
+                (error, f"scheduler:{job_id}"),
+            )
+    except Exception as exc:
+        print(f"  Warning: failed to mark abandoned ingestion run: {exc}")
+    finally:
+        conn.close()
 
 
 def _try_acquire_lock(job_id: str) -> bool:
@@ -1281,10 +1339,12 @@ def acquire_lock(job_id: str) -> bool:
     if _try_acquire_lock(job_id):
         return True
     if _lock_is_stale():
+        stale_data = _read_lock_payload()
         try:
             LOCK_PATH.unlink()
         except FileNotFoundError:
             pass
+        _record_abandoned_import(stale_data)
         return _try_acquire_lock(job_id)
     return False
 
@@ -1322,6 +1382,8 @@ def run_import(
         "runtime_path_verified": False,
         "latest_metric_date": None,
         "rows_on_latest_metric_date": 0,
+        "imported_date_start": None,
+        "imported_date_end": None,
     }
     job_id = job_id or str(datetime.now().timestamp()).replace(".", "")
 
@@ -1444,6 +1506,7 @@ def run_import(
             print(f"Found {len(messages)} unread report email(s)\n")
 
         total_imported = 0
+        imported_dates: List[str] = []
 
         for msg in messages:
             message_id = msg['id']
@@ -1510,6 +1573,9 @@ def run_import(
                     )
                     if imp.success:
                         total_imported += 1
+                        for imported_date in (imp.date_range_start, imp.date_range_end):
+                            if imported_date:
+                                imported_dates.append(str(imported_date))
                         # Run pipeline for BigQuery/Postgres
                         pipeline_ok = run_pipeline_for_file(filepath, seat_id, verbose=verbose)
                         if not pipeline_ok:
@@ -1561,6 +1627,9 @@ def run_import(
 
         result["success"] = True
         result["file_failure_count"] = len(result["file_failures"])
+        if imported_dates:
+            result["imported_date_start"] = min(imported_dates)
+            result["imported_date_end"] = max(imported_dates)
 
         if verbose:
             print("=" * 60)

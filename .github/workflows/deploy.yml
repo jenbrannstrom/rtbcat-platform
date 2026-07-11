@@ -243,6 +243,17 @@ jobs:
               sudo bash scripts/apply_gcp_nginx_auth_contract.sh
               echo '✓ Nginx edge auth contract applied'
 
+              # A Gmail import is a long-running child of the API container.
+              # Recreating that container mid-import leaves partial BigQuery
+              # data and unread email backlog. Abort safely and deploy later.
+              if sudo docker inspect catscan-api >/dev/null 2>&1; then
+                if ! sudo docker exec catscan-api python -c 'from scripts.gmail_import import get_status; import sys; status=get_status(); print("gmail_import_running={}".format(bool(status.get("running")))); sys.exit(1 if status.get("running") else 0)'; then
+                  echo 'FAIL: Gmail report import is active; refusing to restart catscan-api'
+                  exit 1
+                fi
+              fi
+              echo '✓ Gmail import idle; container restart is safe'
+
               # Start containers with new images
               sudo -E docker compose -f docker-compose.gcp.yml up -d --force-recreate
 
