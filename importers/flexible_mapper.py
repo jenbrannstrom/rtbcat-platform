@@ -205,6 +205,24 @@ class MappingResult:
         return db_field in self.mapped
 
 
+def canonical_source_report(mapping: MappingResult, report_type: str) -> str:
+    """Identify the one Google report shape authoritative for buyer spend.
+
+    Authorized Buyers sends multiple performance reports containing Spend. The
+    billing/quality report is a dimensional subset and must not be added to the
+    buyer-level auction report. Tag only the latter as ``buyer_spend`` so the
+    finance precompute has one unambiguous source per buyer/day.
+    """
+    if (
+        report_type == "performance_detail"
+        and mapping.has_field("spend")
+        and mapping.has_field("buyer_account_id")
+        and mapping.has_field("bids_in_auction")
+    ):
+        return "buyer_spend"
+    return report_type
+
+
 def normalize_column_name(name: str) -> str:
     """Normalize a column name for comparison."""
     return name.lower().strip().replace("_", " ").replace("-", " ").replace("#", "")
