@@ -24,7 +24,9 @@ ROTATE_API_KEY="false"
 ROTATE_DB_PASSWORD="false"
 GITHUB_REPO=""
 SYNC_GITHUB_CANARY_SECRET="false"
-GMAIL_SCHEDULE="0 12 * * *"
+# Authorized Buyers reports arrive over several hours. Poll repeatedly so the
+# canonical spend emails generated after the first run are still served that day.
+GMAIL_SCHEDULE="0 12,15,18 * * *"
 PRECOMPUTE_SCHEDULE="30 22 * * *"
 CREATIVE_CACHE_SCHEDULE="45 14 * * *"
 TIME_ZONE="Etc/UTC"
