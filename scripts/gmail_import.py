@@ -24,7 +24,7 @@ import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any, List, Callable
 import uuid
 import time
@@ -181,6 +181,7 @@ def load_status() -> Dict[str, Any]:
         "last_unread_report_emails": 0,
         "last_file_failures": [],
         "last_file_failure_count": 0,
+        "expected_spend_missing": [],
     }
 
 
@@ -207,6 +208,7 @@ def update_status(
     file_failures: Optional[List[Dict[str, str]]] = None,
     emails_skipped: int = 0,
     skipped_seat_ids: Optional[List[str]] = None,
+    expected_spend_missing: Optional[List[str]] = None,
 ):
     """Update the import status after a run."""
     status = load_status()
@@ -232,6 +234,8 @@ def update_status(
         status["last_file_failure_count"] = len(file_failures)
     status["last_emails_skipped"] = int(emails_skipped)
     status["last_skipped_seat_ids"] = sorted(set(skipped_seat_ids or []))
+    if expected_spend_missing is not None:
+        status["expected_spend_missing"] = sorted(set(expected_spend_missing))
 
     # Keep last 50 history entries
     status["history"].insert(0, {
@@ -246,6 +250,7 @@ def update_status(
         "unread_report_emails": unread_report_emails,
         "file_failures": file_failures or [],
         "file_failure_count": len(file_failures or []),
+        "expected_spend_missing": sorted(set(expected_spend_missing or [])),
     })
     status["history"] = status["history"][:50]
 
@@ -272,6 +277,7 @@ def get_status() -> Dict[str, Any]:
         "last_unread_report_emails": int(status.get("last_unread_report_emails") or 0),
         "last_file_failures": status.get("last_file_failures", []),
         "last_file_failure_count": int(status.get("last_file_failure_count") or 0),
+        "expected_spend_missing": status.get("expected_spend_missing", []),
     }
 
 
@@ -432,6 +438,40 @@ def get_runtime_freshness_snapshot() -> dict[str, Any]:
     finally:
         conn.close()
     return snapshot
+
+
+def get_expected_spend_missing_seats(metric_date: Optional[str] = None) -> List[str]:
+    """Return allowlisted seats missing canonical spend rows for D-1 (UTC).
+
+    Google occasionally never delivers a report instance (seat 6634662463
+    metric date 2026-07-05); the run status must say so instead of relying
+    on someone noticing a hole in the dashboard.
+    """
+    if not SEAT_ID_ALLOWLIST:
+        return []
+    if metric_date is None:
+        metric_date = (datetime.now(timezone.utc).date() - timedelta(days=1)).isoformat()
+    conn = _get_sync_connection()
+    if conn is None:
+        return []
+    try:
+        with conn:
+            rows = conn.execute(
+                """
+                SELECT DISTINCT buyer_account_id
+                FROM rtb_buyer_spend_daily
+                WHERE metric_date = %s::date
+                  AND buyer_account_id = ANY(%s)
+                """,
+                (metric_date, sorted(SEAT_ID_ALLOWLIST)),
+            ).fetchall()
+        present = {str(row["buyer_account_id"]) for row in rows}
+        return sorted(seat_id for seat_id in SEAT_ID_ALLOWLIST if seat_id not in present)
+    except Exception as exc:
+        print(f"  Warning: expected-spend completeness check failed: {exc}")
+        return []
+    finally:
+        conn.close()
 
 
 def start_scheduler_ingestion_run(job_id: str, import_trigger: str) -> Optional[str]:
@@ -1524,6 +1564,7 @@ def run_import(
         "rows_on_latest_metric_date": 0,
         "imported_date_start": None,
         "imported_date_end": None,
+        "expected_spend_missing": [],
     }
     job_id = job_id or str(datetime.now().timestamp()).replace(".", "")
 
@@ -1568,6 +1609,7 @@ def run_import(
         if no_new_mail:
             result["no_new_mail"] = True
             result["no_new_mail_reason"] = reason or "no_new_mail"
+        result["expected_spend_missing"] = get_expected_spend_missing_seats()
 
         update_status(
             success,
@@ -1583,6 +1625,7 @@ def run_import(
             file_failures=result.get("file_failures", []),
             emails_skipped=result.get("emails_skipped", 0),
             skipped_seat_ids=result.get("skipped_seat_ids", []),
+            expected_spend_missing=result.get("expected_spend_missing", []),
         )
         finish_scheduler_ingestion_run(
             scheduler_run_id,

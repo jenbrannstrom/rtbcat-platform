@@ -23,8 +23,10 @@ from scripts.v1_canary_smoke import (
     build_pixel_request_params,
     build_webhook_postback_payload,
     build_workflow_request_params,
+    is_after_final_daily_run,
     is_auth_blocked_http_response,
     is_network_blocked_urlerror,
+    validate_agent_daily_spend_d1_completeness,
     validate_agent_daily_spend_payload,
     validate_agent_stats_summary_payload,
     validate_conversion_readiness_payload,
@@ -489,6 +491,73 @@ def test_validate_agent_daily_spend_payload_rejects_zero_spend_when_required():
             require_source_rows=True,
             require_positive_spend=True,
         )
+
+
+def _d1_payload(*, source_status: str) -> dict:
+    payload = _base_agent_daily_spend_payload()
+    payload["rows"][-1]["source_status"] = source_status
+    payload["rows"][-1]["source_row_count"] = 1 if source_status == "present" else 0
+    return payload
+
+
+def test_is_after_final_daily_run_boundary():
+    assert is_after_final_daily_run(
+        datetime(2026, 7, 13, 17, 59, tzinfo=timezone.utc), final_run_hour_utc=18
+    ) is False
+    assert is_after_final_daily_run(
+        datetime(2026, 7, 13, 18, 0, tzinfo=timezone.utc), final_run_hour_utc=18
+    ) is True
+
+
+def test_validate_d1_completeness_fails_missing_day_after_final_run_hour():
+    with pytest.raises(SmokeFailure, match="no source rows for 2026-07-02 after 18:00 UTC"):
+        validate_agent_daily_spend_d1_completeness(
+            _d1_payload(source_status="missing"),
+            expected_date=date(2026, 7, 2),
+            now_utc=datetime(2026, 7, 3, 19, 0, tzinfo=timezone.utc),
+            final_run_hour_utc=18,
+            allow_missing=False,
+        )
+
+
+def test_validate_d1_completeness_allows_pending_day_before_final_run_hour():
+    validate_agent_daily_spend_d1_completeness(
+        _d1_payload(source_status="missing"),
+        expected_date=date(2026, 7, 2),
+        now_utc=datetime(2026, 7, 3, 12, 0, tzinfo=timezone.utc),
+        final_run_hour_utc=18,
+        allow_missing=False,
+    )
+
+
+def test_validate_d1_completeness_passes_when_day_present():
+    validate_agent_daily_spend_d1_completeness(
+        _d1_payload(source_status="present"),
+        expected_date=date(2026, 7, 2),
+        now_utc=datetime(2026, 7, 3, 23, 0, tzinfo=timezone.utc),
+        final_run_hour_utc=18,
+        allow_missing=False,
+    )
+
+
+def test_validate_d1_completeness_waiver_skips_check():
+    validate_agent_daily_spend_d1_completeness(
+        _d1_payload(source_status="missing"),
+        expected_date=date(2026, 7, 2),
+        now_utc=datetime(2026, 7, 3, 23, 0, tzinfo=timezone.utc),
+        final_run_hour_utc=18,
+        allow_missing=True,
+    )
+
+
+def test_validate_d1_completeness_ignores_dates_outside_window():
+    validate_agent_daily_spend_d1_completeness(
+        _d1_payload(source_status="missing"),
+        expected_date=date(2026, 7, 9),
+        now_utc=datetime(2026, 7, 10, 23, 0, tzinfo=timezone.utc),
+        final_run_hour_utc=18,
+        allow_missing=False,
+    )
 
 
 def test_build_webhook_postback_payload_includes_expected_fields():
