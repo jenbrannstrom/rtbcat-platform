@@ -9,6 +9,8 @@ Handles both:
 Features:
   - Optionally archives imported CSVs to S3 with gzip compression
   - Tracks import status in ~/.catscan/gmail_import_status.json
+  - Durable dedup via Postgres gmail_processed_messages (unread state is a
+    human-facing signal only; correctness does not depend on mark-as-read)
 """
 
 import os
@@ -69,6 +71,11 @@ S3_REGION = os.environ.get('CATSCAN_S3_REGION', 'eu-central-1')
 S3_ARCHIVE_ENABLED = os.environ.get('CATSCAN_S3_ARCHIVE', 'false').lower() == 'true'
 GMAIL_LABEL = os.environ.get('CATSCAN_GMAIL_LABEL', '').strip()
 GMAIL_QUERY = os.environ.get('CATSCAN_GMAIL_QUERY', '').strip()
+# Rolling discovery window. Dedup comes from gmail_processed_messages, so a
+# read-but-never-imported email is retried instead of silently lost.
+GMAIL_LOOKBACK_DAYS = int(os.environ.get('CATSCAN_GMAIL_LOOKBACK_DAYS', '3'))
+# Superseded: discovery no longer filters on unread state (the default query
+# dropped is:unread). Still read so existing deployments don't break.
 INCLUDE_READ = os.environ.get('CATSCAN_GMAIL_INCLUDE_READ', 'false').lower() == 'true'
 SEAT_ID_ALLOWLIST = {
     seat_id.strip()
@@ -566,6 +573,73 @@ def record_import_run(
         conn.close()
 
 
+def get_imported_message_ids(message_ids: List[str]) -> set[str]:
+    """Return the subset of message_ids already imported (durable dedup).
+
+    Only status='imported' suppresses re-discovery; skipped/failed messages
+    stay retryable within the rolling lookback window.
+    """
+    if not message_ids:
+        return set()
+    conn = _get_sync_connection()
+    if conn is None:
+        return set()
+    try:
+        with conn:
+            rows = conn.execute(
+                """
+                SELECT gmail_message_id
+                FROM gmail_processed_messages
+                WHERE status = 'imported'
+                  AND gmail_message_id = ANY(%s)
+                """,
+                (list(message_ids),),
+            ).fetchall()
+        return {str(row["gmail_message_id"]) for row in rows}
+    except Exception as exc:
+        print(f"  Warning: failed to read gmail_processed_messages: {exc}")
+        return set()
+    finally:
+        conn.close()
+
+
+def record_processed_message(
+    message_id: str,
+    *,
+    status: str,
+    subject: Optional[str] = None,
+    seat_id: Optional[str] = None,
+    filename: Optional[str] = None,
+    batch_id: Optional[str] = None,
+) -> None:
+    """Record one Gmail message in the durable dedup ledger."""
+    conn = _get_sync_connection()
+    if conn is None:
+        return
+    try:
+        with conn:
+            conn.execute(
+                """
+                INSERT INTO gmail_processed_messages
+                    (gmail_message_id, processed_at, subject, seat_id,
+                     filename, batch_id, status)
+                VALUES (%s, CURRENT_TIMESTAMP, %s, %s, %s, %s, %s)
+                ON CONFLICT (gmail_message_id) DO UPDATE
+                SET processed_at = EXCLUDED.processed_at,
+                    subject = EXCLUDED.subject,
+                    seat_id = EXCLUDED.seat_id,
+                    filename = EXCLUDED.filename,
+                    batch_id = EXCLUDED.batch_id,
+                    status = EXCLUDED.status
+                """,
+                (message_id, subject, seat_id, filename, batch_id, status),
+            )
+    except Exception as exc:
+        print(f"  Warning: failed to record processed gmail message: {exc}")
+    finally:
+        conn.close()
+
+
 def archive_to_s3(filepath: Path, report_type: Optional[str] = None, verbose: bool = True) -> Optional[str]:
     """
     Archive CSV to S3 with gzip compression.
@@ -713,19 +787,33 @@ def build_access_token_provider(
     return get_access_token
 
 
-def find_report_emails(service):
-    """Find all unread emails from Google Authorized Buyers (with pagination)."""
+def build_report_search_query() -> str:
+    """Build the Gmail search query for report discovery.
+
+    Deliberately independent of unread state: mark-as-read used to be the
+    only dedup, so a read-but-never-imported email was silently lost. The
+    rolling newer_than window re-surfaces recent mail on every scheduled
+    poll and gmail_processed_messages filters what was already imported.
+    """
     if GMAIL_QUERY:
-        query = GMAIL_QUERY
-    else:
-        query_parts = [
-            'from:noreply-google-display-ads-managed-reports@google.com',
-        ]
-        if not INCLUDE_READ:
-            query_parts.append('is:unread')
-        if GMAIL_LABEL:
-            query_parts.append(f"label:{GMAIL_LABEL}")
-        query = " ".join(query_parts)
+        return GMAIL_QUERY
+    query_parts = [
+        'from:noreply-google-display-ads-managed-reports@google.com',
+        f'newer_than:{GMAIL_LOOKBACK_DAYS}d',
+    ]
+    if GMAIL_LABEL:
+        query_parts.append(f"label:{GMAIL_LABEL}")
+    return " ".join(query_parts)
+
+
+def filter_new_messages(messages: List[Dict], imported_ids: set[str]) -> List[Dict]:
+    """Drop messages whose ids are already recorded as imported."""
+    return [message for message in messages if message.get('id') not in imported_ids]
+
+
+def find_report_emails(service):
+    """Find new report emails from Google Authorized Buyers (with pagination)."""
+    query = build_report_search_query()
 
     all_messages = []
     page_token = None
@@ -745,7 +833,10 @@ def find_report_emails(service):
         if not page_token:
             break
 
-    return all_messages
+    imported_ids = get_imported_message_ids(
+        [message['id'] for message in all_messages if message.get('id')]
+    )
+    return filter_new_messages(all_messages, imported_ids)
 
 
 def extract_download_url(body: str) -> Optional[str]:
@@ -1552,7 +1643,7 @@ def run_import(
             return result
 
         if verbose:
-            print(f"Found {len(messages)} unread report email(s)\n")
+            print(f"Found {len(messages)} new report email(s)\n")
 
         total_imported = 0
         imported_dates: List[str] = []
@@ -1576,21 +1667,36 @@ def run_import(
                         result["skipped_seat_ids"].append(seat_id)
                     if verbose:
                         print(f"  Skipped seat_id={seat_id or 'unknown'} subject='{subject}'")
-                    # Deliberately NOT marked as read: leaving allowlist-skipped
-                    # emails unread means adding the seat to
-                    # CATSCAN_GMAIL_SEAT_IDS later auto-imports the backlog.
-                    # Marking them read silently destroyed weeks of reports for
-                    # seat 7942355670 (June 2026).
+                    # Deliberately NOT marked as read, and recorded with a
+                    # non-'imported' status so dedup keeps them retryable:
+                    # adding the seat to CATSCAN_GMAIL_SEAT_IDS later
+                    # auto-imports the backlog still inside the lookback
+                    # window. Marking them read silently destroyed weeks of
+                    # reports for seat 7942355670 (June 2026).
+                    record_processed_message(
+                        message_id,
+                        status="skipped_seat",
+                        subject=subject,
+                        seat_id=seat_id,
+                    )
                     continue
 
                 if not downloaded_files:
                     if verbose:
                         print("  No CSV found (attachment or URL)")
+                    record_processed_message(
+                        message_id,
+                        status="no_csv",
+                        subject=subject,
+                        seat_id=seat_id,
+                    )
                     continue
 
                 result["emails_processed"] += 1
 
                 message_fully_processed = True
+                last_filename: Optional[str] = None
+                last_batch_id: Optional[str] = None
 
                 for filepath in downloaded_files:
                     result["files"].append(str(filepath))
@@ -1599,6 +1705,8 @@ def run_import(
                     archive_to_s3(filepath, verbose=verbose)
 
                     imp = import_to_catscan(filepath)
+                    last_filename = filepath.name
+                    last_batch_id = imp.batch_id or None
                     report_kind = canonical_report_kind_for_tracking(
                         filepath.name,
                         parsed_report_type=imp.report_type,
@@ -1687,7 +1795,16 @@ def run_import(
                             f"{failure['error']}"
                         )
 
+                record_processed_message(
+                    message_id,
+                    status="imported" if message_fully_processed else "failed",
+                    subject=subject,
+                    seat_id=seat_id,
+                    filename=last_filename,
+                    batch_id=last_batch_id,
+                )
                 if message_fully_processed:
+                    # Human-facing signal only; dedup is gmail_processed_messages.
                     mark_as_read(service, message_id)
                     if verbose:
                         print("  Marked as read")
