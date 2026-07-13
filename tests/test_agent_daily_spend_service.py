@@ -72,6 +72,9 @@ async def test_daily_spend_distinguishes_missing_from_present_and_totals() -> No
     assert payload["summary"] == {
         "requested_days": 2,
         "days_with_source_rows": 1,
+        "complete": False,
+        "missing_dates": ["2026-07-02"],
+        "latest_complete_date": "2026-07-01",
         "total_impressions": 4200,
         "total_clicks": 17,
         "total_spend_micros": 12_500_000,
@@ -97,6 +100,68 @@ async def test_daily_spend_include_empty_false_drops_missing_days() -> None:
     # Missing days stay visible in summary/warnings even when rows are dropped.
     assert payload["summary"]["days_with_source_rows"] == 1
     assert payload["warnings"] == ["No RTBcat spend source rows found for 2026-07-02."]
+
+
+def _row(metric_date: date, *, present: bool) -> dict:
+    return {
+        "metric_date": metric_date,
+        "impressions": 100 if present else 0,
+        "clicks": 1 if present else 0,
+        "spend_micros": 1_000_000 if present else 0,
+        "source_row_count": 1 if present else 0,
+        "app_count": 0,
+        "billing_count": 0,
+    }
+
+
+async def _completeness_summary(present_by_day: list[bool]) -> dict:
+    rows = [
+        _row(date(2026, 7, day + 1), present=present)
+        for day, present in enumerate(present_by_day)
+    ]
+    service = AgentStatsService(repo=_StubRepo(rows=rows))
+    payload = await service.get_daily_spend(
+        buyer_id="buyer-1",
+        start_date=date(2026, 7, 1),
+        end_date=date(2026, 7, len(present_by_day)),
+    )
+    return payload["summary"]
+
+
+@pytest.mark.asyncio
+async def test_daily_spend_summary_complete_when_full_range_present() -> None:
+    summary = await _completeness_summary([True, True, True])
+
+    assert summary["complete"] is True
+    assert summary["missing_dates"] == []
+    assert summary["latest_complete_date"] == "2026-07-03"
+
+
+@pytest.mark.asyncio
+async def test_daily_spend_summary_mid_range_hole_stops_latest_complete_date() -> None:
+    summary = await _completeness_summary([True, False, True])
+
+    assert summary["complete"] is False
+    assert summary["missing_dates"] == ["2026-07-02"]
+    assert summary["latest_complete_date"] == "2026-07-01"
+
+
+@pytest.mark.asyncio
+async def test_daily_spend_summary_missing_tail() -> None:
+    summary = await _completeness_summary([True, True, False])
+
+    assert summary["complete"] is False
+    assert summary["missing_dates"] == ["2026-07-03"]
+    assert summary["latest_complete_date"] == "2026-07-02"
+
+
+@pytest.mark.asyncio
+async def test_daily_spend_summary_missing_first_day_has_null_latest_complete_date() -> None:
+    summary = await _completeness_summary([False, True, True])
+
+    assert summary["complete"] is False
+    assert summary["missing_dates"] == ["2026-07-01"]
+    assert summary["latest_complete_date"] is None
 
 
 @pytest.mark.asyncio
