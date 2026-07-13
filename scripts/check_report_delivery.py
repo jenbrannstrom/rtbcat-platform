@@ -160,9 +160,10 @@ def main() -> int:
         "seats": {},
     }
     for seat in seats:
-        arrived = deliveries.get(delivery_d, {}).get(seat, set()) | deliveries.get(
-            delivery_d + timedelta(days=1), {}
-        ).get(seat, set())
+        # Strict same-day check: subjects carry no metric date ("yesterday-UTC"),
+        # so an email on D+2 is normally the NEXT day's report, not a late one.
+        # A late-but-recovered day shows up here as missing email + spend lane ok.
+        arrived = deliveries.get(delivery_d, {}).get(seat, set())
         missing = sorted(expected.get(seat, set()) - arrived)
         n_batches = batches.get(seat, 0)
         if n_batches == 0:
@@ -179,7 +180,11 @@ def main() -> int:
         }
         for kind in missing:
             sev = "CANONICAL-SPEND" if kind == CANONICAL_KIND else "report"
-            alerts.append(f"{seat}: {sev} email never arrived for metric {metric_d} ({kind})")
+            alerts.append(
+                f"{seat}: {sev} email did not arrive on its normal day ({delivery_d}) "
+                f"for metric {metric_d} ({kind}) — may still arrive late; spend-lane "
+                f"status is the ground truth"
+            )
         if spend_lane == "missing" and (
             CANONICAL_KIND in expected.get(seat, set()) or seat in batches
         ):
