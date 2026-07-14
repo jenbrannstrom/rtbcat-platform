@@ -85,24 +85,31 @@ def gmail_deliveries(svc, start: date, end: date) -> dict[date, dict[str, set[st
             return out
 
 
-def spend_lane_batches(project: str, dataset: str, metric_date: date) -> dict[str, int]:
-    """Map seat -> distinct import batch count in the canonical spend lane."""
+def spend_lane_batches(
+    project: str, dataset: str, metric_date: date, window_days: int = 14
+) -> dict[tuple[str, str], int]:
+    """Map (seat, iso date) -> distinct import batch count in the canonical spend
+    lane over a trailing window, so a duplicate ingested into an OLDER day (e.g.
+    a mis-scheduled report re-run) is caught, not just yesterday's."""
     from google.cloud import bigquery
 
     client = bigquery.Client(project=project)
     sql = f"""
-        SELECT buyer_account_id, COUNT(DISTINCT import_batch_id) AS batches
+        SELECT buyer_account_id, metric_date, COUNT(DISTINCT import_batch_id) AS batches
         FROM `{project}.{dataset}.rtb_daily`
-        WHERE report_type = 'buyer_spend' AND metric_date = @d
-        GROUP BY buyer_account_id
+        WHERE report_type = 'buyer_spend' AND metric_date BETWEEN @s AND @d
+        GROUP BY buyer_account_id, metric_date
     """
     job = client.query(
         sql,
         job_config=bigquery.QueryJobConfig(
-            query_parameters=[bigquery.ScalarQueryParameter("d", "DATE", metric_date)]
+            query_parameters=[
+                bigquery.ScalarQueryParameter("s", "DATE", metric_date - timedelta(days=window_days - 1)),
+                bigquery.ScalarQueryParameter("d", "DATE", metric_date),
+            ]
         ),
     )
-    return {row.buyer_account_id: row.batches for row in job.result()}
+    return {(row.buyer_account_id, row.metric_date.isoformat()): row.batches for row in job.result()}
 
 
 def main() -> int:
@@ -165,7 +172,7 @@ def main() -> int:
         # A late-but-recovered day shows up here as missing email + spend lane ok.
         arrived = deliveries.get(delivery_d, {}).get(seat, set())
         missing = sorted(expected.get(seat, set()) - arrived)
-        n_batches = batches.get(seat, 0)
+        n_batches = batches.get((seat, metric_d.isoformat()), 0)
         if n_batches == 0:
             spend_lane = "missing"
         elif n_batches == 1:
@@ -193,6 +200,15 @@ def main() -> int:
             alerts.append(
                 f"{seat}: metric {metric_d} ingested {n_batches}x in spend lane — "
                 f"published value is multiplied; dedupe before any refresh"
+            )
+
+    # Trailing-window duplicate sweep: a mis-scheduled re-run lands on an OLD
+    # metric date and the inline publisher multiplies it the same day.
+    for (seat, day), n_batches in sorted(batches.items()):
+        if n_batches > 1 and day != metric_d.isoformat():
+            alerts.append(
+                f"{seat}: metric {day} has {n_batches} spend-lane batches — "
+                f"published value is multiplied; dedupe and re-publish"
             )
 
     result["alerts"] = alerts
