@@ -368,6 +368,14 @@ class AgentStatsService:
         rows = [self._daily_spend_payload(row, buyer_id) for row in raw_rows]
 
         missing_dates = [row["metric_date"] for row in rows if row["source_status"] == "missing"]
+        # Latest date D such that every requested date <= D has source rows;
+        # None when the first requested day is already missing. Lets pollers
+        # consume "data is final through D" without parsing warnings.
+        latest_complete_date: str | None = None
+        for row in rows:
+            if row["source_status"] != "present":
+                break
+            latest_complete_date = row["metric_date"]
         if not include_empty:
             rows = [row for row in rows if row["source_status"] == "present"]
 
@@ -396,6 +404,9 @@ class AgentStatsService:
             "summary": {
                 "requested_days": requested_days,
                 "days_with_source_rows": requested_days - len(missing_dates),
+                "complete": not missing_dates,
+                "missing_dates": missing_dates,
+                "latest_complete_date": latest_complete_date,
                 "total_impressions": sum(_int(row.get("impressions")) for row in raw_rows),
                 "total_clicks": sum(_int(row.get("clicks")) for row in raw_rows),
                 "total_spend_micros": sum(_int(row.get("spend_micros")) for row in raw_rows),

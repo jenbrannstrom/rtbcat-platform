@@ -1,11 +1,123 @@
 # Handover
 
-## Current Production Handover
+## Current Production Handover (July 14, 2026)
 
-This is the current handover as of **July 10, 2026**. It supersedes the June
-12 handover (which it extends; the June incident RCAs below are kept) and is
-the companion to `retirement-notes.md` (CTO retrospective + Hetzner migration
-opinion, 2026-07-09).
+Supersedes the June 12 notes (kept below). Author: incident session of July
+13-14, 2026 (MobYoung daily-spend RCA). Full evidence-backed RCA:
+`investigations/RCA-mobyoung-daily-spend-2026-07-13.md`.
+
+### Incident summary — MobYoung `/api/agent/v1/daily-spend` (buyer 6634662463)
+
+Client reported 2 missing days (2026-07-05, 2026-07-12) for July 1-12. Actual
+findings were three distinct defects:
+
+- **07-01 published DOUBLED** (18,211.82 vs true 9,105.909962): an out-of-band
+  replay of the spend CSV on 07-11 appended a duplicate batch (`583a4d26`, no
+  import_history row) to BigQuery `rtb_daily`, and a manual precompute refresh
+  materialized the sum. Fixed 07-13: batch backed up to
+  `rtbcat_analytics.rtb_daily_dupbatch_583a4d26_bak_20260713`, deleted,
+  day re-materialized. Verified.
+- **07-05 missing because Google never delivered** the
+  `catscan-bidsinauction-6634662463` email on 07-06 (mailbox searched incl.
+  spam/trash; 4 of 5 report kinds arrived; that delivery weekend was visibly
+  degraded). Not an importer bug. Recovery in flight — see below.
+- **07-12 was plain D+1 latency** (email arrived 07-13 10:00 UTC, after the
+  client checked). Ingested 07-13 (batch `d645c3b8`, 4,991,479,984 micros).
+  On 07-14 a mis-scoped owner re-run (named `12JULY`, contained metric 07-12,
+  display-formatted) was auto-ingested and the inline publisher DOUBLED the
+  day for ~1h. Fixed same hour: backup
+  `rtb_daily_dupbatch_adc8623e_bak_20260714`, deleted from BQ + PG,
+  republished. That AB schedule is deleted.
+
+Client-facing arithmetic: the 11 verified days total 123,084,809,581 micros.
+The client's UI figure (141,613.90) is ~1,954 over-scoped (likely included a
+July-13 partial or timezone slice); with 07-05 (~16,575) the true range total
+lands ≈139,660. Ask them to re-pull the UI for exactly Jul 1-12 UTC and
+compare per-day values.
+
+### In flight (2026-07-15 morning)
+
+Owner scheduled a `5JULY` AB query re-run: delivers ~10:00 UTC 07-15, the
+10:15 UTC import ingests it, and the inline publisher (#108
+`publish_buyer_spend_range`) publishes metric 07-05 automatically. One-shot
+`catscan-postwave-dupcheck` (10:50 UTC, systemd transient on the VM) runs the
+delivery watchdog early in case that query is mis-scoped onto an existing day
+(which the inline publisher would double). Afterwards verify 12/12 days:
+`SELECT metric_date, spend_micros FROM rtb_buyer_spend_daily WHERE
+buyer_account_id='6634662463' AND metric_date BETWEEN '2026-07-01' AND
+'2026-07-12'`.
+
+### Live production changes made this week (already applied)
+
+- Cloud Scheduler `gmail-import` schedule changed `0 12,15,18 * * *` →
+  `15 10,12,15,18 * * *` (report wave lands 10:00-10:07 UTC; the 12:00 first
+  run left spend ~2h stale daily). Mirrored in terraform + provision config on
+  the PR branch (terraform had drifted to the single pre-#109 run).
+- New systemd timer on the VM: `catscan-report-delivery-check.timer`
+  (13:45 + 19:15 UTC daily) → runs `scripts/check_report_delivery.py` inside
+  `catscan-api` (state-dir fallback copy at
+  `/home/catscan/.catscan/check_report_delivery.py`). Per seat it checks:
+  report emails arrived on their normal day (expected set learned from a
+  14-day lookback), canonical spend-lane rows present, and a **trailing
+  14-day duplicate-batch sweep**. Status JSON:
+  `/home/catscan/.catscan/report_delivery_status.json`; journal:
+  `journalctl -u catscan-report-delivery-check.service`. Validated against
+  the real 07-05 signature and a healthy control day.
+- BigQuery backup tables `rtb_daily_dupbatch_*_bak_*` hold the two deleted
+  duplicate batches; drop them once the client confirms reconciliation.
+
+### Pending review: PR #110 (draft, branch `fix/daily-spend-completeness`)
+
+Five commits, 918 tests passing: (1) `/api/agent/v1/daily-spend` summary gains
+`complete` / `missing_dates[]` / `latest_complete_date` (additive — until
+deployed, the API signals gaps only via warnings/per-day source_status);
+(2) Gmail discovery becomes unread-independent (rolling `newer_than:` window +
+`gmail_processed_messages` ledger, **migration 070 applies at deploy**);
+(3) per-seat D+1 missing-spend alerting in status JSON/API + canary;
+(4) the delivery watchdog script; (5) the scheduler mirror.
+
+### Operational gotchas learned the hard way (do not relearn)
+
+- **The BQ lane is append-only with no idempotency**: re-running any spend CSV
+  through the pipeline appends a new batch and the inline publisher multiplies
+  the published day within minutes. Before ANY historical refresh, scan for
+  multi-batch days (`COUNT(DISTINCT import_batch_id) > 1` per buyer/date,
+  `report_type='buyer_spend'`). Three double-count incidents in one week trace
+  to this; making the lane idempotent is the top follow-up.
+- **Never race Gmail labels to block an import**: `is:unread` search results
+  lag just-changed labels by minutes (a read-quarantine 8 minutes before a run
+  failed). Take `~/.catscan/gmail_import.lock` or pause the scheduler job.
+- **Newly created AB saved queries export display-formatted data** ($ prefixes,
+  2dp, `m/d/yy`) even when email-delivered; only the original scheduled
+  reports carry machine 6dp. The importer parses the display format correctly,
+  and the 2dp cost is only ~±0.3/day — but don't expect 6dp equality.
+- **The 22:30 precompute window is 2 days**; any metric date landing in BQ
+  later than D+1 is never re-materialized without a manual/inline refresh.
+- `docker exec` survives SSH-session death: never re-run a "timed-out"
+  refresh — check `/proc/*/cmdline` in the container first (two concurrent
+  refreshes contended for ~45 min on 07-13). For long jobs use
+  `docker exec -d ... > logfile`.
+
+### Open issues for the next engineer
+
+- **Seat 299038253 has ZERO `buyer_spend`-lane rows in BigQuery** despite
+  daily `catscan-bidsinauction` emails that import successfully — its file
+  shape must be classifying to a different report_type. The watchdog alerts
+  on it daily by design. Pre-existing; uninvestigated.
+- Parquet→BQ idempotency (see gotchas — top priority).
+- On-VM/state-dir pipeline scripts have drifted from the repo
+  (`export_csv_to_parquet.py`, `load_parquet_to_bigquery.py`,
+  `bq_aggregate_to_pg.py` live in `/home/rtbcat/.catscan/`); reconcile them
+  into git.
+- Local checkout note: this working tree sits on `codex/live-major-smoke`
+  with local changes; deployed code == `origin/main`. Compare against
+  `origin/main`, not the working tree.
+
+## Previous Handover (June 12, 2026)
+
+This is the previous handover as of **June 12, 2026**. It supersedes the June
+7/June 10 language-flags notes and removes the archived April/May creative QA
+scope (see git history for those).
 
 The user wants GitHub to be the source of truth. Production must be recoverable
 from GitHub, Terraform, Google Secret Manager, Cloud SQL, Cloud Scheduler,
@@ -16,10 +128,12 @@ expensive staging VM.
 
 - GCP project: `catscan-prod-202601`
 - Production URL: `https://scan.rtb.cat`
-- Current deployed commit: `6b3f2b19` (merge of PR #100, retirement-notes
-  findings), containers on image tag `sha-6b3f2b1`
-- Latest production deploy: 2026-07-09, GitHub Actions run `29045719643`,
-  success with green post-deploy contract gate
+- Current deployed commit: `7d06facb`
+- Production health: `/api/health` returns 200 with `git_sha: 7d06facb`,
+  `version: sha-7d06fac`, and `release_version: 0.9.5`
+- Latest production deploy: GitHub Actions run `27403711752`, success — first
+  fully green contract gate in the June 11-12 sequence (no
+  `ALLOW_CONTRACT_FAILURE` bypass)
 - Production VM: `catscan-production-sg`, `RUNNING`, IP `34.143.222.60`
 - Staging/old VM: `catscan-production-sg2`, `TERMINATED` (retired May 2026,
   snapshot `catscan-production-sg2-retirement-20260506-0327` kept). The deploy
@@ -32,45 +146,9 @@ expensive staging VM.
 Do not restart or use `catscan-production-sg2` unless explicitly asked. It is
 stopped, but not deleted.
 
-## What Changed (July 9-10) — retirement-notes findings implemented
-
-PR #100 (`infra/retirement-findings`, four commits) merged and deployed:
-
-- **Daily data-trust contracts (notes §1).** `scripts/contracts_check.py`
-  gained `C-DAT-001` (per-seat rtb_daily freshness, WARN >3d / FAIL >5d) and
-  `C-DAT-002` (per-seat, per-report-type column completeness: fails when a
-  monitored column or whole report type goes dark vs the prior window, warns
-  when a column is empty everywhere). The repo's
-  `catscan-contracts-check.timer` is now **installed and enabled on the
-  production VM** — daily 04:00, runs inside `catscan-api`, JSON to
-  `/tmp/contracts_daily.json` in the container. Expect a standing C-DAT-002
-  WARN until upstream `app_name`/`app_id` emptiness is fixed (see Remaining
-  Work).
-- **rtb_daily partition migration kit (notes §3).** `scripts/partition_migration/`
-  contains a rehearsal-gated path to monthly partitions: DDL (BIGINT `id`,
-  dedup on `(metric_date, row_hash)`, 16 indexes → 7 on pg_stat evidence),
-  timed loader, per-month validation, instant cutover/rollback, and
-  retention-by-`DROP PARTITION` wired to `retention_config`. Importers detect
-  the table shape at connect time, so no deploy needs to synchronize with the
-  cutover. **Do not run against live prod without the rehearsal** — see the
-  kit README. Measured while building it: rtb_daily is 327 GB / ~467M rows
-  (2026-07-09), growing ~1.8 GB/day, and `rtb_daily_id_seq` is at 589.7M of
-  the INTEGER column max (~16 months to exhaustion; the kit's BIGINT rebuild
-  is the fix).
-- **Stale workflow purge (notes §2).** The eight `v1-*` pilot workflows are
-  deleted. An audit found all 34 routers mounted and real, so no code was
-  deleted; `cloudsql-logical-backup.yml` is healthy and stays.
-- **No-hot-patch invariant (notes §4).** CLAUDE.md now states: nothing serves
-  traffic that isn't a pushed, sha-tagged image. The old "docker cp is
-  acceptable" allowance is gone.
-
-Corrections to the retirement notes discovered while verifying: Cloud SQL is
-**Postgres 15.17** (not 16 — pin 15.17 for the migration) and the rtb_daily
-size figures in the notes (157 GB / 227M rows) were ~2x stale.
-
 ## Latest Production Commits (June 10-12)
 
-All pushed to `main` and deployed:
+All pushed to `main` and deployed (`7d06facb` is live):
 
 - `7d06facb` `Stop marking allowlist-skipped Gmail reports as read`
 - `7f605551` `Coalesce null aggregates in config precompute`
@@ -182,17 +260,8 @@ applies to all seats.
   `secretmanager.secrets.create`).
 - `docker restart` does NOT re-read `/opt/catscan/.env` — container env only
   updates on recreation (deploy or `refresh_gcp_vm_runtime_env.sh
-  --recreate-api`). Hot-patching via `docker cp` is no longer acceptable
-  (CLAUDE.md invariant, July 2026): push the commit, let CI build, deploy that.
-- Daily contract validation runs on the VM via systemd
-  (`catscan-contracts-check.timer`, 04:00): check with
-  `systemctl status catscan-contracts-check.service` or
-  `journalctl -u catscan-contracts-check.service`. The unit files live in
-  `scripts/systemd/`; on a redeploy of the VM they must be reinstalled
-  (`cp` to `/etc/systemd/system/` + `systemctl enable --now`).
-- The `gh` CLI on the production VM is authenticated as `jenbrannstrom`
-  (device login, July 9). Run `gh auth logout` if credentials should not
-  live on the box.
+  --recreate-api`). Hot-patched files via `docker cp` DO survive restarts but
+  not recreation.
 - Ad-hoc production DB access: run Python inside `catscan-api` using
   `storage.postgres_database` helpers — `pg_query` for SELECTs (it
   fetches and will roll back writes), `pg_execute` for writes.
@@ -203,13 +272,6 @@ applies to all seats.
 
 ## Remaining Work
 
-0. **Upstream `app_name`/`app_id` emptiness**: both columns are 100% empty
-   across all seats in rtb_daily (C-DAT-002 warns daily). The daily-spend
-   feature already works around it via `rtb_buyer_spend_daily`; fixing the
-   upstream mapping (or accepting and delisting the columns from
-   `MONITORED_COLUMNS` in `scripts/contracts_check.py`) clears the WARN.
-   Also: 2 stuck `ingestion_runs` rows keep C-ING-001 at WARN — clear with
-   `contracts_check.py --fail-stale-ingestion-runs` after a look.
 1. Implement the VIDEO evidence-priority fix and surface
    `language_source`/`language_confidence` in the Language Flags UI (see
    carried-over RCA above).
@@ -230,14 +292,7 @@ applies to all seats.
 8. Untracked local files not from this work: `manual/explainers/`,
    `manual/index.md` (modified), and
    `.github/workflows/trigger-docs-freshness.yml` — review and commit or
-   discard deliberately. (Also seen July 9: `.env.bak.20260521003359`,
-   `precompute_24h_monitor.pid`, `scripts/precompute_24h_monitor.sh` on the
-   VM — same treatment.)
-9. GCP → Hetzner migration: rehearse the rtb_daily restore into partitions
-   on the target box per `scripts/partition_migration/README.md`, and pin
-   Postgres **15.17**. Cut over onto partitions only if the rehearsal is
-   clean; wire `partition_retention.py --from-config --apply` as a daily
-   timer after cutover.
+   discard deliberately.
 
 ## Useful Commands
 

@@ -52,6 +52,13 @@ class GmailStatusResponse(BaseModel):
     last_file_failure_count: int = Field(
         0, description="Number of file-level import failures from the last Gmail import run"
     )
+    expected_spend_missing: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Allowlisted seat IDs with no canonical buyer_spend rows for "
+            "yesterday (UTC) as of the last import run"
+        ),
+    )
 
 
 class GmailImportResponse(BaseModel):

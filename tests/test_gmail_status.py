@@ -84,6 +84,77 @@ def test_gmail_status_includes_file_failures(tmp_path, monkeypatch):
     assert status["recent_history"][0]["file_failures"] == [failure]
 
 
+def test_gmail_status_includes_expected_spend_missing(tmp_path, monkeypatch):
+    _stub_google_modules()
+
+    from scripts import gmail_import
+
+    monkeypatch.setattr(gmail_import, "STATUS_PATH", tmp_path / "gmail_import_status.json")
+    monkeypatch.setattr(gmail_import, "LOCK_PATH", tmp_path / "gmail_import.lock")
+
+    gmail_import.update_status(
+        success=True,
+        files_imported=2,
+        emails_processed=2,
+        reason="import_completed",
+        expected_spend_missing=["6634662463"],
+    )
+
+    status = gmail_import.get_status()
+    assert status["expected_spend_missing"] == ["6634662463"]
+    assert status["recent_history"][0]["expected_spend_missing"] == ["6634662463"]
+
+
+def test_expected_spend_missing_seats_flags_absent_allowlisted_seat(monkeypatch):
+    _stub_google_modules()
+
+    from scripts import gmail_import
+
+    class _StubConn:
+        def __init__(self):
+            self.calls = []
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_exc):
+            return False
+
+        def execute(self, sql, params=None):
+            self.calls.append((sql, params))
+            return self
+
+        def fetchall(self):
+            return [{"buyer_account_id": "6574658621"}]
+
+        def close(self):
+            pass
+
+    conn = _StubConn()
+    monkeypatch.setattr(gmail_import, "SEAT_ID_ALLOWLIST", {"6574658621", "6634662463"})
+    monkeypatch.setattr(gmail_import, "_get_sync_connection", lambda: conn)
+
+    missing = gmail_import.get_expected_spend_missing_seats(metric_date="2026-07-12")
+
+    assert missing == ["6634662463"]
+    sql, params = conn.calls[0]
+    assert "rtb_buyer_spend_daily" in sql
+    assert params == ("2026-07-12", ["6574658621", "6634662463"])
+
+
+def test_expected_spend_missing_seats_empty_without_allowlist_or_db(monkeypatch):
+    _stub_google_modules()
+
+    from scripts import gmail_import
+
+    monkeypatch.setattr(gmail_import, "SEAT_ID_ALLOWLIST", set())
+    assert gmail_import.get_expected_spend_missing_seats() == []
+
+    monkeypatch.setattr(gmail_import, "SEAT_ID_ALLOWLIST", {"6634662463"})
+    monkeypatch.setattr(gmail_import, "_get_sync_connection", lambda: None)
+    assert gmail_import.get_expected_spend_missing_seats() == []
+
+
 def test_dead_worker_lock_is_recovered_immediately(tmp_path, monkeypatch):
     _stub_google_modules()
 

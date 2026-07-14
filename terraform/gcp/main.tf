@@ -664,8 +664,8 @@ resource "google_cloud_scheduler_job" "precompute_refresh" {
 
 resource "google_cloud_scheduler_job" "gmail_import" {
   name        = "gmail-import"
-  description = "Daily Gmail report import - 1h after emails arrive (~11:00 UTC)"
-  schedule    = "0 12 * * *"
+  description = "Gmail report import - first run right after the ~10:00 UTC delivery wave"
+  schedule    = "15 10,12,15,18 * * *"
   time_zone   = "Etc/UTC"
   region      = var.gcp_region
 
