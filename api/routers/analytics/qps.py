@@ -4,6 +4,7 @@ Handles QPS analytics, size coverage, geo waste, pretargeting recommendations,
 publisher waste, bid filtering, platform efficiency, and hourly patterns.
 """
 
+import asyncio
 import logging
 from typing import Any, Optional
 
@@ -74,7 +75,8 @@ async def get_size_coverage(
                         billing_ids.extend(await get_valid_billing_ids_for_buyer(allowed_buyer))
 
         analyzer = SizeCoverageAnalyzer(os.getenv("POSTGRES_SERVING_DSN", ""))
-        summary = analyzer.analyze(
+        summary = await asyncio.to_thread(
+            analyzer.analyze,
             days,
             billing_id=billing_id,
             billing_ids=billing_ids if billing_ids else None,
@@ -149,7 +151,11 @@ async def get_geo_waste(
                 for allowed_buyer in allowed:
                     billing_ids.extend(await get_valid_billing_ids_for_buyer(allowed_buyer))
         analyzer = GeoWasteAnalyzer(os.getenv("POSTGRES_SERVING_DSN", ""))
-        summary = analyzer.analyze(days, billing_ids=billing_ids if billing_ids else None)
+        summary = await asyncio.to_thread(
+            analyzer.analyze,
+            days,
+            billing_ids=billing_ids if billing_ids else None,
+        )
         return {
             "period_days": days,
             "buyer_id": resolved_buyer_id,
@@ -245,16 +251,19 @@ async def get_qps_summary(
         size_analyzer = SizeCoverageAnalyzer(os.getenv("POSTGRES_SERVING_DSN", ""))
         geo_analyzer = GeoWasteAnalyzer(os.getenv("POSTGRES_SERVING_DSN", ""))
 
-        size_summary = size_analyzer.analyze(
-            days,
-            billing_ids=billing_ids if billing_ids else None,
-            buyer_id=resolved_buyer_id,
+        size_summary, geo_summary = await asyncio.gather(
+            asyncio.to_thread(
+                size_analyzer.analyze,
+                days,
+                billing_ids=billing_ids if billing_ids else None,
+                buyer_id=resolved_buyer_id,
+            ),
+            asyncio.to_thread(
+                geo_analyzer.analyze,
+                days,
+                billing_ids=billing_ids if billing_ids else None,
+            ),
         )
-        geo_summary = geo_analyzer.analyze(days, billing_ids=billing_ids if billing_ids else None)
-
-        # Calculate total estimated waste
-        # Size gaps are 100% waste, geo waste is partial
-        size_waste_pct = 100 - size_summary.coverage_rate if size_summary.coverage_rate > 0 else 0
 
         return {
             "period_days": days,

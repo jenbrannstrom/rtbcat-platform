@@ -1,0 +1,6 @@
+# Copy to backend.hcl. backend.hcl is gitignored because the bucket name is
+# private operational inventory.
+#
+# Use a dedicated prefix that does not overlap an existing Terraform stack.
+bucket = "REPLACE_WITH_THE_ACCESS_CONTROLLED_STATE_BUCKET"
+prefix = "terraform/hetzner/production"

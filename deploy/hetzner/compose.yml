@@ -1,0 +1,106 @@
+name: rtbcat-hetzner
+
+# Part 3 shadow deployment. It intentionally has no public reverse proxy,
+# Cloud SQL sidecar, scheduler, build context, or mutable image tag.
+services:
+  api:
+    image: ${API_IMAGE:?Set API_IMAGE to a GHCR sha256 digest reference}
+    pull_policy: never
+    container_name: rtbcat-api
+    init: true
+    stop_grace_period: 45s
+    ports:
+      - "127.0.0.1:8000:8000"
+    env_file:
+      - ${RTBCAT_RUNTIME_ENV_FILE:?Set RTBCAT_RUNTIME_ENV_FILE}
+    environment:
+      APP_VERSION: sha-${RELEASE_GIT_SHA:?Set RELEASE_GIT_SHA}
+      GIT_SHA: ${RELEASE_GIT_SHA}
+      RELEASE_VERSION: ${RELEASE_VERSION:-migration-shadow}
+      UVICORN_WORKERS: ${UVICORN_WORKERS:-2}
+      POSTGRES_HOST: ${RTBCAT_DATABASE_PRIVATE_IP:-10.60.1.20}
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: ${RTBCAT_DATABASE_NAME:-rtbcat_serving}
+      POSTGRES_USER: ${RTBCAT_DATABASE_OWNER:-rtbcat_serving}
+      POSTGRES_PASSWORD_FILE: /run/rtbcat-secrets/postgres-password
+      POSTGRES_SSLMODE: verify-full
+      POSTGRES_SSL_ROOT_CERT_FILE: /run/rtbcat-secrets/postgres-ca.crt
+      GOOGLE_APPLICATION_CREDENTIALS: /run/rtbcat-secrets/google-adc.json
+      SECRETS_BACKEND: gcp
+      SECRETS_PREFER_ENV: "false"
+      SECRETS_HEALTH_STRICT: "true"
+      OAUTH2_PROXY_ENABLED: "false"
+      CATSCAN_READ_ONLY_SHADOW: "true"
+      # Part 5 must prove scheduler ownership before any of these can be true.
+      CATSCAN_ENABLE_GMAIL_IMPORT_SCHEDULER: "false"
+      CATSCAN_ENABLE_PRECOMPUTE_SCHEDULER: "false"
+      CATSCAN_ENABLE_CREATIVE_CACHE_SCHEDULER: "false"
+    volumes:
+      - type: bind
+        source: ${RTBCAT_DATA_DIR:-/var/lib/rtbcat/app-data}
+        target: /home/rtbcat/.catscan
+      - type: bind
+        source: ${RTBCAT_DB_AUTH_FILE:?Set RTBCAT_DB_AUTH_FILE}
+        target: /run/rtbcat-secrets/postgres-password
+        read_only: true
+      - type: bind
+        source: ${RTBCAT_POSTGRES_CA_FILE:?Set RTBCAT_POSTGRES_CA_FILE}
+        target: /run/rtbcat-secrets/postgres-ca.crt
+        read_only: true
+      - type: bind
+        source: ${RTBCAT_GOOGLE_CREDENTIALS_FILE:?Set RTBCAT_GOOGLE_CREDENTIALS_FILE}
+        target: /run/rtbcat-secrets/google-adc.json
+        read_only: true
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import json,urllib.request; p=json.load(urllib.request.urlopen('http://127.0.0.1:8000/health')); assert p['status']=='healthy' and p['database_exists'] is True"]
+      interval: 20s
+      timeout: 10s
+      retries: 6
+      start_period: 30s
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    logging:
+      driver: json-file
+      options:
+        max-size: 20m
+        max-file: "5"
+    networks:
+      - app
+
+  dashboard:
+    image: ${DASHBOARD_IMAGE:?Set DASHBOARD_IMAGE to a GHCR sha256 digest reference}
+    pull_policy: never
+    container_name: rtbcat-dashboard
+    init: true
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      NEXT_PUBLIC_APP_VERSION: sha-${RELEASE_GIT_SHA}
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/login').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 20s
+      timeout: 10s
+      retries: 6
+      start_period: 20s
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    logging:
+      driver: json-file
+      options:
+        max-size: 20m
+        max-file: "5"
+    networks:
+      - app
+
+networks:
+  app:
+    name: rtbcat-hetzner-app
