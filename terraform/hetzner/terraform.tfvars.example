@@ -1,0 +1,28 @@
+# Copy to terraform.tfvars. terraform.tfvars is gitignored.
+# Never place an API token or private SSH key in this file.
+
+operator_ssh_public_key = "ssh-ed25519 REPLACE_WITH_THE_OPERATOR_PUBLIC_KEY operator"
+
+# Use the current operator/VPN egress address as a /32. World-open SSH is
+# rejected by validation. Part 2 replaces bootstrap SSH with Tailscale access.
+ssh_source_cidrs = ["203.0.113.10/32"]
+enable_public_bootstrap_ssh = true
+
+# Defaults shown for an explicit review before plan/apply.
+location                = "sin"
+app_server_type         = "cpx22"
+database_server_type    = "ccx23"
+app_data_volume_size_gb = 150
+database_volume_size_gb = 750
+
+# The temporary volume holds the parallel directory dump so the permanent
+# database volume does not need to be oversized forever. Unmount it before
+# disabling this flag after rehearsal evidence has been retained.
+enable_rehearsal_dump_volume  = true
+rehearsal_dump_volume_size_gb = 400
+# Keep this true through the accepted restore. Set it false in a separate
+# reviewed apply before setting enable_rehearsal_dump_volume=false.
+enable_rehearsal_dump_volume_delete_protection = true
+
+enable_server_backups    = true
+enable_delete_protection = true

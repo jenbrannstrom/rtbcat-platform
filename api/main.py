@@ -51,9 +51,17 @@ def get_version() -> str:
     return "0.9.4"
 
 
+def resolve_serving_dsn(config) -> Optional[str]:
+    """Prefer the deployment DSN over a restored legacy config value."""
+    return os.getenv("POSTGRES_SERVING_DSN") or (
+        config.database.serving_postgres_dsn if config else None
+    )
+
+
 from fastapi.middleware.cors import CORSMiddleware
 
 from api.auth import APIKeyAuthMiddleware
+from api.read_only_shadow import ReadOnlyShadowMiddleware, read_only_shadow_enabled
 from api.session_middleware import SessionAuthMiddleware
 from api.auth_bootstrap import router as bootstrap_router, _auto_heal_bootstrap_status
 from api.auth_oauth_proxy import router as auth_router, cleanup_sessions
@@ -115,8 +123,13 @@ async def lifespan(app: FastAPI):
     """Application lifespan handler for startup/shutdown."""
     global _store, _config_manager
 
-    # Initialize v40 database schema
-    await startup_event()
+    read_only_shadow = read_only_shadow_enabled()
+
+    # A migration shadow must never mutate the restored rehearsal database.
+    if not read_only_shadow:
+        await startup_event()
+    else:
+        logger.info("Read-only shadow mode: skipping startup migrations.")
 
     # Initialize on startup
     _config_manager = ConfigManager()
@@ -124,26 +137,28 @@ async def lifespan(app: FastAPI):
         config = _config_manager.load()
     except Exception:
         config = None
-    serving_dsn = config.database.serving_postgres_dsn if config else os.getenv("POSTGRES_SERVING_DSN")
+    # An explicit deployment DSN must win over a legacy encrypted config value.
+    # This prevents a restored ~/.catscan directory from silently routing
+    # serving queries back to the old provider during migration.
+    serving_dsn = resolve_serving_dsn(config)
     if not serving_dsn:
-        raise RuntimeError(
-            "POSTGRES_SERVING_DSN must be set for serving queries."
-        )
+        raise RuntimeError("POSTGRES_SERVING_DSN must be set for serving queries.")
     configure_serving_database(serving_dsn)
 
     logger.info("Using PostgresStore for state storage")
     _store = PostgresStore()
-    await _store.initialize()
+    await _store.initialize(run_migrations=not read_only_shadow)
 
     # Set dependencies for routers
     set_store(_store)
     set_config_manager(_config_manager)
 
-    # Auto-heal bootstrap status for existing deployments
-    try:
-        await _auto_heal_bootstrap_status()
-    except Exception as e:
-        logger.warning("Failed to auto-heal bootstrap status: %s", e)
+    if not read_only_shadow:
+        # Auto-heal may update system settings.
+        try:
+            await _auto_heal_bootstrap_status()
+        except Exception as e:
+            logger.warning("Failed to auto-heal bootstrap status: %s", e)
 
     # Validate required secrets for enabled features at startup
     secrets_health = get_secrets_health()
@@ -187,29 +202,36 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning("BigQuery raw schema health check crashed: %s", e)
 
-    # Auto-populate buyer_seats from existing creatives if needed
-    try:
-        seats_created = await _store.populate_buyer_seats_from_creatives()
-        if seats_created > 0:
-            logger.info(f"Auto-populated {seats_created} buyer seats from existing creatives")
-    except Exception as e:
-        logger.warning(f"Failed to auto-populate buyer seats: {e}")
+    if not read_only_shadow:
+        # These startup maintenance operations all write.
+        try:
+            seats_created = await _store.populate_buyer_seats_from_creatives()
+            if seats_created > 0:
+                logger.info(
+                    "Auto-populated %s buyer seats from existing creatives",
+                    seats_created,
+                )
+        except Exception as e:
+            logger.warning("Failed to auto-populate buyer seats: %s", e)
 
-    # Cleanup expired sessions on startup
-    try:
-        cleanup_result = await cleanup_sessions()
-        if cleanup_result.get("sessions_deleted", 0) > 0:
-            logger.info(f"Cleaned up {cleanup_result['sessions_deleted']} expired sessions")
-    except Exception as e:
-        logger.warning(f"Failed to cleanup sessions: {e}")
+        try:
+            cleanup_result = await cleanup_sessions()
+            if cleanup_result.get("sessions_deleted", 0) > 0:
+                logger.info(
+                    "Cleaned up %s expired sessions",
+                    cleanup_result["sessions_deleted"],
+                )
+        except Exception as e:
+            logger.warning("Failed to cleanup sessions: %s", e)
 
-    # Cleanup expired agent tokens on startup (mirrors session cleanup above)
-    try:
-        agent_tokens_revoked = await AgentTokenService().cleanup_expired_tokens()
-        if agent_tokens_revoked > 0:
-            logger.info(f"Revoked {agent_tokens_revoked} expired agent tokens")
-    except Exception as e:
-        logger.warning(f"Failed to cleanup agent tokens: {e}")
+        try:
+            agent_tokens_revoked = await AgentTokenService().cleanup_expired_tokens()
+            if agent_tokens_revoked > 0:
+                logger.info("Revoked %s expired agent tokens", agent_tokens_revoked)
+        except Exception as e:
+            logger.warning("Failed to cleanup agent tokens: %s", e)
+    else:
+        logger.info("Read-only shadow mode: skipped all startup maintenance writes.")
 
     logger.info("Cat-Scan API started")
 
@@ -226,7 +248,11 @@ def create_app() -> FastAPI:
         Configured FastAPI application instance.
     """
     # Disable built-in Swagger/ReDoc in production — docs live at docs.rtb.cat
-    disable_docs = os.environ.get("DISABLE_OPENAPI_DOCS", "").lower() in ("1", "true", "yes")
+    disable_docs = os.environ.get("DISABLE_OPENAPI_DOCS", "").lower() in (
+        "1",
+        "true",
+        "yes",
+    )
     application = FastAPI(
         title="Cat-Scan Creative Intelligence",
         description="API for collecting and analyzing Authorized Buyers creative data",
@@ -253,6 +279,9 @@ def create_app() -> FastAPI:
 
     # Session-based authentication (multi-user mode)
     application.add_middleware(SessionAuthMiddleware)
+
+    # Added last so it is the outermost application guard.
+    application.add_middleware(ReadOnlyShadowMiddleware)
 
     return application
 

@@ -95,17 +95,19 @@ class PostgresStore:
         # through `store.creative_repository.*`.
         self.creative_repository = self
 
-    async def initialize(self) -> None:
+    async def initialize(self, *, run_migrations: bool = True) -> None:
         """Initialize the database schema.
 
-        Runs pending migrations if needed.
+        Runs pending migrations unless an explicitly read-only shadow has
+        already restored and validated its schema.
         """
         if self._initialized:
             return
 
-        await init_postgres_database()
+        if run_migrations:
+            await init_postgres_database()
         self._initialized = True
-        logger.info("PostgresStore initialized")
+        logger.info("PostgresStore initialized (run_migrations=%s)", run_migrations)
 
     # =========================================================================
     # CREATIVE OPERATIONS

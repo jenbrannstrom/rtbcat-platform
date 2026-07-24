@@ -31,8 +31,14 @@ FROM python:3.11-slim-bookworm AS runtime
 
 WORKDIR /app
 
-# Create non-root user for security
-RUN groupadd -r rtbcat && useradd -r -g rtbcat rtbcat
+# Create a deterministic non-root runtime identity. Existing builds retain the
+# historical 999 default; the Hetzner GHCR build sets both values to 10001 so
+# host-mounted secrets can be granted to exactly this container identity.
+ARG RUNTIME_UID=999
+ARG RUNTIME_GID=999
+RUN groupadd --gid "${RUNTIME_GID}" rtbcat && \
+    useradd --no-create-home --uid "${RUNTIME_UID}" --gid rtbcat \
+      --shell /usr/sbin/nologin rtbcat
 
 # Copy virtual environment from builder
 COPY --from=builder /opt/venv /opt/venv
@@ -54,7 +60,9 @@ RUN apt-get update && \
 COPY --chown=rtbcat:rtbcat . .
 
 # Create data directory (matches production mount point)
-RUN mkdir -p /home/rtbcat/.catscan && chown rtbcat:rtbcat /home/rtbcat/.catscan
+RUN mkdir -p /home/rtbcat/.catscan /run/rtbcat-secrets && \
+    chmod 0755 /app/scripts/container_entrypoint.sh && \
+    chown rtbcat:rtbcat /home/rtbcat/.catscan /run/rtbcat-secrets
 
 # Build/runtime version metadata
 ARG APP_VERSION=0.0.0
@@ -69,6 +77,8 @@ ENV PYTHONUNBUFFERED=1 \
 
 # Switch to non-root user
 USER rtbcat
+
+ENTRYPOINT ["/app/scripts/container_entrypoint.sh"]
 
 # Expose API port
 EXPOSE 8000

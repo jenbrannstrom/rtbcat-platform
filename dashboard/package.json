@@ -25,6 +25,7 @@
     "react-markdown": "^9.0.1",
     "recharts": "^2.13.3",
     "remark-gfm": "^4.0.0",
+    "sharp": "0.35.3",
     "tailwind-merge": "^2.5.4"
   },
   "devDependencies": {
@@ -41,6 +42,7 @@
     "vitest": "^4.1.8"
   },
   "overrides": {
-    "postcss": "8.5.14"
+    "postcss": "8.5.14",
+    "sharp": "0.35.3"
   }
 }

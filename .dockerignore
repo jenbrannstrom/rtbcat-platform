@@ -1,0 +1,54 @@
+# Source-control and CI metadata
+.git
+.github
+.gitignore
+
+# Local/runtime configuration and credentials
+.env
+.env.*
+**/.env
+**/.env.*
+**/*credentials*.json
+**/*service-account*.json
+**/*service_account*.json
+**/gmail-token.json
+**/secrets/**
+**/*.pem
+**/*.key
+**/*.p12
+
+# Private migration/provider state
+docs/internal
+**/.terraform
+**/.terraform/**
+**/*.tfstate
+**/*.tfstate.*
+**/*.tfvars
+**/*.tfplan
+
+# Local virtual environments, caches and build output
+.venv
+venv
+env
+node_modules
+dashboard/node_modules
+dashboard/.next
+**/__pycache__
+**/*.py[cod]
+.pytest_cache
+.mypy_cache
+.ruff_cache
+htmlcov
+coverage.xml
+
+# Local data and logs must never become an image layer
+.catscan
+**/*.db
+**/*.sqlite
+**/*.sqlite3
+**/*.csv
+**/*.parquet
+**/*.log
+*.tar
+*.tar.gz
+*.zip
