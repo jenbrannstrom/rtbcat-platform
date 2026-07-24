@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from storage.postgres_database import pg_query, pg_query_one, pg_execute
+from storage.postgres_database import pg_query, pg_query_one
 
 
 class RtbBidstreamRepository:
@@ -125,7 +125,15 @@ class RtbBidstreamRepository:
                 SUM(impressions) as impressions,
                 SUM(bids) as total_bids,
                 SUM(auctions_won) as auctions_won,
-                SUM(spend_micros) as spend_micros,
+                SUM(
+                    COALESCE(
+                        NULLIF(
+                            to_jsonb(rtb_publisher_daily)->>'spend_micros',
+                            ''
+                        )::bigint,
+                        0
+                    )
+                ) as spend_micros,
                 SUM(successful_responses) as successful_responses,
                 SUM(bid_requests) as bid_requests
             FROM rtb_publisher_daily
