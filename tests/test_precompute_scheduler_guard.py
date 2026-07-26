@@ -17,6 +17,7 @@ class _Secrets:
 
 
 def test_scheduled_precompute_refuses_to_compete_with_gmail_import(monkeypatch) -> None:
+    monkeypatch.setenv("CATSCAN_ENABLE_PRECOMPUTE_SCHEDULER", "true")
     monkeypatch.setattr(precompute, "get_secrets_manager", lambda: _Secrets())
     monkeypatch.setattr(gmail_import, "get_status", lambda: {"running": True})
     request = SimpleNamespace(headers={"X-Precompute-Refresh-Secret": "scheduler-secret"})
@@ -26,3 +27,14 @@ def test_scheduled_precompute_refuses_to_compete_with_gmail_import(monkeypatch) 
 
     assert exc_info.value.status_code == 409
     assert exc_info.value.detail == "Gmail import is still running"
+
+
+def test_scheduled_precompute_is_blocked_when_disabled(monkeypatch) -> None:
+    monkeypatch.setenv("CATSCAN_ENABLE_PRECOMPUTE_SCHEDULER", "false")
+    request = SimpleNamespace(headers={"X-Precompute-Refresh-Secret": "scheduler-secret"})
+
+    with pytest.raises(HTTPException) as exc_info:
+        asyncio.run(precompute.refresh_precompute_scheduled(request))
+
+    assert exc_info.value.status_code == 503
+    assert "CATSCAN_ENABLE_PRECOMPUTE_SCHEDULER" in exc_info.value.detail

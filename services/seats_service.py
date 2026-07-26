@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 import os
 import time
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Optional, Any
 
@@ -29,6 +29,7 @@ class BuyerSeat:
     buyer_id: str
     bidder_id: str
     display_name: Optional[str] = None
+    currency_code: Optional[str] = None
     active: bool = True
     creative_count: int = 0
     last_synced: Optional[datetime] = None
@@ -42,6 +43,7 @@ class BuyerSeat:
             buyer_id=row["buyer_id"],
             bidder_id=row["bidder_id"],
             display_name=row.get("display_name"),
+            currency_code=row.get("currency_code"),
             active=row.get("active", True),
             creative_count=row.get("creative_count", 0),
             last_synced=row.get("last_synced"),
@@ -55,6 +57,7 @@ class BuyerSeat:
             "buyer_id": self.buyer_id,
             "bidder_id": self.bidder_id,
             "display_name": self.display_name,
+            "currency": self.currency_code,
             "active": self.active,
             "creative_count": self.creative_count,
             "last_synced": _format_datetime(self.last_synced),
@@ -226,6 +229,14 @@ class SeatsService:
     async def update_display_name(self, buyer_id: str, display_name: str) -> bool:
         """Update a buyer seat's display name."""
         updated = await self.repo.update_buyer_seat_display_name(buyer_id, display_name)
+        if updated:
+            self._invalidate_buyer_seat_with_bidder_cache(buyer_id)
+            self._invalidate_buyer_seats_list_cache()
+        return updated
+
+    async def update_currency(self, buyer_id: str, currency_code: str) -> bool:
+        """Update the buyer currency used to label spend metrics."""
+        updated = await self.repo.update_buyer_seat_currency(buyer_id, currency_code)
         if updated:
             self._invalidate_buyer_seat_with_bidder_cache(buyer_id)
             self._invalidate_buyer_seats_list_cache()

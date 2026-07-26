@@ -147,6 +147,7 @@ class BuyerSeat:
         bidder_id: Parent bidder account ID.
         service_account_id: Foreign key to service_accounts table.
         display_name: Human-readable name for the buyer seat.
+        currency_code: ISO-4217 buyer currency for spend metrics.
         active: Whether the seat is active for syncing.
         creative_count: Number of creatives associated with this seat.
         last_synced: Timestamp of last successful sync.
@@ -157,6 +158,7 @@ class BuyerSeat:
     bidder_id: str
     service_account_id: Optional[str] = None
     display_name: Optional[str] = None
+    currency_code: Optional[str] = None
     active: bool = True
     creative_count: int = 0
     last_synced: Optional[datetime] = None

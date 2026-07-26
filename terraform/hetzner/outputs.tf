@@ -53,6 +53,16 @@ output "rehearsal_dump_volume_automount" {
   value       = try("/mnt/HC_Volume_${hcloud_volume.rehearsal_dump[0].id}", null)
 }
 
+output "pgbackrest_restore_drill_server_id" {
+  description = "Disposable pgBackRest restore-drill server ID, or null when disabled."
+  value       = try(hcloud_server.pgbackrest_restore_drill[0].id, null)
+}
+
+output "pgbackrest_restore_drill_public_ipv4" {
+  description = "Disposable pgBackRest restore-drill public IPv4, or null when disabled."
+  value       = try(hcloud_server.pgbackrest_restore_drill[0].ipv4_address, null)
+}
+
 output "next_checkpoint" {
   description = "The next migration part after provisioning this foundation."
   value       = "Install Tailscale and PostgreSQL 15.17, mount the data volume predictably, and configure independent WAL backups before restoring data."

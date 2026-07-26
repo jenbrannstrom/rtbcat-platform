@@ -24,5 +24,8 @@ rehearsal_dump_volume_size_gb = 400
 # reviewed apply before setting enable_rehearsal_dump_volume=false.
 enable_rehearsal_dump_volume_delete_protection = true
 
+# Opt in only for the separately approved pgBackRest clean-host/PITR drill.
+enable_pgbackrest_restore_drill_host = false
+
 enable_server_backups    = true
 enable_delete_protection = true

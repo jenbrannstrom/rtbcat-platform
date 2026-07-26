@@ -57,3 +57,36 @@ def test_worker_refreshes_endpoints_after_successful_import(monkeypatch) -> None
         ("legacy", "2026-07-10", "2026-07-10"),
         ("endpoints", None),
     ]
+
+
+def test_worker_skips_refresh_when_all_imports_are_exact_duplicates(
+    monkeypatch, capsys
+) -> None:
+    monkeypatch.setattr(
+        gmail_import_worker,
+        "_run_import",
+        lambda **_kwargs: {
+            "success": True,
+            "files_imported": 1,
+            "duplicate_downstream_skip_count": 1,
+            "imported_date_start": "2026-07-05",
+            "imported_date_end": "2026-07-05",
+        },
+    )
+
+    def _unexpected(*_args, **_kwargs):
+        raise AssertionError("exact duplicate run must not refresh published data")
+
+    monkeypatch.setattr(gmail_import_worker, "_refresh_home_precompute", _unexpected)
+    monkeypatch.setattr(gmail_import_worker, "_refresh_config_precompute", _unexpected)
+    monkeypatch.setattr(gmail_import_worker, "_refresh_rtb_precompute", _unexpected)
+    monkeypatch.setattr(gmail_import_worker, "_refresh_legacy_performance", _unexpected)
+    monkeypatch.setattr(gmail_import_worker, "_refresh_endpoint_snapshot", _unexpected)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["gmail_import_worker.py", "--job-id", "job-duplicate", "--quiet"],
+    )
+
+    assert gmail_import_worker.main() == 0
+    assert "All imported files were exact duplicates" in capsys.readouterr().out

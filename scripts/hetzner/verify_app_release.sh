@@ -1,26 +1,35 @@
 #!/usr/bin/env bash
-# Verify the digest-pinned Part 3 shadow deployment without changing it.
+# Verify a digest-pinned shadow or initial writable deployment without changing it.
 
 set -euo pipefail
 
 RELEASE_FILE=""
 WITH_GOOGLE="false"
+EXPECTED_MODE="shadow"
 
 usage() {
   cat <<'EOF'
 Usage: sudo scripts/hetzner/verify_app_release.sh \
-  --release-file <digest-release.env> [--with-google]
+  --release-file <digest-release.env> \
+  [--mode shadow|writable-schedulers-off] [--with-google]
 EOF
 }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --release-file) RELEASE_FILE="${2:?missing release file}"; shift 2 ;;
+    --mode) EXPECTED_MODE="${2:?missing mode}"; shift 2 ;;
     --with-google) WITH_GOOGLE="true"; shift ;;
     --help|-h) usage; exit 0 ;;
     *) echo "Unknown argument: $1" >&2; usage >&2; exit 2 ;;
   esac
 done
+
+if [[ "$EXPECTED_MODE" != "shadow" && \
+      "$EXPECTED_MODE" != "writable-schedulers-off" ]]; then
+  echo "Expected mode must be shadow or writable-schedulers-off." >&2
+  exit 2
+fi
 
 if [[ ${EUID} -ne 0 ]]; then
   echo "Run this script as root on the Hetzner app host." >&2
@@ -91,16 +100,21 @@ for scheduler_flag in \
     exit 1
   fi
 done
-if ! grep -qx 'CATSCAN_READ_ONLY_SHADOW=true' <<<"$container_env"; then
-  echo "Shadow API is missing CATSCAN_READ_ONLY_SHADOW=true." >&2
-  exit 1
-fi
-mutation_status="$(
-  curl -sS --max-time 10 -o /dev/null -w '%{http_code}' \
-    -X POST http://127.0.0.1:8000/seats/populate
-)"
-if [[ "$mutation_status" != "405" ]]; then
-  echo "Read-only shadow mutation guard returned HTTP ${mutation_status}, expected 405." >&2
+if [[ "$EXPECTED_MODE" == "shadow" ]]; then
+  if ! grep -qx 'CATSCAN_READ_ONLY_SHADOW=true' <<<"$container_env"; then
+    echo "Shadow API is missing CATSCAN_READ_ONLY_SHADOW=true." >&2
+    exit 1
+  fi
+  mutation_status="$(
+    curl -sS --max-time 10 -o /dev/null -w '%{http_code}' \
+      -X POST http://127.0.0.1:8000/seats/populate
+  )"
+  if [[ "$mutation_status" != "405" ]]; then
+    echo "Read-only shadow mutation guard returned HTTP ${mutation_status}, expected 405." >&2
+    exit 1
+  fi
+elif ! grep -qx 'CATSCAN_READ_ONLY_SHADOW=false' <<<"$container_env"; then
+  echo "Writable API is missing CATSCAN_READ_ONLY_SHADOW=false." >&2
   exit 1
 fi
 
@@ -119,4 +133,4 @@ if [[ "$WITH_GOOGLE" == "true" ]]; then
     python /app/scripts/hetzner/verify_google_access.py
 fi
 
-echo "Part 3 shadow release verified: digest pins, database, Google access, scheduler guards, and loopback-only listeners are healthy."
+echo "Release verified in ${EXPECTED_MODE} mode: digest pins, database, Google access, scheduler guards, and loopback-only listeners are healthy."

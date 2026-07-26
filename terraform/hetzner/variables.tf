@@ -127,6 +127,26 @@ variable "database_server_type" {
   default     = "ccx23"
 }
 
+variable "enable_pgbackrest_restore_drill_host" {
+  description = "Create a disposable clean host for the pgBackRest restore/PITR drill. This opt-in host uses local disk and must be removed after evidence is accepted."
+  type        = bool
+  default     = false
+}
+
+variable "pgbackrest_restore_drill_server_type" {
+  description = "Disposable restore-drill host type. CPX62 provides a 640 GB local disk and avoids consuming the project Volume quota."
+  type        = string
+  default     = "cpx62"
+
+  validation {
+    condition = contains(
+      ["cpx62", "ccx53", "ccx63"],
+      var.pgbackrest_restore_drill_server_type,
+    )
+    error_message = "The restore-drill type must provide at least 600 GB of local disk: cpx62, ccx53 or ccx63."
+  }
+}
+
 variable "app_data_volume_size_gb" {
   description = "Permanent app-data volume size in decimal GB. Production currently has about 93 GB under .catscan."
   type        = number

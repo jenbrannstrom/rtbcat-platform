@@ -1,6 +1,6 @@
 # Cat-Scan Roadmap
 
-Last updated: March 11, 2026
+Last updated: July 22, 2026
 
 This roadmap is forward-looking. It is not an internal incident diary.
 
@@ -21,7 +21,25 @@ Built and in repo:
 
 ## Current priorities
 
-### 1. Conversion-driven optimization
+### 1. Rehearse and complete the production infrastructure migration
+
+Current state:
+- a detailed private migration inventory and a sanitized readiness brief exist
+- the database partition/validation kit exists
+- the application is containerized, but deploy, recovery and scheduling remain provider-specific
+- the system is ready for target provisioning and rehearsal, not production cutover
+
+Next steps:
+- codify the target host, network, deploy, secrets materialization and timers
+- install WAL-based backups and prove point-in-time recovery on a clean host
+- complete a timed full restore into the partitioned schema and record validation evidence
+- migrate application and PostgreSQL first while retaining required Google-native services
+- freeze a clean release SHA, execute the writer-freeze/cutover runbook, soak, then decommission conservatively
+
+Decision rule:
+- no cutover date until the restore rehearsal, backup restore drill and rollback cutoff are all proven
+
+### 2. Conversion-driven optimization
 
 This is the most important missing layer.
 
@@ -43,7 +61,7 @@ Next steps:
 - feed conversion and value evidence into optimizer scoring
 - keep hard automation gated behind confidence and coverage thresholds
 
-### 2. Troubleshooting API as a verification and diagnostics layer
+### 3. Troubleshooting API as a verification and diagnostics layer
 
 This is useful, but it is not a replacement for the Daily CSV path.
 
@@ -64,7 +82,7 @@ Next steps:
 - surface troubleshooting results as operator diagnostics and verification checks
 - avoid positioning this as a substitute for Daily CSVs or AppsFlyer-backed value analysis
 
-### 3. Language analysis as a real optional subsystem
+### 4. Language analysis as a real optional subsystem
 
 Current state:
 - the UI and API paths exist
@@ -78,7 +96,7 @@ Next steps:
 - keep the feature optional and explicitly configured
 - preserve manual override and operator review in the creative flow
 
-### 4. Better operator proof, not bigger claims
+### 5. Better operator proof, not bigger claims
 
 Current state:
 - the product is useful
@@ -89,7 +107,7 @@ Next steps:
 - measure exact improvements in areas we can prove
 - keep public claims narrow until the evidence exists
 
-### 5. Cleaner onboarding for self-hosted users
+### 6. Cleaner onboarding for self-hosted users
 
 Current state:
 - the install path works

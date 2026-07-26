@@ -48,6 +48,10 @@ jobs:
             tests/test_migration_read_compatibility.py \
             tests/test_qps_router_async.py \
             tests/test_read_only_shadow.py \
+            tests/test_scheduler_guard.py \
+            tests/test_precompute_scheduler_guard.py \
+            tests/test_creative_cache_router.py \
+            tests/test_writable_activation_guards.py \
             -q
 
   build:

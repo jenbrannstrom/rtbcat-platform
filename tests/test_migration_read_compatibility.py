@@ -7,6 +7,29 @@ import pytest
 from storage.postgres_repositories.rtb_bidstream_repo import (
     RtbBidstreamRepository,
 )
+from storage.postgres_repositories.seats_repo import SeatsRepository
+
+
+@pytest.mark.asyncio
+async def test_seat_listing_tolerates_pre_currency_schema(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    async def stub_query(sql: str, params: tuple = ()) -> list[dict]:
+        captured["sql"] = sql
+        captured["params"] = params
+        return []
+
+    monkeypatch.setattr(
+        "storage.postgres_repositories.seats_repo.pg_query",
+        stub_query,
+    )
+
+    rows = await SeatsRepository().get_buyer_seats(active_only=True)
+
+    assert rows == []
+    sql = str(captured["sql"])
+    assert "to_jsonb(buyer_seats)->>'currency_code'" in sql
+    assert " AS currency_code" in sql
 
 
 @pytest.mark.asyncio

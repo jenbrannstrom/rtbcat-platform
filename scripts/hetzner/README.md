@@ -103,24 +103,100 @@ on loopback/private IPv4 and admits PostgreSQL only from the app private IP.
 
 ### 4. Prove independent backup and PITR prerequisites
 
-Prepare a root-owned mode-0600 env file using `pgbackrest-s3.env.example`, then:
+Select and approve the repository provider, region and failure boundary first.
+The repository needs a dedicated bucket/prefix, object-version protection, a
+bucket-scoped machine identity and an explicitly accepted recurring cost. The
+current approved deployment uses GCS `asia-southeast1`: it is independent of
+Hetzner at the provider/credential layer and keeps traffic local to Singapore,
+but it is not a country-level disaster copy. Use pgBackRest's native GCS
+repository driver with a dedicated service-account JSON key:
+
+```text
+repo1-type         = gcs
+repo1-gcs-key-type = service
+```
+
+Do not route GCS through pgBackRest's S3 driver. GCS returns `404 NoSuchKey`
+when an XML `DELETE` targets a missing object, unlike S3's idempotent delete
+behavior. pgBackRest 2.58's native GCS driver explicitly accepts that response.
+
+Do not use a user key or a project-wide Storage Admin identity. The pgBackRest
+identity needs object access only to the dedicated backup bucket.
+Escrow the independent repository encryption passphrase in an approved secret
+manager outside both Hetzner and the backup bucket; losing it makes every
+encrypted backup unrecoverable.
+
+Prepare a root-owned mode-0600 env file using
+`pgbackrest-s3.env.example`, install it on the database host, then configure
+the repository and launch the initial production-sized full backup:
 
 ```bash
 sudo scripts/hetzner/configure_pgbackrest_s3.sh \
-  --env-file /etc/rtbcat/pgbackrest-s3.env
+  --env-file /etc/rtbcat/pgbackrest-s3.env \
+  --start-full-backup
 ```
 
-Success requires stanza creation, archive push/check and an initial encrypted
-full backup. The script also installs weekly-full, Monday-to-Saturday
-differential, and daily repository/archive-check timers. A clean-host restore
-drill is still required before cutover. Escrow the encryption passphrase in an
-approved secret manager outside both Hetzner and the backup bucket; losing it
-makes every encrypted backup unrecoverable.
+The full backup runs as a non-blocking systemd job because the current
+PostgreSQL cluster is about 413 GB:
+
+```bash
+systemctl status rtbcat-pgbackrest-full.service
+journalctl -fu rtbcat-pgbackrest-full.service
+```
+
+After it succeeds, enable the recurring weekly-full and Monday-to-Saturday
+differential timers. The daily archive/repository check timer is enabled during
+initial configuration:
+
+```bash
+sudo scripts/hetzner/configure_pgbackrest_s3.sh \
+  --env-file /etc/rtbcat/pgbackrest-s3.env \
+  --enable-backup-timers
+
+sudo scripts/hetzner/verify_pgbackrest_backup.sh \
+  --json-out /secure/evidence/pgbackrest-backup.json
+```
 
 After the production-sized rehearsal restore, take a new pgBackRest full backup
-and restore that backup onto a separate clean disposable host/Volume. The
-initial empty-cluster backup proves the transport and WAL archive path, not
-production-data recoverability.
+and restore it onto a separate clean disposable host. The optional Terraform
+resource `enable_pgbackrest_restore_drill_host` uses a `cpx62` with a 640 GB
+local disk, so the drill does not exceed the current 1,500 GB Volume quota. It
+is disabled by default and requires a separate reviewed plan/cost approval.
+
+Create an isolated before/after WAL witness only after the full backup and
+continuous archive checks pass:
+
+```bash
+sudo scripts/hetzner/create_pgbackrest_pitr_probe.sh \
+  --json-out /secure/evidence/pgbackrest-pitr-probe.json \
+  --confirm CREATE_ISOLATED_PITR_WITNESS
+```
+
+On the opt-in clean host, bootstrap the pinned stopped cluster:
+
+```bash
+sudo scripts/hetzner/bootstrap_pgbackrest_restore_host.sh \
+  --confirm BOOTSTRAP_DISPOSABLE_RESTORE_HOST
+```
+
+Install a postgres-owned mode-0600 copy of the exact repository configuration
+at `/etc/pgbackrest/pgbackrest.conf`. Then use the backup label, time target and
+two markers from the private probe evidence:
+
+```bash
+sudo scripts/hetzner/restore_pgbackrest_pitr_drill.sh \
+  --backup-set BACKUP_LABEL \
+  --target-time TARGET_TIME \
+  --before-marker BEFORE_MARKER \
+  --after-marker AFTER_MARKER \
+  --json-out /secure/evidence/pgbackrest-clean-host-pitr.json \
+  --confirm DESTROY_EMPTY_RESTORE_DRILL_CLUSTER
+```
+
+Acceptance requires PostgreSQL 15.17 with checksums, loopback-only listeners,
+archive mode off on the restored drill host, all 98 expected user tables, the
+before marker present and the after marker absent. Preserve the evidence before
+requesting the separate destructive approval to remove the disposable host.
 
 ### 5. Install the source connector on the database host
 
@@ -163,3 +239,34 @@ shrunk, which is why dump capacity is temporary rather than permanent.
 
 This first restore is deliberately as-is. The partitioned `rtb_daily` Path A
 and zero-difference financial/data validation remain Part 4 acceptance work.
+
+### 7. Compare and transfer frozen sequence state
+
+Native logical replication does not copy sequence counters. The final-sync
+runbook therefore uses a separate guarded helper after source writers are
+frozen:
+
+```bash
+SOURCE_POSTGRES_DSN='source-dsn' \
+TARGET_POSTGRES_DSN='target-dsn' \
+scripts/hetzner/sync_postgres_sequences.py \
+  --json-out /secure/evidence/sequence-compare.json
+```
+
+That invocation is read-only. Applying requires both `--apply` and the exact
+`--confirm APPLY_SEQUENCE_STATE` string, plus `--json-out` for a mode-0600
+pre-apply recovery record. The helper refuses a count other than 38 by default,
+refuses different source/target sequence inventories, preflights `UPDATE`
+privilege and preserves both `last_value` and `is_called`.
+
+The
+[PostgreSQL 15 sequence documentation](https://www.postgresql.org/docs/15/functions-sequence.html)
+states that `setval()` changes are not undone when a transaction aborts. If
+apply or verification fails, the helper therefore restores every pre-apply
+target state, verifies that compensating restoration and records the result.
+Source and target writers must still be frozen: compensation is recovery from
+a helper failure, not concurrent-write protection. This behavior passed a
+PostgreSQL 15.17 disposable rehearsal, including a failure after 37 partial
+sequence changes, exact recovery, a 38-state apply and a zero-change idempotent
+reapply. See
+`docs/HETZNER_FINAL_SYNC_RUNBOOK.md` for ordering and approval boundaries.

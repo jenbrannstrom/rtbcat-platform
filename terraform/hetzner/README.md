@@ -24,6 +24,9 @@ PostgreSQL, migrate data, update DNS or disable any GCP service.
 - Delete/rebuild protection and server-system-disk backups enabled by default.
 - Remote state uses the retained GCS control plane. The bucket identifier is
   private operational inventory supplied through an ignored `backend.hcl`.
+- An opt-in disposable pgBackRest restore-drill host is disabled by default.
+  When explicitly enabled, it uses a `cpx62` with a 640 GB local disk so a
+  clean restore does not consume the currently exhausted Volume headroom.
 
 The attached database Volume is triple-replicated block storage, but Hetzner
 does not include Volumes in server backups or snapshots. It is not a backup.
@@ -91,3 +94,24 @@ cleanly unmounted.
 After Tailscale SSH is verified, set `enable_public_bootstrap_ssh=false`. The
 reviewed plan should update only the two public firewall resources; it must not
 replace either server.
+
+## Disposable pgBackRest restore drill
+
+`enable_pgbackrest_restore_drill_host=false` is the safe default. After the
+encrypted full backup and WAL archive are healthy, set it to `true` only for a
+separately approved clean-host restore window:
+
+```hcl
+enable_pgbackrest_restore_drill_host = true
+```
+
+The July 26 project API price for the default Singapore `cpx62` was USD
+0.3253/hour. The reviewed plan must add exactly one disposable server and one
+drill-only firewall, with no changes or replacements to the production app,
+database, network or Volumes. Bootstrap and restore it using
+`scripts/hetzner/bootstrap_pgbackrest_restore_host.sh` and
+`scripts/hetzner/restore_pgbackrest_pitr_drill.sh`.
+
+After evidence is accepted and repository credentials have been removed,
+return the variable to `false`, review the one-server/one-firewall deletion,
+and obtain explicit destructive approval before applying it.

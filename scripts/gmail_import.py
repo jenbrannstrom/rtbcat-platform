@@ -9,6 +9,8 @@ Handles both:
 Features:
   - Optionally archives imported CSVs to S3 with gzip compression
   - Tracks import status in ~/.catscan/gmail_import_status.json
+  - Durable dedup via Postgres gmail_processed_messages (unread state is a
+    human-facing signal only; correctness does not depend on mark-as-read)
 """
 
 import os
@@ -22,7 +24,8 @@ import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+from enum import Enum
 from typing import Optional, Dict, Any, List, Callable
 import uuid
 import time
@@ -69,6 +72,11 @@ S3_REGION = os.environ.get('CATSCAN_S3_REGION', 'eu-central-1')
 S3_ARCHIVE_ENABLED = os.environ.get('CATSCAN_S3_ARCHIVE', 'false').lower() == 'true'
 GMAIL_LABEL = os.environ.get('CATSCAN_GMAIL_LABEL', '').strip()
 GMAIL_QUERY = os.environ.get('CATSCAN_GMAIL_QUERY', '').strip()
+# Rolling discovery window. Dedup comes from gmail_processed_messages, so a
+# read-but-never-imported email is retried instead of silently lost.
+GMAIL_LOOKBACK_DAYS = int(os.environ.get('CATSCAN_GMAIL_LOOKBACK_DAYS', '3'))
+# Superseded: discovery no longer filters on unread state (the default query
+# dropped is:unread). Still read so existing deployments don't break.
 INCLUDE_READ = os.environ.get('CATSCAN_GMAIL_INCLUDE_READ', 'false').lower() == 'true'
 SEAT_ID_ALLOWLIST = {
     seat_id.strip()
@@ -174,6 +182,9 @@ def load_status() -> Dict[str, Any]:
         "last_unread_report_emails": 0,
         "last_file_failures": [],
         "last_file_failure_count": 0,
+        "last_duplicate_downstream_skips": [],
+        "last_duplicate_downstream_skip_count": 0,
+        "expected_spend_missing": [],
     }
 
 
@@ -198,8 +209,10 @@ def update_status(
     rows_on_latest_metric_date: int = 0,
     unread_report_emails: Optional[int] = None,
     file_failures: Optional[List[Dict[str, str]]] = None,
+    duplicate_downstream_skips: Optional[List[Dict[str, Any]]] = None,
     emails_skipped: int = 0,
     skipped_seat_ids: Optional[List[str]] = None,
+    expected_spend_missing: Optional[List[str]] = None,
 ):
     """Update the import status after a run."""
     status = load_status()
@@ -223,8 +236,15 @@ def update_status(
     if file_failures is not None:
         status["last_file_failures"] = file_failures
         status["last_file_failure_count"] = len(file_failures)
+    if duplicate_downstream_skips is not None:
+        status["last_duplicate_downstream_skips"] = duplicate_downstream_skips
+        status["last_duplicate_downstream_skip_count"] = len(
+            duplicate_downstream_skips
+        )
     status["last_emails_skipped"] = int(emails_skipped)
     status["last_skipped_seat_ids"] = sorted(set(skipped_seat_ids or []))
+    if expected_spend_missing is not None:
+        status["expected_spend_missing"] = sorted(set(expected_spend_missing))
 
     # Keep last 50 history entries
     status["history"].insert(0, {
@@ -239,6 +259,9 @@ def update_status(
         "unread_report_emails": unread_report_emails,
         "file_failures": file_failures or [],
         "file_failure_count": len(file_failures or []),
+        "duplicate_downstream_skips": duplicate_downstream_skips or [],
+        "duplicate_downstream_skip_count": len(duplicate_downstream_skips or []),
+        "expected_spend_missing": sorted(set(expected_spend_missing or [])),
     })
     status["history"] = status["history"][:50]
 
@@ -265,6 +288,13 @@ def get_status() -> Dict[str, Any]:
         "last_unread_report_emails": int(status.get("last_unread_report_emails") or 0),
         "last_file_failures": status.get("last_file_failures", []),
         "last_file_failure_count": int(status.get("last_file_failure_count") or 0),
+        "last_duplicate_downstream_skips": status.get(
+            "last_duplicate_downstream_skips", []
+        ),
+        "last_duplicate_downstream_skip_count": int(
+            status.get("last_duplicate_downstream_skip_count") or 0
+        ),
+        "expected_spend_missing": status.get("expected_spend_missing", []),
     }
 
 
@@ -427,6 +457,40 @@ def get_runtime_freshness_snapshot() -> dict[str, Any]:
     return snapshot
 
 
+def get_expected_spend_missing_seats(metric_date: Optional[str] = None) -> List[str]:
+    """Return allowlisted seats missing canonical spend rows for D-1 (UTC).
+
+    Google occasionally never delivers a report instance (seat 6634662463
+    metric date 2026-07-05); the run status must say so instead of relying
+    on someone noticing a hole in the dashboard.
+    """
+    if not SEAT_ID_ALLOWLIST:
+        return []
+    if metric_date is None:
+        metric_date = (datetime.now(timezone.utc).date() - timedelta(days=1)).isoformat()
+    conn = _get_sync_connection()
+    if conn is None:
+        return []
+    try:
+        with conn:
+            rows = conn.execute(
+                """
+                SELECT DISTINCT buyer_account_id
+                FROM rtb_buyer_spend_daily
+                WHERE metric_date = %s::date
+                  AND buyer_account_id = ANY(%s)
+                """,
+                (metric_date, sorted(SEAT_ID_ALLOWLIST)),
+            ).fetchall()
+        present = {str(row["buyer_account_id"]) for row in rows}
+        return sorted(seat_id for seat_id in SEAT_ID_ALLOWLIST if seat_id not in present)
+    except Exception as exc:
+        print(f"  Warning: expected-spend completeness check failed: {exc}")
+        return []
+    finally:
+        conn.close()
+
+
 def start_scheduler_ingestion_run(job_id: str, import_trigger: str) -> Optional[str]:
     """Create one ingestion_runs row for the scheduler-triggered import job."""
     conn = _get_sync_connection()
@@ -562,6 +626,73 @@ def record_import_run(
                 )
     except Exception as exc:
         print(f"  Warning: failed to record import run: {exc}")
+    finally:
+        conn.close()
+
+
+def get_imported_message_ids(message_ids: List[str]) -> set[str]:
+    """Return the subset of message_ids already imported (durable dedup).
+
+    Only status='imported' suppresses re-discovery; skipped/failed messages
+    stay retryable within the rolling lookback window.
+    """
+    if not message_ids:
+        return set()
+    conn = _get_sync_connection()
+    if conn is None:
+        return set()
+    try:
+        with conn:
+            rows = conn.execute(
+                """
+                SELECT gmail_message_id
+                FROM gmail_processed_messages
+                WHERE status = 'imported'
+                  AND gmail_message_id = ANY(%s)
+                """,
+                (list(message_ids),),
+            ).fetchall()
+        return {str(row["gmail_message_id"]) for row in rows}
+    except Exception as exc:
+        print(f"  Warning: failed to read gmail_processed_messages: {exc}")
+        return set()
+    finally:
+        conn.close()
+
+
+def record_processed_message(
+    message_id: str,
+    *,
+    status: str,
+    subject: Optional[str] = None,
+    seat_id: Optional[str] = None,
+    filename: Optional[str] = None,
+    batch_id: Optional[str] = None,
+) -> None:
+    """Record one Gmail message in the durable dedup ledger."""
+    conn = _get_sync_connection()
+    if conn is None:
+        return
+    try:
+        with conn:
+            conn.execute(
+                """
+                INSERT INTO gmail_processed_messages
+                    (gmail_message_id, processed_at, subject, seat_id,
+                     filename, batch_id, status)
+                VALUES (%s, CURRENT_TIMESTAMP, %s, %s, %s, %s, %s)
+                ON CONFLICT (gmail_message_id) DO UPDATE
+                SET processed_at = EXCLUDED.processed_at,
+                    subject = EXCLUDED.subject,
+                    seat_id = EXCLUDED.seat_id,
+                    filename = EXCLUDED.filename,
+                    batch_id = EXCLUDED.batch_id,
+                    status = EXCLUDED.status
+                """,
+                (message_id, subject, seat_id, filename, batch_id, status),
+            )
+    except Exception as exc:
+        print(f"  Warning: failed to record processed gmail message: {exc}")
     finally:
         conn.close()
 
@@ -713,19 +844,33 @@ def build_access_token_provider(
     return get_access_token
 
 
-def find_report_emails(service):
-    """Find all unread emails from Google Authorized Buyers (with pagination)."""
+def build_report_search_query() -> str:
+    """Build the Gmail search query for report discovery.
+
+    Deliberately independent of unread state: mark-as-read used to be the
+    only dedup, so a read-but-never-imported email was silently lost. The
+    rolling newer_than window re-surfaces recent mail on every scheduled
+    poll and gmail_processed_messages filters what was already imported.
+    """
     if GMAIL_QUERY:
-        query = GMAIL_QUERY
-    else:
-        query_parts = [
-            'from:noreply-google-display-ads-managed-reports@google.com',
-        ]
-        if not INCLUDE_READ:
-            query_parts.append('is:unread')
-        if GMAIL_LABEL:
-            query_parts.append(f"label:{GMAIL_LABEL}")
-        query = " ".join(query_parts)
+        return GMAIL_QUERY
+    query_parts = [
+        'from:noreply-google-display-ads-managed-reports@google.com',
+        f'newer_than:{GMAIL_LOOKBACK_DAYS}d',
+    ]
+    if GMAIL_LABEL:
+        query_parts.append(f"label:{GMAIL_LABEL}")
+    return " ".join(query_parts)
+
+
+def filter_new_messages(messages: List[Dict], imported_ids: set[str]) -> List[Dict]:
+    """Drop messages whose ids are already recorded as imported."""
+    return [message for message in messages if message.get('id') not in imported_ids]
+
+
+def find_report_emails(service):
+    """Find new report emails from Google Authorized Buyers (with pagination)."""
+    query = build_report_search_query()
 
     all_messages = []
     page_token = None
@@ -745,7 +890,10 @@ def find_report_emails(service):
         if not page_token:
             break
 
-    return all_messages
+    imported_ids = get_imported_message_ids(
+        [message['id'] for message in all_messages if message.get('id')]
+    )
+    return filter_new_messages(all_messages, imported_ids)
 
 
 def extract_download_url(body: str) -> Optional[str]:
@@ -1162,6 +1310,49 @@ class CatscanImportResult:
     file_size_bytes: int = 0
 
 
+class PipelineOutcome(Enum):
+    """Outcome of dispatching an imported file to the parquet/BQ lane."""
+
+    SUCCESS = "success"
+    FAILURE = "failure"
+    SKIPPED_DUPLICATE = "skipped_duplicate"
+
+
+def is_fully_duplicate_import(result: CatscanImportResult) -> bool:
+    """Return whether Postgres rejected every input row as already known.
+
+    Requiring the duplicate count to equal the read count avoids treating an
+    empty or wholly-invalid file as an idempotent replay.
+    """
+    return (
+        result.rows_read > 0
+        and result.rows_imported == 0
+        and result.rows_duplicate == result.rows_read
+    )
+
+
+def run_pipeline_after_import(
+    filepath: Path,
+    seat_id: Optional[str],
+    import_result: CatscanImportResult,
+    verbose: bool = True,
+) -> PipelineOutcome:
+    """Dispatch a successful PG import without replaying exact duplicates."""
+    if is_fully_duplicate_import(import_result):
+        print(
+            f"  WARNING: Skipping parquet/BigQuery load and publish for "
+            f"100%-duplicate import {filepath.name} "
+            f"({import_result.rows_duplicate:,} rows). Existing published data "
+            "is unchanged; a restated report requires the replace workflow.",
+            flush=True,
+        )
+        return PipelineOutcome.SKIPPED_DUPLICATE
+
+    if run_pipeline_for_file(filepath, seat_id, verbose=verbose):
+        return PipelineOutcome.SUCCESS
+    return PipelineOutcome.FAILURE
+
+
 def import_to_catscan(filepath: Path) -> CatscanImportResult:
     """
     Import the CSV into Cat-Scan database directly using the unified importer.
@@ -1203,12 +1394,18 @@ def import_to_catscan(filepath: Path) -> CatscanImportResult:
                 )
             if response.status_code == 200:
                 data = response.json()
-                print(f"  Imported: {data.get('rows_imported', 0)} rows")
+                rows_imported = int(data.get("rows_imported", 0) or 0)
+                rows_duplicate = int(data.get("rows_duplicate", 0) or 0)
+                rows_read = int(
+                    data.get("rows_read", rows_imported + rows_duplicate) or 0
+                )
+                print(f"  Imported: {rows_imported} rows")
                 return CatscanImportResult(
                     success=True,
                     report_type="api_import",
-                    rows_imported=data.get("rows_imported", 0),
-                    rows_duplicate=data.get("rows_duplicate", 0),
+                    rows_imported=rows_imported,
+                    rows_duplicate=rows_duplicate,
+                    rows_read=rows_read,
                     batch_id=data.get("batch_id", ""),
                     file_size_bytes=file_size,
                 )
@@ -1421,6 +1618,8 @@ def run_import(
         "files_imported": 0,
         "file_failures": [],
         "file_failure_count": 0,
+        "duplicate_downstream_skips": [],
+        "duplicate_downstream_skip_count": 0,
         "unread_report_emails": 0,
         "emails_skipped": 0,
         "skipped_seat_ids": [],
@@ -1433,6 +1632,7 @@ def run_import(
         "rows_on_latest_metric_date": 0,
         "imported_date_start": None,
         "imported_date_end": None,
+        "expected_spend_missing": [],
     }
     job_id = job_id or str(datetime.now().timestamp()).replace(".", "")
 
@@ -1477,6 +1677,7 @@ def run_import(
         if no_new_mail:
             result["no_new_mail"] = True
             result["no_new_mail_reason"] = reason or "no_new_mail"
+        result["expected_spend_missing"] = get_expected_spend_missing_seats()
 
         update_status(
             success,
@@ -1490,8 +1691,10 @@ def run_import(
             rows_on_latest_metric_date=result["rows_on_latest_metric_date"],
             unread_report_emails=result.get("unread_report_emails"),
             file_failures=result.get("file_failures", []),
+            duplicate_downstream_skips=result.get("duplicate_downstream_skips", []),
             emails_skipped=result.get("emails_skipped", 0),
             skipped_seat_ids=result.get("skipped_seat_ids", []),
+            expected_spend_missing=result.get("expected_spend_missing", []),
         )
         finish_scheduler_ingestion_run(
             scheduler_run_id,
@@ -1552,7 +1755,7 @@ def run_import(
             return result
 
         if verbose:
-            print(f"Found {len(messages)} unread report email(s)\n")
+            print(f"Found {len(messages)} new report email(s)\n")
 
         total_imported = 0
         imported_dates: List[str] = []
@@ -1576,21 +1779,36 @@ def run_import(
                         result["skipped_seat_ids"].append(seat_id)
                     if verbose:
                         print(f"  Skipped seat_id={seat_id or 'unknown'} subject='{subject}'")
-                    # Deliberately NOT marked as read: leaving allowlist-skipped
-                    # emails unread means adding the seat to
-                    # CATSCAN_GMAIL_SEAT_IDS later auto-imports the backlog.
-                    # Marking them read silently destroyed weeks of reports for
-                    # seat 7942355670 (June 2026).
+                    # Deliberately NOT marked as read, and recorded with a
+                    # non-'imported' status so dedup keeps them retryable:
+                    # adding the seat to CATSCAN_GMAIL_SEAT_IDS later
+                    # auto-imports the backlog still inside the lookback
+                    # window. Marking them read silently destroyed weeks of
+                    # reports for seat 7942355670 (June 2026).
+                    record_processed_message(
+                        message_id,
+                        status="skipped_seat",
+                        subject=subject,
+                        seat_id=seat_id,
+                    )
                     continue
 
                 if not downloaded_files:
                     if verbose:
                         print("  No CSV found (attachment or URL)")
+                    record_processed_message(
+                        message_id,
+                        status="no_csv",
+                        subject=subject,
+                        seat_id=seat_id,
+                    )
                     continue
 
                 result["emails_processed"] += 1
 
                 message_fully_processed = True
+                last_filename: Optional[str] = None
+                last_batch_id: Optional[str] = None
 
                 for filepath in downloaded_files:
                     result["files"].append(str(filepath))
@@ -1599,6 +1817,8 @@ def run_import(
                     archive_to_s3(filepath, verbose=verbose)
 
                     imp = import_to_catscan(filepath)
+                    last_filename = filepath.name
+                    last_batch_id = imp.batch_id or None
                     report_kind = canonical_report_kind_for_tracking(
                         filepath.name,
                         parsed_report_type=imp.report_type,
@@ -1625,9 +1845,14 @@ def run_import(
                         for imported_date in (imp.date_range_start, imp.date_range_end):
                             if imported_date:
                                 imported_dates.append(str(imported_date))
-                        # Run pipeline for BigQuery/Postgres
-                        pipeline_ok = run_pipeline_for_file(filepath, seat_id, verbose=verbose)
-                        if not pipeline_ok:
+                        # Run parquet/BQ only for files that contributed new PG rows.
+                        pipeline_outcome = run_pipeline_after_import(
+                            filepath,
+                            seat_id,
+                            imp,
+                            verbose=verbose,
+                        )
+                        if pipeline_outcome is PipelineOutcome.FAILURE:
                             message_fully_processed = False
                             failure = {
                                 "message_id": message_id,
@@ -1642,6 +1867,17 @@ def run_import(
                             )
                             if verbose:
                                 print(f"  Pipeline failed: {filepath.name}")
+                        elif pipeline_outcome is PipelineOutcome.SKIPPED_DUPLICATE:
+                            result["duplicate_downstream_skips"].append(
+                                {
+                                    "message_id": message_id,
+                                    "filename": filepath.name,
+                                    "seat_id": seat_id or "",
+                                    "report_kind": report_kind,
+                                    "rows_read": imp.rows_read,
+                                    "rows_duplicate": imp.rows_duplicate,
+                                }
+                            )
                         elif (
                             report_kind == "catscan-bidsinauction"
                             and seat_id
@@ -1687,7 +1923,16 @@ def run_import(
                             f"{failure['error']}"
                         )
 
+                record_processed_message(
+                    message_id,
+                    status="imported" if message_fully_processed else "failed",
+                    subject=subject,
+                    seat_id=seat_id,
+                    filename=last_filename,
+                    batch_id=last_batch_id,
+                )
                 if message_fully_processed:
+                    # Human-facing signal only; dedup is gmail_processed_messages.
                     mark_as_read(service, message_id)
                     if verbose:
                         print("  Marked as read")
@@ -1706,6 +1951,9 @@ def run_import(
 
         result["success"] = True
         result["file_failure_count"] = len(result["file_failures"])
+        result["duplicate_downstream_skip_count"] = len(
+            result["duplicate_downstream_skips"]
+        )
         if imported_dates:
             result["imported_date_start"] = min(imported_dates)
             result["imported_date_end"] = max(imported_dates)

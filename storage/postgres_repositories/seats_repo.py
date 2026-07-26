@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Any, Optional
 
 from storage.postgres_database import pg_query, pg_query_one, pg_execute
@@ -34,7 +33,9 @@ class SeatsRepository:
 
         return await pg_query(
             f"""
-            SELECT buyer_id, bidder_id, display_name, active,
+            SELECT buyer_id, bidder_id, display_name,
+                   NULLIF(to_jsonb(buyer_seats)->>'currency_code', '') AS currency_code,
+                   active,
                    creative_count, last_synced, created_at, service_account_id
             FROM buyer_seats
             {where_clause}
@@ -66,7 +67,9 @@ class SeatsRepository:
 
         return await pg_query(
             f"""
-            SELECT buyer_id, bidder_id, display_name, active,
+            SELECT buyer_id, bidder_id, display_name,
+                   NULLIF(to_jsonb(buyer_seats)->>'currency_code', '') AS currency_code,
+                   active,
                    creative_count, last_synced, created_at, service_account_id
             FROM buyer_seats
             {where_clause}
@@ -98,7 +101,9 @@ class SeatsRepository:
 
         return await pg_query(
             f"""
-            SELECT buyer_id, bidder_id, display_name, active,
+            SELECT buyer_id, bidder_id, display_name,
+                   NULLIF(to_jsonb(buyer_seats)->>'currency_code', '') AS currency_code,
+                   active,
                    creative_count, last_synced, created_at, service_account_id
             FROM buyer_seats
             {where_clause}
@@ -111,7 +116,9 @@ class SeatsRepository:
         """Get a single buyer seat by ID."""
         return await pg_query_one(
             """
-            SELECT buyer_id, bidder_id, display_name, active,
+            SELECT buyer_id, bidder_id, display_name,
+                   NULLIF(to_jsonb(buyer_seats)->>'currency_code', '') AS currency_code,
+                   active,
                    creative_count, last_synced, created_at, service_account_id
             FROM buyer_seats
             WHERE buyer_id = %s
@@ -148,6 +155,16 @@ class SeatsRepository:
         await pg_execute(
             "UPDATE buyer_seats SET display_name = %s WHERE buyer_id = %s",
             (display_name, buyer_id),
+        )
+        return True
+
+    async def update_buyer_seat_currency(
+        self, buyer_id: str, currency_code: str
+    ) -> bool:
+        """Update a buyer seat's ISO-4217 spend currency."""
+        await pg_execute(
+            "UPDATE buyer_seats SET currency_code = %s WHERE buyer_id = %s",
+            (currency_code, buyer_id),
         )
         return True
 
@@ -198,9 +215,7 @@ class SeatsRepository:
             ON CONFLICT (buyer_id) DO NOTHING
             """
         )
-        row = await pg_query_one(
-            "SELECT COUNT(*) as cnt FROM buyer_seats"
-        )
+        row = await pg_query_one("SELECT COUNT(*) as cnt FROM buyer_seats")
         return row["cnt"] if row else 0
 
     # =========================================================================
@@ -255,7 +270,7 @@ class SeatsRepository:
         """Get bidder_id for a service account from buyer_seats."""
         row = await pg_query_one(
             "SELECT bidder_id FROM buyer_seats WHERE service_account_id = %s LIMIT 1",
-            (service_account_id,)
+            (service_account_id,),
         )
         return row["bidder_id"] if row else None
 
@@ -264,9 +279,11 @@ class SeatsRepository:
         row = await pg_query_one("SELECT bidder_id FROM buyer_seats LIMIT 1")
         return row["bidder_id"] if row else None
 
-    async def get_buyer_seat_with_bidder(self, buyer_id: str) -> Optional[dict[str, Any]]:
+    async def get_buyer_seat_with_bidder(
+        self, buyer_id: str
+    ) -> Optional[dict[str, Any]]:
         """Get buyer seat info including bidder_id, display_name, and service_account_id."""
         return await pg_query_one(
             "SELECT bidder_id, display_name, service_account_id FROM buyer_seats WHERE buyer_id = %s",
-            (buyer_id,)
+            (buyer_id,),
         )

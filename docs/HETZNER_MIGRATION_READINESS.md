@@ -1,6 +1,6 @@
 # Hetzner migration readiness
 
-Last updated: July 24, 2026
+Last updated: July 26, 2026
 
 ## Decision
 
@@ -8,8 +8,9 @@ RTBcat's Hetzner foundation and complete online database restore rehearsal are
 accepted. The restored-target media-buyer, calendar-month/all-time and private
 finance-schema comparisons are also accepted. Local read-only application
 compatibility and heavy-request validation against that target are accepted;
-the immutable target-host deployment and same-network soak remain open. RTBcat
-is not ready for production cutover.
+the immutable target-host deployment and first same-network application smoke
+are accepted. The encrypted target WAL/backup chain and clean-host PITR restore
+are also accepted. RTBcat is not ready for production cutover.
 
 The private master inventory is stored locally at
 `docs/internal/rtbcat-migration/GCP-FULL-MIGRATION-INVENTORY-CHECKLIST.md`.
@@ -29,14 +30,16 @@ that do not belong in GitHub or a public snapshot.
    drill.
 
 The reviewable, part-by-part execution plan is tracked in
-[`HETZNER_MIGRATION_PLAN.md`](HETZNER_MIGRATION_PLAN.md). Its July 24 execution
+[`HETZNER_MIGRATION_PLAN.md`](HETZNER_MIGRATION_PLAN.md). Its July 25 execution
 checkpoint is the authoritative resume order for the next engineer. Part 1 has
 a local Terraform implementation under `terraform/hetzner/` and is now
 provisioned in the isolated RTBcat Hetzner project. The read-only rehearsal copy
 exists, but production authority, DNS and writer state have not changed.
+The concise resume checkpoint is
+[`HETZNER_MIGRATION_NEXT_ENGINEER.md`](HETZNER_MIGRATION_NEXT_ENGINEER.md).
 
-Part 2 now has guarded local scripts for Tailscale, PostgreSQL 15.17,
-independent pgBackRest/WAL backups and a direct Cloud SQL-to-Hetzner rehearsal.
+Part 2 has guarded local scripts for Tailscale, PostgreSQL 15.17, independent
+pgBackRest/WAL backups and a direct Cloud SQL-to-Hetzner rehearsal.
 Private networking, Tailscale, the protected database/app-data Volume mounts and
 the empty PostgreSQL foundation have been run and accepted. The owner directed
 that retained Cloud SQL backups/PITR serve as recovery for this rehearsal and
@@ -45,8 +48,16 @@ read-only dump user passed preflight. The full 452,996,676,967-byte online
 source dumped in 8,037 seconds and restored/analyzed in 20,042 seconds. Every
 dump checksum passed twice; the read-only target contains the exact 98 expected
 user tables with no invalid indexes. All temporary source credentials and
-grants were then removed. Independent target backup/recovery remains a
-production cutover gate.
+grants were then removed. Independent target backup/recovery was the remaining
+Part 2 production-cutover gate at that checkpoint.
+
+That final Part 2 gate passed on July 26. Native GCS in Singapore now holds an
+AES-256-CBC pgBackRest repository with two full backups, zero archive failures
+and enabled full/differential/check timers. A disposable Singapore clean host
+restored full `20260726-113211F` to
+`2026-07-26T12:06:53.141026Z`; PostgreSQL 15.17/checksums, 98 application
+tables, loopback-only/archive-off isolation and the before-present/after-absent
+PITR witness all passed.
 
 On July 24, `scripts/catscan_mcp_db_smoke.py` compared eight deterministic,
 read-only media-buyer contracts across all six shared buyers for
@@ -70,8 +81,10 @@ was therefore not part of this Cloud SQL transfer.
 
 Part 3 now has a manual GHCR build, digest/commit/Compose release manifest,
 loopback-only shadow Compose deployment, private-TLS PostgreSQL connection,
-off-GCP Google credential probe and immutable rollback tooling. None has been
-published or deployed.
+off-GCP Google credential probe and immutable rollback tooling. Sanitized
+release `332ec985084085edef714525d118f6c6ad2db8d4` was merged, its manual
+workflow passed, and the API/dashboard were published and deployed by exact
+digest on the target app host.
 
 The July 24 application rehearsal ran the current API locally in explicit
 read-only-shadow mode against the Hetzner database. All 15 representative GET
@@ -85,6 +98,51 @@ in 42.7 seconds while a concurrent health request returned 200 in 6.4 seconds.
 Tunnelled timings are directional only. Data health returned its intended
 `degraded` state for absent report types and a timed-out completeness scan; it
 did not identify a transfer difference.
+
+The target-host rerun then passed all 15 authenticated GET contracts and
+blocked both mutation routes. It ran inside the immutable API container against
+the rehearsal database over the Hetzner private network. The two longest
+requests completed in 35.3 and 31.1 seconds while a concurrent health request
+returned 200 in 0.054 seconds. Deployment acceptance also passed exact image
+revision, PostgreSQL TLS, Secret Manager, BigQuery, GCS, scheduler guards and
+loopback-only listener checks. DNS, production writers and production
+schedulers remain unchanged.
+
+On July 25, `scripts/catscan_api_read_only_soak.py` began the paired
+application soak. The one-cycle baseline completed all 15 Hetzner GETs with
+zero missing read-only shadow headers. GCP returned HTTP 500 on the 90-day RTB
+funnel and publisher contracts and exceeded 120 seconds for the QPS summary;
+the Hetzner equivalents returned 200. Seats and 90-day spend matched exactly.
+Other current-window result drift is expected while GCP advances beyond the
+July 22 target snapshot and is tracked separately from request and JSON-shape
+failures. A supervised six-hour run started at `2026-07-25T07:54:12Z`; it is
+complete and accepted: 300/300 target requests passed with zero missing
+read-only shadow headers. The same three GCP failures repeated in every cycle.
+GCP serves revision `30f24771`, whereas the shadow serves accepted revision
+`332ec985084085edef714525d118f6c6ad2db8d4`; this compared actual deployed
+behavior but was not a controlled same-build provider benchmark.
+The harness and evidence format are documented in
+[`CATSCAN_API_READ_ONLY_SOAK.md`](CATSCAN_API_READ_ONLY_SOAK.md).
+
+The July 25 final-sync audit found that Cloud SQL has no logical-decoding flag,
+publication or retained migration slot. The July 22 rehearsal database
+therefore cannot be retroactively caught up: it must be preserved as evidence
+and replaced by a fresh schema-matched logical subscriber, which can take an
+online initial copy and then continuously catch up. All 98 target tables have
+primary keys, but 38 sequences require a frozen-state transfer and two
+generated columns need explicit replication validation. The permanent target
+Volume has room for one production-sized database, not the old rehearsal and a
+new subscriber simultaneously. The planned approval gates and rollback cutoff
+are documented in
+[`HETZNER_FINAL_SYNC_RUNBOOK.md`](HETZNER_FINAL_SYNC_RUNBOOK.md).
+
+Writer inventory found three enabled Cloud Scheduler jobs whose HTTP targets
+follow the public hostname, plus general API mutations/background work and a
+separate login that owns the private finance schema. The three scheduler flags
+previously described ownership but did not enforce it at the endpoints. Local
+code now rejects scheduled Gmail, precompute and creative-cache work unless its
+flag is explicitly true; 28 focused tests and Ruff pass. That fix still must be
+reviewed, built and deployed in an immutable cutover release.
 
 The application-data rehearsal is also complete. A source-to-target rsync,
 followed by an online delta, copied 12,476 non-credential regular files and
@@ -126,8 +184,10 @@ Both target nodes currently belong to the existing shared `amazingdo.com`
 Tailscale tailnet. Until default-deny project tags/grants or a separate tailnet
 is accepted, it is auxiliary access rather than an isolation boundary and the
 operator `/32` public SSH path remains open. The independent backup
-provider/credentials, encryption-passphrase escrow and renewable off-GCP Google
-identity are not configured yet.
+provider/credentials and encryption-passphrase escrow are not configured yet.
+The shadow uses the owner-approved existing production service-account key as
+a migration bridge; replacement with a renewable off-GCP identity remains
+recommended before long-term operation.
 
 The approximately USD 291.69/USD 261.01 provider envelope was rechecked on
 July 23 from the intended-project API: CPX22 is USD 30.99/month, CCX23 is USD
@@ -143,35 +203,50 @@ That cleanup saves about USD 17/month independently of the migration.
 
 - The full production-sized database completed a timed target restore and the
   90-day/all-time public and private-finance comparisons passed with zero
-  differences. Local heavy shadow API/dashboard checks also pass. The
-  digest-pinned target-host deployment and same-network soak remain open.
-- The independent logical-backup path is not healthy; managed-provider backups
-  cannot be the only recovery path before self-hosting.
-- The RTBcat-specific Hetzner foundation is provisioned, but the independent
-  encrypted pgBackRest/WAL chain and clean-host recovery drill remain open.
-- The current production deployment workflow, container registry
-  authentication and database connector are provider-specific; the prepared
-  Hetzner path has not yet been published or exercised.
+  differences. Local and immutable target-host heavy shadow checks also pass.
+  The six-hour read-only soak completed 300/300 successful target requests with
+  zero missing shadow headers and is accepted.
+- The independent encrypted pgBackRest/WAL chain, recurring timers and
+  clean-host PITR restore are accepted. Approved cleanup removed the disposable
+  drill host/firewall, unused HMAC/legacy environment and witness database; the
+  post-cleanup Terraform plan is empty.
+- The Hetzner release path and tree-identical A→B→A rollback are exercised and
+  accepted; the current manifest is restored to SHA `332ec985...`.
 - Scheduled imports, refreshes, delivery checks, contracts, retention and a
   dated purge are not yet represented as one target-host timer manifest.
 - The live analytics lane still writes to object storage and reads/writes the
-  warehouse. Off-provider credentials and connectivity must be proven from
-  the target.
-- Local data-correctness work must be merged, deployed and acceptance-tested
-  before the migration release SHA is frozen.
+  warehouse. Target read access is proven; ownership and one-time cutover of
+  every writer/scheduler still need an explicit manifest.
+- Cloud SQL logical decoding is off and enabling it requires a separately
+  approved restart. A fresh logical subscriber, WAL/slot monitoring and
+  source-to-target catch-up rehearsal are not yet complete.
+- The current immutable target deployment remains shadow-only. Guarded
+  scheduler-disabled writable activation is implemented and its check-only
+  Compose/evidence rehearsal passes, but the changed release is not yet
+  reviewed, published, deployed as a shadow or live-rehearsed. Single-owner
+  scheduler enable remains a later approval gate.
+- The private-finance schema owner is traced to the separate ADT finance
+  controller. Its active runtime uses local SQLite plus read-only RTBcat HTTP,
+  not Cloud SQL, but the dormant owner login must still be recreated on target
+  and blocked on source during freeze.
 
 ## Required acceptance evidence
 
 - Full restore timing and zero-difference partition validation.
 - Heavy dashboard and API performance checks against the restored target
-  (local tunnelled pass complete; target-host immutable-image rerun required).
-- Point-in-time recovery and clean-host restore from the target backup chain.
+  (local tunnelled and target-host immutable-image passes complete).
+- Point-in-time recovery and clean-host restore from the target backup chain
+  (complete July 26).
 - Re-ingesting the same report leaves published values unchanged.
 - All scheduled operations run once from the target, with the old scheduler
   disabled so there is never dual delivery.
 - Authentication, critical agent consumers, daily spend and finance-facing
   aggregates reconcile before and after cutover.
 - A written writer-freeze order, DNS/TLS plan and explicit rollback cutoff.
+- All logical tables are `ready`, the subscriber reaches the frozen source LSN,
+  and all 38 sequence states match before DNS changes.
+- The enforced scheduler guards are present in the accepted immutable image,
+  and only one target API deployment can execute scheduled writes.
 
 ## Privacy boundary
 

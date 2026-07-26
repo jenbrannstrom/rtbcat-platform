@@ -107,6 +107,12 @@ to measure endpoint load or QPS-quota utilization — use `Bid Requests`
 
 ### Cost Metrics
 
+All spend-derived metrics use the buyer account's configured currency. A
+`spend_micros` value is one millionth of that currency, not necessarily USD.
+For example, buyer `8087233591` (Uplivo / Tuky Internet) is EUR. When consuming
+the Agent API, use `currency`, `spend`, and `avg_cpm`; the legacy `spend_usd`
+and `avg_cpm_usd` aliases are populated only for USD seats.
+
 | Metric | Formula | Use |
 |--------|---------|-----|
 | **CPM** | `(Spend / Impressions) × 1000` | Cost per 1000 impressions |

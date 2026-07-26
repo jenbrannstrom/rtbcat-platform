@@ -1,11 +1,762 @@
 # Handover
 
-## Current Production Handover
+## Next engineer resume — July 26, 2026, 17:01 SAST
 
-This is the current handover as of **July 10, 2026**. It supersedes the June
-12 handover (which it extends; the June incident RCAs below are kept) and is
-the companion to `retirement-notes.md` (CTO retrospective + Hetzner migration
-opinion, 2026-07-09).
+Read this section before running anything. The detailed, chronological evidence
+follows below.
+
+Current authority and safety boundary:
+
+- the migration has **not** cut over;
+- Cloud SQL, GCP ingress, DNS and the three Cloud Scheduler jobs remain
+  authoritative and unchanged;
+- the Hetzner application is still a loopback-only, read-only shadow with every
+  scheduler flag false;
+- no live writer activation, DNS change, scheduler change or Cloud SQL restart
+  is authorized; and
+- the worktree is intentionally dirty. Preserve unrelated/user changes: do not
+  reset, clean, restore or broadly stage it, and do not force-add
+  `docs/internal/`.
+
+Accepted gates:
+
+- encrypted pgBackRest backup/WAL archival uses the dedicated native-GCS
+  repository in Singapore, not Johannesburg; two full backups, timers and a
+  clean-host PITR restore were accepted;
+- disposable Hetzner server `155417362`, firewall `11370709`, the unused HMAC
+  credential and legacy environment file, and witness database
+  `rtbcat_pgbackrest_pitr_probe` were removed; the refreshed Terraform plan is
+  empty;
+- the exact 38-sequence sync rehearsal passed, including compensating recovery
+  after an induced partial apply and an idempotent exact reapply; and
+- writable activation tooling passed local check-only rehearsal. This was not a
+  live activation and made no external state change. The last combined focused
+  run passed 51 relevant tests.
+
+Private evidence is under `docs/internal/rtbcat-migration/`, including:
+
+- `PGBACKREST-EXECUTION-2026-07-26.json`;
+- `sequence-sync-rehearsal-2026-07-26/summary.json`; and
+- `writable-activation-rehearsal-2026-07-26/summary.json`.
+
+Keep that evidence mode 0600 and outside commits. The operating references are
+`docs/HETZNER_MIGRATION_NEXT_ENGINEER.md` and
+`docs/HETZNER_FINAL_SYNC_RUNBOOK.md`.
+
+Exact next action: review and preserve the current tree, then obtain explicit
+user approval before creating a scoped immutable commit, pushing it, running
+the manual GHCR build workflow, or deploying its digest-pinned release to
+Hetzner. The first deployment must remain a read-only shadow. Shadow acceptance
+still does not authorize writable activation; request separate approval for
+the live writable rehearsal. Logical-decoding restart, subscriber replacement,
+source writer freeze, DNS cutover, target writes and target schedulers retain
+their own later approval gates.
+
+## Writable activation guard — check-only accepted — July 26, 2026, 16:54 SAST
+
+Local activation engineering is complete without changing the running Hetzner
+shadow, Cloud SQL, DNS, writers or schedulers. The checksum-matched Compose
+artifact now defaults to shadow mode but can be rendered writable only through
+`scripts/hetzner/activate_writable_release.sh`. The existing shadow deploy
+explicitly overrides inherited shell values back to read-only/all-schedulers-off.
+
+The activation entry point requires the exact live confirmation and mode-0600
+evidence for source writer freeze, zero active source writer sessions,
+subscriber catch-up, exact sequence sync, final reconciliation, target backup,
+unchanged DNS and disabled target schedulers. It accepts only digest-pinned
+images and the release-matched Compose checksum, keeps API/dashboard on
+loopback, starts writable mode with all three scheduler flags false, and
+restores verified shadow mode if live activation verification fails.
+
+The check-only rehearsal passed:
+
+- the rendered API was writable with Gmail, precompute and creative-cache
+  schedulers all false;
+- API/dashboard remained bound only to `127.0.0.1`;
+- wrong confirmation returned exit 2 before rendering;
+- evidence claiming an enabled scheduler returned exit 1 and created no
+  receipt;
+- inherited shell values attempting to enable all schedulers were neutralized;
+- 29 activation/scheduler/read-only focused tests passed; and
+- the manual immutable-image workflow now includes the scheduler and activation
+  guard tests.
+
+Private evidence is under
+`docs/internal/rtbcat-migration/writable-activation-rehearsal-2026-07-26/`.
+This is not a live activation acceptance. The changed Compose/tooling and
+scheduler endpoint guards must be reviewed, published as a new immutable
+release and deployed as a shadow before a live writable rehearsal. Publishing
+or deploying that release is an external change and still requires explicit
+approval.
+
+## Sequence-state rehearsal accepted — July 26, 2026, 16:44 SAST
+
+The next cutover-engineering gate passed without touching Cloud SQL, the
+Hetzner rehearsal database, DNS, writers or schedulers. Two disposable,
+loopback-only PostgreSQL 15.17 containers exercised the exact 38-sequence
+inventory used by the final-sync helper, including mixed `is_called` states and
+quoted/schema-qualified identifiers.
+
+The rehearsal found a critical safety error before production use:
+PostgreSQL `setval()` changes survive transaction rollback. The helper now
+requires a mode-0600 JSON recovery record before apply, preflights target
+`UPDATE` privileges, and compensates for apply failure by restoring and
+verifying every pre-apply target state.
+
+Accepted results:
+
+- wrong confirmation and missing recovery evidence both refused with exit 2;
+- initial read-only comparison found the deliberately divergent 38 states;
+- an induced failure occurred after 37 partial `setval()` changes;
+- compensating recovery restored all 38 original values/flags, and an
+  independent reread matched the pre-apply evidence exactly;
+- the successful apply changed all 38 states and produced an exact match;
+- the post-apply compare passed and the idempotent reapply changed zero states;
+- 11 focused tests, Ruff, Python compilation and diff checks passed; and
+- both disposable containers were removed and their loopback ports closed.
+
+Private evidence is under
+`docs/internal/rtbcat-migration/sequence-sync-rehearsal-2026-07-26/`.
+The next gate is the immutable writable-target activation rehearsal with every
+scheduler initially disabled; it does not authorize a production writer,
+scheduler, DNS or Cloud SQL change.
+
+## Backup/PITR gate accepted — July 26, 2026, 14:31 SAST
+
+Production authority remains unchanged. Cloud SQL is writable and
+authoritative; the Hetzner application remains the loopback-only read-only
+shadow with every scheduler disabled. No DNS, production writer, scheduler or
+Cloud SQL setting changed.
+
+The repository is the dedicated pgBackRest repository bucket (exact name in
+private evidence) in Singapore (`asia-southeast1`), matching
+the application region. It has uniform access, public-access prevention,
+versioning, 14-day soft delete, 30-day noncurrent cleanup and seven-day
+incomplete-multipart cleanup. The dedicated runtime service account has only
+bucket-level `roles/storage.objectUser` and no project roles. The repository
+uses pgBackRest's native GCS driver and AES-256-CBC encryption.
+
+An initial GCS XML/S3-compatible attempt was rejected because the XML endpoint
+returns HTTP 404 when pgBackRest deletes an absent object and pgBackRest's S3
+driver treats that response as fatal. Runtime configuration was changed to the
+native GCS driver, which explicitly accepts the missing-object result. The
+native service-account JSON key and repository cipher passphrase are separately
+escrowed as version-1 Secret Manager secrets with user-managed
+`asia-southeast1` replication. After restore acceptance, the unused HMAC key
+was deactivated and deleted, its Secret Manager secret was deleted, and its
+root-only target environment file was removed. No credential payload is
+recorded in evidence, and temporary workstation/transit copies were removed.
+
+The accepted chain on `rtbcat-production-db` has `archive_mode=on`, zero
+archive failures and two retained full backups. The selected full
+`20260726-113211F` covered 438,979,227,000 source bytes, stored about 57.1 GB,
+and completed in 1,977,336 ms. Full, differential and daily repository-check
+timers are enabled with full retention 2 and differential retention 6.
+
+The isolated PITR witness target was
+`2026-07-26T12:06:53.141026Z`. The opt-in Terraform plan applied exactly one
+firewall and one disposable Singapore `cpx62`, with zero updates or deletes.
+The clean host restored 438,979,227,293 bytes from `20260726-113211F` in
+409,337 ms and promoted at the selected target. Acceptance passed:
+
+- PostgreSQL 15.17, checksums on, archive mode off and loopback-only listener;
+- 98 application tables in `rtbcat_serving_rehearsal`;
+- the before-target witness is present and the after-target witness is absent;
+- PostgreSQL is no longer in recovery; and
+- 177,329,164,288 bytes remained free on the local root disk.
+
+The drill exposed and fixed two maintained-script defects without recopying
+data: RFC3339 recovery targets are now normalized for PostgreSQL 15, and the
+restore bootstrap no longer lowers `max_connections` below the source value.
+Private evidence is in
+`PGBACKREST-BACKUP-2026-07-26.json`,
+`PGBACKREST-PITR-PROBE-2026-07-26.json`,
+`PGBACKREST-CLEAN-HOST-PITR-2026-07-26.json` and
+`PGBACKREST-EXECUTION-2026-07-26.json`.
+
+Approved cleanup completed at 12:57 UTC: Terraform destroyed disposable server
+`155417362` and firewall `11370709` with no other infrastructure changes. The
+server exceeded Hetzner's graceful-shutdown timeout and was then deleted; its
+local disk is not recoverable, while accepted evidence remains preserved
+privately. The unused HMAC/secret and legacy environment file were removed,
+and the isolated PITR witness database was dropped. A refreshed Terraform plan
+is empty. A post-cleanup native-GCS check archived WAL through
+`0000000100000068000000F4`; the repository retains both healthy full backups,
+all three timers are enabled and archive failures remain zero.
+
+## Backup/PITR gate preflight — July 26, 2026, 10:31 SAST
+
+Production authority remains unchanged. Cloud SQL is writable and
+authoritative; the Hetzner application is still the loopback-only read-only
+shadow with every scheduler disabled. No DNS, writer, scheduler, GCP resource,
+Hetzner resource or target-host configuration changed during this pass.
+
+Read-only target preflight confirmed:
+
+- PostgreSQL 15.17 and data checksums are healthy;
+- the rehearsal cluster uses about 413 GB;
+- pgBackRest 2.58.0 is installed, but the repository is empty/unconfigured;
+- `archive_mode` is still off, no pgBackRest timers exist and no backup was
+  started;
+- public SSH remains available only through the retained operator `/32`; the
+  database Tailscale peer was offline; and
+- the existing 1,500 GB Volume quota has only 200 GB free, which cannot hold a
+  second production-sized restore Volume.
+
+Local backup/recovery engineering now includes:
+
+- hardened non-blocking pgBackRest S3-compatible configuration in
+  `scripts/hetzner/configure_pgbackrest_s3.sh`;
+- a separate full-backup acceptance check before recurring timers can be
+  enabled;
+- metadata-only backup/WAL evidence generation in
+  `scripts/hetzner/verify_pgbackrest_backup.sh`;
+- isolated before/after PITR witness creation;
+- guarded bootstrap and time-target restoration that refuse the production
+  database host and a non-empty disposable cluster; and
+- an opt-in Terraform `cpx62` clean-host drill resource using its 640 GB local
+  disk, disabled by default so it consumes no Volume quota.
+
+Validation passed: eight focused tests, Ruff, Bash parsing, Terraform format
+and validation, and `git diff --check`. The default live Terraform plan remains
+empty. The separately generated drill plan has exactly two creates (one
+firewall and one `cpx62`), zero updates and zero deletes.
+
+Superseded decision note: this preflight initially proposed Johannesburg for a
+country-level failure boundary. The owner correctly clarified that the
+application is in Singapore and approved Singapore storage to avoid needless
+inter-region traffic and restore egress. No Johannesburg storage was created.
+The accepted Singapore execution and exact private evidence are recorded in
+the current checkpoint above.
+
+## Night shutdown checkpoint — July 25, 2026, 22:14 SAST
+
+Safe to shut down the operator workstation. Resume this migration; do not
+restart it from discovery or repeat completed bulk transfers.
+
+Start tomorrow with:
+
+```bash
+cd /home/jen/Documents/rtbcat-platform
+git status --short --branch
+sed -n '1,260p' docs/HETZNER_MIGRATION_NEXT_ENGINEER.md
+sed -n '1,260p' docs/HETZNER_FINAL_SYNC_RUNBOOK.md
+git check-ignore -v \
+  docs/internal/rtbcat-migration/GCP-FULL-MIGRATION-INVENTORY-CHECKLIST.md
+```
+
+Current authority and safety state:
+
+- production has **not cut over**;
+- Cloud SQL is still writable and authoritative;
+- GCP application ingress, DNS and all three Cloud Scheduler jobs are
+  unchanged;
+- the Hetzner application remains the loopback-only, read-only shadow with
+  scheduler flags false;
+- no Cloud SQL flags, publications, slots, database roles or sessions were
+  changed during final-sync planning;
+- no target database was dropped or created;
+- no target writer or scheduler was enabled;
+- the six-hour soak and its SSH tunnel are stopped; no related local process
+  was running at this checkpoint; and
+- the worktree remains intentionally dirty on
+  `fix/uplivo-agent-currency`, ahead of its configured remote base by one
+  commit. Do not reset, clean, restore or broadly stage it.
+
+Completed today:
+
+- six-hour paired API soak accepted: 300/300 successful Hetzner requests,
+  every read-only header present; GCP repeated the same two HTTP 500s and one
+  timeout in all 20 cycles;
+- immutable tree-identical A→B→A application rollback accepted and current
+  manifest restored;
+- Cloud SQL/target logical-replication and storage audit completed read-only;
+- writer/scheduler inventory completed, including the dormant finance-schema
+  owner role (name in private evidence);
+- final synchronization, writer freeze, DNS, scheduler ownership and rollback
+  cutoff documented in `docs/HETZNER_FINAL_SYNC_RUNBOOK.md`;
+- concise resume checkpoint written to
+  `docs/HETZNER_MIGRATION_NEXT_ENGINEER.md`;
+- scheduled write endpoints now have local explicit-true ownership guards;
+- guarded 38-sequence comparison/apply helper added at
+  `scripts/hetzner/sync_postgres_sequences.py`; and
+- touched-area validation passed: 49 tests, Ruff and `git diff --check`.
+
+Do not attempt to catch up `rtbcat_serving_rehearsal`. Cloud SQL had no logical
+slot preserving changes since July 22. The accepted plan is to preserve its
+evidence, then—only after explicit destructive approval—replace it with a
+fresh schema-matched subscriber that performs an online initial copy and
+continuous logical catch-up.
+
+The independent encrypted Hetzner pgBackRest/WAL backup chain, PITR and
+clean-host restore are now accepted. The next local engineering gates are a
+disposable rehearsal of the sequence helper and an immutable writable
+activation that starts with every scheduler disabled.
+
+Separate approvals remain mandatory for:
+
+- Cloud SQL logical-decoding flags and restart;
+- replication role/publication/slot creation;
+- stopping the shadow and replacing the July 22 rehearsal database;
+- writer freeze and final non-credential `.catscan` delta;
+- subscription/slot finalization;
+- DNS; and
+- the first Hetzner write and scheduler enablement.
+
+Hard rollback boundary: before the first accepted Hetzner write, return to
+frozen GCP if necessary. After the first Hetzner write, Cloud SQL is stale
+unless reverse synchronization has been proven; use fix-forward or the Hetzner
+backup chain.
+
+Exact private evidence is under `docs/internal/rtbcat-migration/`; that entire
+tree is intentionally ignored and must never be force-added or included in a
+public snapshot.
+
+## Workstation reboot checkpoint — July 22, 2026
+
+The local workspace is intentionally dirty and must be resumed, not reset.
+Branch `fix/uplivo-agent-currency` contains uncommitted currency-contract and
+BigQuery idempotency work plus untracked migration
+`storage/postgres_migrations/071_buyer_seat_currency.sql`. No production
+deploy, DNS change, GitHub push or Hetzner mutation was made during the
+migration-readiness/reboot-preparation pass.
+
+Migration documentation now has two privacy layers:
+
+- Sanitized, intended for tracking after review:
+  `docs/HETZNER_MIGRATION_PLAN.md`, `docs/HETZNER_MIGRATION_READINESS.md` and
+  the updated `ROADMAP.md`.
+- Private/ignored: `docs/internal/rtbcat-migration/`, including the full live
+  inventory, reboot recovery material and backup manifest. `docs/internal/`
+  is gitignored; do not force-add it and do not include it in a public
+  snapshot.
+
+Readiness verdict: provision and rehearse now; do not schedule production
+cutover. The hard gates are a full timed restore, target WAL/PITR plus a clean
+restore drill, target IaC/deploy/timers, off-provider Google access testing,
+the writer-freeze/rollback runbook, and deployment of the local
+data-correctness changes from a clean immutable SHA.
+
+After reboot, start with:
+
+```bash
+cd /home/jen/Documents/rtbcat-platform
+git status --short --branch
+git check-ignore -v docs/internal/rtbcat-migration/GCP-FULL-MIGRATION-INVENTORY-CHECKLIST.md
+sed -n '1,220p' docs/internal/rtbcat-migration/REBOOT-CHECKPOINT-2026-07-22.md
+```
+
+Do not run `git reset`, clean ignored files, or deploy until that checkpoint
+and the backup manifest have been reviewed.
+
+### Migration execution checkpoint — July 23, 2026
+
+Resume at **Part 1 provisioning** using the current-execution section at the
+top of `docs/HETZNER_MIGRATION_PLAN.md`. Parts 1–3 are implemented locally but
+no Hetzner resource has been created, no migration data has moved, and no DNS,
+production-writer or scheduler change has occurred. Terraform is initialized
+and an ignored placeholder-free tfvars file exists, but the project token is
+absent and remote-state recovery, Singapore availability/limits, independent
+backup storage and the off-GCP Google identity remain prerequisites. Exact
+cost/account evidence is kept in the ignored private master inventory, not in
+this tracked handover.
+
+Continuation audit on July 23: an existing retained, versioned GCS state bucket
+was identified and the stack was prepared for an isolated GCS backend prefix;
+the exact bucket config remains ignored/private. `cat-scan@rtb.cat` was
+reauthenticated and passed a write/read/delete recovery probe in the isolated
+prefix; the probe was removed. Backend initialization completed July 23.
+Current project-API pricing corrects the planning envelope to approximately USD
+291.69/USD 261.01 because Volumes are USD 0.0767/GB-month. The revised cost
+was approved July 23. Limits are also insufficient: only one server slot and
+1,024 GB of Volume capacity are available; request at least six total servers
+and 1,300 GB (eight/1,500 recommended). The first token was generated in the
+wrong existing `amazingDO.com` project; read-only discovery exposed the
+project mismatch. Its credential value was removed before Terraform use, an
+isolated replacement token was saved mode `0600`, and read-only API checks
+confirm its project is empty. The wrong token was revoked in the Console. The
+stack is initialized against the isolated GCS backend using `cat-scan@rtb.cat`
+ADC, with no resource-state object yet. An ignored saved plan (SHA-256
+`174ef61e62388097dc25c1851a96f8000440af14eecc54ce0769ad517f9b25de`) has 13
+expected Hetzner creates, no updates/deletes, no public PostgreSQL and no
+non-Hetzner provider; regenerate it after limit approval. The account-wide
+eight-server/1,500 GB limit increase was submitted July 23 and is pending. The
+previously unprotected temporary 400 GB rehearsal Volume now has a dedicated
+deletion-protection switch and documented two-apply removal path.
+`terraform fmt -check -recursive` and `terraform validate` pass after those
+changes. No Hetzner resource, saved plan, image, transfer, DNS change or writer
+change was made.
+The reboot checksum manifest now reports expected mismatches only for the two
+living migration documents updated after the July 22 archive; every immutable
+backup artifact and preserved source file still passes. Do not rewrite the
+archive checksum manifest to hide those post-backup changes.
+
+Privacy gate before any GitHub push: the local ahead commit contains a
+force-added private investigation record, and older tracked handover material
+also predates the current privacy boundary. Do not push this branch or run the
+public-snapshot script until the private investigation is removed from the
+branch history and the tracked tree has passed a dedicated sanitization review.
+
+### Migration validation checkpoint — July 24, 2026
+
+The full online restore is complete and the restored database remains
+read-only. A new reusable suite at `scripts/catscan_mcp_db_smoke.py` ran eight
+future-MCP-shaped media-buyer contracts against Cloud SQL and
+`rtbcat_serving_rehearsal`. All six shared buyers and the closed 30-day window
+`2026-06-22` through `2026-07-21` matched exactly (8/8 contracts, identical
+normalized row hashes). Unit/API coverage passed 27/27. The target was faster
+for every contract in this tunnelled smoke; do not treat cross-tunnel timings
+as a controlled benchmark.
+
+Preserve the suite, `docs/CATSCAN_MCP_DB_SMOKE.md` and the ignored detailed
+evidence in
+`docs/internal/rtbcat-migration/CATSCAN-MCP-DB-SMOKE-2026-07-24.json`.
+The temporary local source-secret payload was removed and both tunnels exited.
+The expanded gate later passed 10/10 public contracts through `2026-07-22`,
+including exact calendar-month and all-time canonical spend, plus 7/7 private
+finance contracts. The private schema has matching 154-column/14-table
+structure and is empty on both sides; active finance audit data remains in its
+separate SQLite store. Evidence is in
+`docs/internal/rtbcat-migration/DATABASE-RECONCILIATION-2026-07-24.json`.
+
+The next pass completed the online application-data rehearsal and local
+read-only application shadow. The bulk source-to-target rsync plus delta copied
+12,476 non-credential regular files and 100,810,997,029 logical bytes; target
+count/bytes and runtime ownership match, credentials are absent and about 57.0
+GB remains free. Production stayed live. The one-use SSH key and temporary
+source `/32` cloud/UFW rules were removed and the direct path is blocked again.
+
+The current API ran locally against `rtbcat_serving_rehearsal` with
+`CATSCAN_READ_ONLY_SHADOW=true`. All 15 GET checks passed, two mutation checks
+returned 405, and the run fixed compatibility with the restored pre-071 buyer
+seat schema and the older publisher aggregate schema. QPS analysis now leaves
+the FastAPI event loop and runs its size/geo queries concurrently; the live
+90-day request completed in 42.7 seconds while health remained responsive.
+Evidence is in the ignored
+`docs/internal/rtbcat-migration/SHADOW-APPLICATION-AND-APPDATA-2026-07-24.json`.
+
+Do not apply a Terraform plan that proposes host replacement. A temporary
+firewall plan revealed that maintained cloud-init templates changed the
+force-replacement `user_data` hash. Both server resources now explicitly ignore
+post-provision `user_data`; formatting/validation pass and the live plan is
+empty.
+
+The digest-pinned target-host shadow is now accepted. Sanitized release
+`332ec985084085edef714525d118f6c6ad2db8d4` was merged, its manual GHCR build
+passed, and the exact API/dashboard digests run loopback-only on the target.
+Deployment acceptance passed private PostgreSQL TLS and Google service probes.
+The target-host suite passed 15/15 authenticated GET contracts and both
+mutation probes returned 405; evidence is in the ignored
+`docs/internal/rtbcat-migration/TARGET-HOST-SHADOW-APPLICATION-2026-07-24.json`.
+The owner explicitly approved reusing the existing service-account key as a
+migration bridge. DNS, production writers and all target schedulers remain
+unchanged. Next work is a bounded read-only soak, rollback rehearsal and the
+independent target backup/restore gate—not another bulk transfer or a cutover.
+
+### Read-only soak checkpoint — July 25, 2026
+
+`scripts/catscan_api_read_only_soak.py` now automates the paired GCP/Hetzner
+application soak documented in `docs/CATSCAN_API_READ_ONLY_SOAK.md`. It sends
+only the same 15 rehearsed GET contracts, requires every target response to
+carry `X-CatScan-Shadow: read-only`, and records status, latency, response
+size, exact hashes, value-free schema hashes and changed JSON paths. It does
+not retain response bodies, credentials or buyer IDs. Focused soak, shadow and
+QPS regression tests pass 11/11.
+
+The July 25 one-cycle baseline completed 15/15 target requests with no missing
+shadow headers. GCP returned HTTP 500 for the 90-day RTB funnel and publisher
+contracts and exceeded the 120-second timeout for the 90-day QPS summary.
+Seats and 90-day spend matched exactly. The remaining result drift is expected
+to include post-July-22 source writes; request failures and JSON-shape changes
+are counted separately. GCP is serving revision `30f24771`, while the target
+runs accepted revision `332ec985084085edef714525d118f6c6ad2db8d4`; this is a
+comparison of real deployed behavior, not a controlled same-build provider
+benchmark. Detailed ignored evidence is under
+`docs/internal/rtbcat-migration/api-soak/baseline-2026-07-25/`.
+
+A supervised six-hour soak started at `2026-07-25T07:54:12Z`, using a
+15-minute pause between cycles and a supervised loopback SSH tunnel. The
+one-use API-key file was deleted immediately after startup. Both
+`rtbcat-read-only-soak-20260725.service` and
+`rtbcat-soak-tunnel-20260725.service` were active after launch. Evidence is
+written after every completed cycle under
+`docs/internal/rtbcat-migration/api-soak/six-hour-2026-07-25/`. After the run,
+inspect `summary.json` and the two unit states before accepting the soak or
+moving on to immutable rollback rehearsal. Do not enable writers, schedulers
+or DNS as part of that review.
+
+Rollback preflight ran while the soak continued, without restarting the target.
+The host initially had only the current accepted manifest, so a real version
+transition could not yet be rehearsed. PR-head SHA
+`9aeb5732c5054d9a40e70e07fecb7a7913a89f93` has the exact same Git tree as
+accepted merge SHA `332ec985084085edef714525d118f6c6ad2db8d4`. Its guarded
+manual GHCR workflow run `30152700277` passed and produced a second
+digest-pinned manifest, making it a behavior-identical alternate for an
+A→B→A drill after the soak. The target deploy and verify helpers exactly match
+the accepted commit. The initially absent rollback wrapper was installed from
+that same immutable commit, checksum
+`22862c8842e7d0896b13662150afab7322ab9fc1788fc1f995eaeb624a50a53b`,
+without restarting the shadow; its list command resolves the current accepted
+manifest. Private preflight evidence is in
+`docs/internal/rtbcat-migration/ROLLBACK-REHEARSAL-PREFLIGHT-2026-07-25.json`.
+No container, DNS, writer or scheduler changed during preflight.
+
+The soak and rollback drill completed later on July 25. Twenty paired cycles
+made 300 target requests; all 300 succeeded and every response retained the
+read-only shadow header. GCP repeated the same two HTTP 500s and one
+120-second QPS timeout in all 20 cycles, so strict mode correctly returned
+nonzero for 60 source failures. Seats and 90-day spend matched exactly 20/20.
+Target QPS p50/p95 was 30.0/30.7 seconds and data-health p50/p95 was
+35.9/36.0 seconds.
+
+The A→B→A immutable drill then activated tree-identical alternate SHA
+`9aeb5732c5054d9a40e70e07fecb7a7913a89f93`, passed every deployment gate,
+and used the actual rollback wrapper to restore accepted SHA
+`332ec985084085edef714525d118f6c6ad2db8d4`. Independent post-rollback
+verification again passed digest, database, Google access, read-only,
+scheduler and listener checks. The candidate transfer was removed and the
+local tunnel stopped. DNS, production writers and target schedulers never
+changed. Consolidated private evidence is in
+`docs/internal/rtbcat-migration/SOAK-AND-ROLLBACK-2026-07-25.json`.
+
+### Final synchronization planning checkpoint — July 25, 2026
+
+Read-only Cloud SQL inspection found PostgreSQL 15.17 with no instance flags,
+publication, subscription or migration slot. Enabling
+`cloudsql.logical_decoding` requires a restart. A slot created now cannot
+recover changes since the July 22 rehearsal snapshot, so do not attempt an ad
+hoc catch-up of `rtbcat_serving_rehearsal`. The accepted strategy is a fresh
+schema-matched logical subscriber with `copy_data=true`, followed by continuous
+catch-up and a final approved writer freeze.
+
+The target audit found 98 ordinary tables, all with primary keys, 38 sequences,
+two stored generated columns, no RLS/partition roots/large objects and no
+existing logical-replication objects. Its permanent Volume cannot hold both the
+438.9 GB rehearsal DB and a second full copy; preserve the checksummed dump and
+acceptance evidence, then replace the rehearsal only under a separate
+destructive approval.
+
+Live writer inventory found three enabled Cloud Scheduler jobs (Gmail,
+precompute and creative cache), general API mutations/background jobs, and
+the dormant finance-schema owner role (name in private evidence), which owns
+the 14 private-finance tables. The systemd report-delivery and contracts
+timers are normally read-only but should be stopped during freeze for quiet
+validation.
+
+That owner role is now traced to its external controller (name in private
+evidence). That controller's current store is local SQLite. Its sole `archi`
+timer reads RTBcat through the buyer-scoped HTTP API and has no current
+PostgreSQL path; the Cloud SQL role/schema are provisioned for a possible
+future runtime. Treat the role as dormant, recreate its ownership/grants on
+target, and still set it `NOLOGIN` during the source freeze.
+
+The three scheduler flags were discovered to be reporting-only: with secrets
+present, the scheduled endpoints could still execute after DNS moved even when
+the target environment said `false`. Local code now enforces an explicit-true
+flag at each scheduled write endpoint and defaults absent flags to disabled.
+The focused scheduler/health tests pass 28/28 and Ruff passes. This is not yet a
+production control; it must be reviewed and shipped in the immutable cutover
+release.
+
+`scripts/hetzner/sync_postgres_sequences.py` now supplies the required
+dry-run-by-default 38-sequence comparison and guarded target apply. It preserves
+`last_value` plus `is_called`, requires
+`--confirm APPLY_SEQUENCE_STATE` plus a mode-0600 pre-apply recovery record.
+Because `setval()` is nontransactional, failure triggers verified compensating
+restoration rather than relying on rollback. The PostgreSQL 15.17 rehearsal and
+11 focused tests are accepted.
+
+The sanitized plan is `docs/HETZNER_FINAL_SYNC_RUNBOOK.md`; exact private
+findings are in
+`docs/internal/rtbcat-migration/FINAL-DATABASE-SYNC-AND-CUTOVER-2026-07-25.md`.
+The concise resume document for the next engineer is
+`docs/HETZNER_MIGRATION_NEXT_ENGINEER.md`; use it before reconstructing state
+from the older chronological sections in this file.
+No Cloud SQL flag, database, role, scheduler, API, DNS or writer state changed
+during planning.
+
+## Incident addendum (July 21-22, 2026) — daily-spend 07-05 multiplied 7×
+
+Author: incident session of July 21-22 (ADT spend over-report brief). Full
+evidence-backed RCA + remediation record:
+`investigations/RCA-mobyoung-0705-multiplied-2026-07-21.md` (in local commit
+`27051027` — the force-added record covered by the privacy gate above).
+
+- ADT reported `/api/agent/v1/daily-spend` for buyer `6634662463` ~30% above
+  the AB console month-to-date. Sole cause: metric **2026-07-05** served at
+  (exact values in private evidence) micros — exactly **7 identical 557,102-row
+  `buyer_spend` batches**. The `5JULY` recovery re-run (the "in flight" item
+  in the July 14 handover below) was created as a **recurring** AB schedule
+  and never deleted; it re-delivered the same file daily Jul 15-21. The PG
+  lane deduped every repeat (`rows_imported=0`); the BQ raw-export lane
+  appended (`WRITE_APPEND`, no idempotency); publisher #108 summed all
+  batches.
+- The delivery watchdog alerted twice daily Jul 16-19 (journal/status-JSON
+  only — nobody consumes it), then 07-05 **aged out of the 14-day duplicate
+  sweep** on Jul 20 and went silent while the day kept growing. Both gaps
+  (alert channel, latching) are still open.
+- Remediation (guardian-approved, executed Jul 21 ~19:50 UTC, verified
+  Jul 22 ~04:55 UTC): 6 duplicate batches backed up to BQ
+  `rtb_daily_dupbatch_0705x6_bak_20260721` (3,342,612 rows), deleted, day
+  re-materialized (refresh run `a2fc5379`, EXIT=0; gmail-import lock held
+  during the window, removed after). Serving state now: 07-05 =
+  (exact values in private evidence) micros; Jul 1-20 total = (exact values in
+  private evidence); single batch `a2451dad` in BQ; zero multi-batch spend
+  days for any seat since Jul 1.
+- Owner deleted the `5JULY` schedule Jul 22 morning. Conclusive confirmation
+  is the first post-deletion delivery wave (~10:00 UTC) + 10:15 import
+  passing with no re-delivery — a one-shot check runs 10:40 UTC Jul 22.
+  **Until the idempotency guard deploys there is no protection**: any
+  re-delivery re-inflates the day within minutes and the watchdog will NOT
+  alert (aged out). Re-dedupe steps are in the RCA's remediation section.
+- Client-facing: Jul 1-20 now reads (exact values in private evidence) vs
+  console (exact values in private evidence). The residual **(−1.08%) is
+  permanent**: the recovered 07-05 file is a display-formatted (2 dp) export
+  that zeroes the sub-cent tail (July 13 RCA). Document it to ADT; do not
+  chase it as a live bug.
+- Follow-up work is scoped in `docs/BRIEF_PARQUET_BQ_IDEMPOTENCY.md` (same
+  local commit): option A (discard the raw parquet export + skip the inline
+  publish when a file imports as 100% duplicates) is implemented locally in
+  this working tree, **not deployed**; durable option C (batch-aware
+  readers) remains open.
+- Drop `rtb_daily_dupbatch_0705x6_bak_20260721` together with the two
+  July 13/14 `_bak_` tables once ADT confirms reconciliation.
+
+## Current Production Handover (July 14, 2026)
+
+Supersedes the June 12 notes (kept below). Author: incident session of July
+13-14, 2026 (MobYoung daily-spend RCA). Full evidence-backed RCA:
+`investigations/RCA-mobyoung-daily-spend-2026-07-13.md`.
+
+### Incident summary — MobYoung `/api/agent/v1/daily-spend` (buyer 6634662463)
+
+Client reported 2 missing days (2026-07-05, 2026-07-12) for July 1-12. Actual
+findings were three distinct defects:
+
+- **07-01 published DOUBLED** (18,211.82 vs true 9,105.909962): an out-of-band
+  replay of the spend CSV on 07-11 appended a duplicate batch (`583a4d26`, no
+  import_history row) to BigQuery `rtb_daily`, and a manual precompute refresh
+  materialized the sum. Fixed 07-13: batch backed up to
+  `rtbcat_analytics.rtb_daily_dupbatch_583a4d26_bak_20260713`, deleted,
+  day re-materialized. Verified.
+- **07-05 missing because Google never delivered** the
+  `catscan-bidsinauction-6634662463` email on 07-06 (mailbox searched incl.
+  spam/trash; 4 of 5 report kinds arrived; that delivery weekend was visibly
+  degraded). Not an importer bug. Recovery in flight — see below.
+- **07-12 was plain D+1 latency** (email arrived 07-13 10:00 UTC, after the
+  client checked). Ingested 07-13 (batch `d645c3b8`, 4,991,479,984 micros).
+  On 07-14 a mis-scoped owner re-run (named `12JULY`, contained metric 07-12,
+  display-formatted) was auto-ingested and the inline publisher DOUBLED the
+  day for ~1h. Fixed same hour: backup
+  `rtb_daily_dupbatch_adc8623e_bak_20260714`, deleted from BQ + PG,
+  republished. That AB schedule is deleted.
+
+Client-facing arithmetic: the 11 verified days total 123,084,809,581 micros.
+The client's UI figure (141,613.90) is ~1,954 over-scoped (likely included a
+July-13 partial or timezone slice); with 07-05 (~16,575) the true range total
+lands ≈139,660. Ask them to re-pull the UI for exactly Jul 1-12 UTC and
+compare per-day values.
+
+### In flight (2026-07-15 morning)
+
+Owner scheduled a `5JULY` AB query re-run: delivers ~10:00 UTC 07-15, the
+10:15 UTC import ingests it, and the inline publisher (#108
+`publish_buyer_spend_range`) publishes metric 07-05 automatically. One-shot
+`catscan-postwave-dupcheck` (10:50 UTC, systemd transient on the VM) runs the
+delivery watchdog early in case that query is mis-scoped onto an existing day
+(which the inline publisher would double). Afterwards verify 12/12 days:
+`SELECT metric_date, spend_micros FROM rtb_buyer_spend_daily WHERE
+buyer_account_id='6634662463' AND metric_date BETWEEN '2026-07-01' AND
+'2026-07-12'`.
+
+### Live production changes made this week (already applied)
+
+- Cloud Scheduler `gmail-import` schedule changed `0 12,15,18 * * *` →
+  `15 10,12,15,18 * * *` (report wave lands 10:00-10:07 UTC; the 12:00 first
+  run left spend ~2h stale daily). Mirrored in terraform + provision config on
+  the PR branch (terraform had drifted to the single pre-#109 run).
+- New systemd timer on the VM: `catscan-report-delivery-check.timer`
+  (13:45 + 19:15 UTC daily) → runs `scripts/check_report_delivery.py` inside
+  `catscan-api` (state-dir fallback copy at
+  `/home/catscan/.catscan/check_report_delivery.py`). Per seat it checks:
+  report emails arrived on their normal day (expected set learned from a
+  14-day lookback), canonical spend-lane rows present, and a **trailing
+  14-day duplicate-batch sweep**. Status JSON:
+  `/home/catscan/.catscan/report_delivery_status.json`; journal:
+  `journalctl -u catscan-report-delivery-check.service`. Validated against
+  the real 07-05 signature and a healthy control day.
+- BigQuery backup tables `rtb_daily_dupbatch_*_bak_*` hold the two deleted
+  duplicate batches; drop them once the client confirms reconciliation.
+
+### Pending review: PR #110 (draft, branch `fix/daily-spend-completeness`)
+
+Five commits, 918 tests passing: (1) `/api/agent/v1/daily-spend` summary gains
+`complete` / `missing_dates[]` / `latest_complete_date` (additive — until
+deployed, the API signals gaps only via warnings/per-day source_status);
+(2) Gmail discovery becomes unread-independent (rolling `newer_than:` window +
+`gmail_processed_messages` ledger, **migration 070 applies at deploy**);
+(3) per-seat D+1 missing-spend alerting in status JSON/API + canary;
+(4) the delivery watchdog script; (5) the scheduler mirror.
+
+### Local follow-up: buyer-currency API contract (not deployed)
+
+Branch `fix/uplivo-agent-currency` adds migration 071 and makes Agent API money
+denomination-aware. One known non-USD seat is explicitly EUR; other currently
+known seats are USD. Exact buyer mappings and reconciliation evidence are in
+the ignored private reboot checkpoint. `/daily-spend` now returns the currency
+in both `buyer.currency` and `data_source.currency`, while
+`/stats-summary` adds neutral `currency`, `spend`, and `avg_cpm` fields. Legacy
+`spend_usd` / `avg_cpm_usd` fields are `null` for non-USD seats instead of
+mislabeling EUR values. Unknown currencies remain `null` and are never guessed.
+
+The private reconciliation evidence matches the canonical API micros value.
+A separate historical invoice discrepancy remains unresolved and was not
+edited. Apply migrations 070 and 071 when deploying the combined branch, then
+verify the known non-USD seat returns `EUR`. Until that deployment, production
+still exposes the old currency-ambiguous response contract.
+
+### Operational gotchas learned the hard way (do not relearn)
+
+- **The BQ lane is append-only with no idempotency**: re-running any spend CSV
+  through the pipeline appends a new batch and the inline publisher multiplies
+  the published day within minutes. Before ANY historical refresh, scan for
+  multi-batch days (`COUNT(DISTINCT import_batch_id) > 1` per buyer/date,
+  `report_type='buyer_spend'`). Three double-count incidents in one week trace
+  to this; making the lane idempotent is the top follow-up.
+- **Never race Gmail labels to block an import**: `is:unread` search results
+  lag just-changed labels by minutes (a read-quarantine 8 minutes before a run
+  failed). Take `~/.catscan/gmail_import.lock` or pause the scheduler job.
+- **Newly created AB saved queries export display-formatted data** ($ prefixes,
+  2dp, `m/d/yy`) even when email-delivered; only the original scheduled
+  reports carry machine 6dp. The importer parses the display format correctly,
+  and the 2dp cost is only ~±0.3/day — but don't expect 6dp equality.
+- **The 22:30 precompute window is 2 days**; any metric date landing in BQ
+  later than D+1 is never re-materialized without a manual/inline refresh.
+- `docker exec` survives SSH-session death: never re-run a "timed-out"
+  refresh — check `/proc/*/cmdline` in the container first (two concurrent
+  refreshes contended for ~45 min on 07-13). For long jobs use
+  `docker exec -d ... > logfile`.
+
+### Open issues for the next engineer
+
+- **Seat 299038253 has ZERO `buyer_spend`-lane rows in BigQuery** despite
+  daily `catscan-bidsinauction` emails that import successfully — its file
+  shape must be classifying to a different report_type. The watchdog alerts
+  on it daily by design. Pre-existing; uninvestigated.
+- Parquet→BQ idempotency (see gotchas — top priority).
+- On-VM/state-dir pipeline scripts have drifted from the repo
+  (`export_csv_to_parquet.py`, `load_parquet_to_bigquery.py`,
+  `bq_aggregate_to_pg.py` live in `/home/rtbcat/.catscan/`); reconcile them
+  into git.
+- Local checkout note: this working tree sits on `codex/live-major-smoke`
+  with local changes; deployed code == `origin/main`. Compare against
+  `origin/main`, not the working tree.
+
+## Previous Handover (June 12, 2026)
+
+This is the previous handover as of **June 12, 2026**. It supersedes the June
+7/June 10 language-flags notes and removes the archived April/May creative QA
+scope (see git history for those).
 
 The user wants GitHub to be the source of truth. Production must be recoverable
 from GitHub, Terraform, Google Secret Manager, Cloud SQL, Cloud Scheduler,
@@ -16,61 +767,28 @@ expensive staging VM.
 
 - GCP project: `catscan-prod-202601`
 - Production URL: `https://scan.rtb.cat`
-- Current deployed commit: `6b3f2b19` (merge of PR #100, retirement-notes
-  findings), containers on image tag `sha-6b3f2b1`
-- Latest production deploy: 2026-07-09, GitHub Actions run `29045719643`,
-  success with green post-deploy contract gate
+- Current deployed commit: `7d06facb`
+- Production health: `/api/health` returns 200 with `git_sha: 7d06facb`,
+  `version: sha-7d06fac`, and `release_version: 0.9.5`
+- Latest production deploy: GitHub Actions run `27403711752`, success — first
+  fully green contract gate in the June 11-12 sequence (no
+  `ALLOW_CONTRACT_FAILURE` bypass)
 - Production VM: `catscan-production-sg`, `RUNNING`, IP `34.143.222.60`
-- Staging/old VM: `catscan-production-sg2`, `TERMINATED` (retired May 2026,
-  snapshot `catscan-production-sg2-retirement-20260506-0327` kept). The deploy
+- Staging/old VM: `catscan-production-sg2` was permanently deleted July 22,
+  2026 together with its 80 GB boot disk and static IPv4. Retirement snapshot
+  `catscan-production-sg2-retirement-20260506-0327` is retained. The deploy
   workflow only supports `production`.
 - Terraform state bucket: `gs://catscan-prod-202601-tfstate`, prefix
   `terraform/gcp`
 - Production access from a workstation: `gcloud --account=billing@amazingdo.com`
   with `--tunnel-through-iap` (plain SSH times out)
 
-Do not restart or use `catscan-production-sg2` unless explicitly asked. It is
-stopped, but not deleted.
-
-## What Changed (July 9-10) — retirement-notes findings implemented
-
-PR #100 (`infra/retirement-findings`, four commits) merged and deployed:
-
-- **Daily data-trust contracts (notes §1).** `scripts/contracts_check.py`
-  gained `C-DAT-001` (per-seat rtb_daily freshness, WARN >3d / FAIL >5d) and
-  `C-DAT-002` (per-seat, per-report-type column completeness: fails when a
-  monitored column or whole report type goes dark vs the prior window, warns
-  when a column is empty everywhere). The repo's
-  `catscan-contracts-check.timer` is now **installed and enabled on the
-  production VM** — daily 04:00, runs inside `catscan-api`, JSON to
-  `/tmp/contracts_daily.json` in the container. Expect a standing C-DAT-002
-  WARN until upstream `app_name`/`app_id` emptiness is fixed (see Remaining
-  Work).
-- **rtb_daily partition migration kit (notes §3).** `scripts/partition_migration/`
-  contains a rehearsal-gated path to monthly partitions: DDL (BIGINT `id`,
-  dedup on `(metric_date, row_hash)`, 16 indexes → 7 on pg_stat evidence),
-  timed loader, per-month validation, instant cutover/rollback, and
-  retention-by-`DROP PARTITION` wired to `retention_config`. Importers detect
-  the table shape at connect time, so no deploy needs to synchronize with the
-  cutover. **Do not run against live prod without the rehearsal** — see the
-  kit README. Measured while building it: rtb_daily is 327 GB / ~467M rows
-  (2026-07-09), growing ~1.8 GB/day, and `rtb_daily_id_seq` is at 589.7M of
-  the INTEGER column max (~16 months to exhaustion; the kit's BIGINT rebuild
-  is the fix).
-- **Stale workflow purge (notes §2).** The eight `v1-*` pilot workflows are
-  deleted. An audit found all 34 routers mounted and real, so no code was
-  deleted; `cloudsql-logical-backup.yml` is healthy and stays.
-- **No-hot-patch invariant (notes §4).** CLAUDE.md now states: nothing serves
-  traffic that isn't a pushed, sha-tagged image. The old "docker cp is
-  acceptable" allowance is gone.
-
-Corrections to the retirement notes discovered while verifying: Cloud SQL is
-**Postgres 15.17** (not 16 — pin 15.17 for the migration) and the rtb_daily
-size figures in the notes (157 GB / 227M rows) were ~2x stale.
+Do not recreate `catscan-production-sg2`; its retirement snapshot is the
+retained recovery artifact.
 
 ## Latest Production Commits (June 10-12)
 
-All pushed to `main` and deployed:
+All pushed to `main` and deployed (`7d06facb` is live):
 
 - `7d06facb` `Stop marking allowlist-skipped Gmail reports as read`
 - `7f605551` `Coalesce null aggregates in config precompute`
@@ -182,17 +900,8 @@ applies to all seats.
   `secretmanager.secrets.create`).
 - `docker restart` does NOT re-read `/opt/catscan/.env` — container env only
   updates on recreation (deploy or `refresh_gcp_vm_runtime_env.sh
-  --recreate-api`). Hot-patching via `docker cp` is no longer acceptable
-  (CLAUDE.md invariant, July 2026): push the commit, let CI build, deploy that.
-- Daily contract validation runs on the VM via systemd
-  (`catscan-contracts-check.timer`, 04:00): check with
-  `systemctl status catscan-contracts-check.service` or
-  `journalctl -u catscan-contracts-check.service`. The unit files live in
-  `scripts/systemd/`; on a redeploy of the VM they must be reinstalled
-  (`cp` to `/etc/systemd/system/` + `systemctl enable --now`).
-- The `gh` CLI on the production VM is authenticated as `jenbrannstrom`
-  (device login, July 9). Run `gh auth logout` if credentials should not
-  live on the box.
+  --recreate-api`). Hot-patched files via `docker cp` DO survive restarts but
+  not recreation.
 - Ad-hoc production DB access: run Python inside `catscan-api` using
   `storage.postgres_database` helpers — `pg_query` for SELECTs (it
   fetches and will roll back writes), `pg_execute` for writes.
@@ -203,13 +912,6 @@ applies to all seats.
 
 ## Remaining Work
 
-0. **Upstream `app_name`/`app_id` emptiness**: both columns are 100% empty
-   across all seats in rtb_daily (C-DAT-002 warns daily). The daily-spend
-   feature already works around it via `rtb_buyer_spend_daily`; fixing the
-   upstream mapping (or accepting and delisting the columns from
-   `MONITORED_COLUMNS` in `scripts/contracts_check.py`) clears the WARN.
-   Also: 2 stuck `ingestion_runs` rows keep C-ING-001 at WARN — clear with
-   `contracts_check.py --fail-stale-ingestion-runs` after a look.
 1. Implement the VIDEO evidence-priority fix and surface
    `language_source`/`language_confidence` in the Language Flags UI (see
    carried-over RCA above).
@@ -222,22 +924,13 @@ applies to all seats.
    Buyer-level totals are correct.
 4. Residual language-flags QA for Amazing Design Tools (`1487810529`): 25
    language-market alerts, 207 `no content` analysis errors, broad geo alerts.
-5. Delete or fully retire `catscan-production-sg2` and release its static IP
-   once permanent deletion is confirmed.
-6. Run a full Terraform plan with privileged credentials and review drift.
-7. Address the GitHub Actions Node.js 20 deprecation warnings before GitHub's
+5. Run a full Terraform plan with privileged credentials and review drift.
+6. Address the GitHub Actions Node.js 20 deprecation warnings before GitHub's
    Node 24 default cutoff (June 16, 2026 per run annotations).
-8. Untracked local files not from this work: `manual/explainers/`,
+7. Untracked local files not from this work: `manual/explainers/`,
    `manual/index.md` (modified), and
    `.github/workflows/trigger-docs-freshness.yml` — review and commit or
-   discard deliberately. (Also seen July 9: `.env.bak.20260521003359`,
-   `precompute_24h_monitor.pid`, `scripts/precompute_24h_monitor.sh` on the
-   VM — same treatment.)
-9. GCP → Hetzner migration: rehearse the rtb_daily restore into partitions
-   on the target box per `scripts/partition_migration/README.md`, and pin
-   Postgres **15.17**. Cut over onto partitions only if the rehearsal is
-   clean; wire `partition_retention.py --from-config --apply` as a daily
-   timer after cutover.
+   discard deliberately.
 
 ## Useful Commands
 

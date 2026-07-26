@@ -17,6 +17,7 @@ from services.precompute_service import PrecomputeService
 from services.precompute_utils import normalize_refresh_dates, refresh_window
 from services.precompute_validation import run_precompute_validation
 from services.rtb_precompute import refresh_rtb_summaries
+from services.scheduler_guard import require_scheduler_enabled
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +57,8 @@ class PrecomputeHealthResponse(BaseModel):
 @router.post("/precompute/refresh/scheduled", response_model=PrecomputeRefreshResponse)
 async def refresh_precompute_scheduled(request: Request) -> PrecomputeRefreshResponse:
     """Trigger scheduled precompute refreshes for Cloud Scheduler or cron."""
+    require_scheduler_enabled("CATSCAN_ENABLE_PRECOMPUTE_SCHEDULER")
+
     secrets_mgr = get_secrets_manager()
     secret = secrets_mgr.get("PRECOMPUTE_REFRESH_SECRET")
     header_secret = request.headers.get("X-Precompute-Refresh-Secret")

@@ -34,8 +34,8 @@ middleware files.
 ## Deployment
 
 - Deploy workflow is manual-only (GitHub Actions `workflow_dispatch`)
-- Production is the only deploy target (staging retired May 2026; VM
-  `catscan-production-sg2` is TERMINATED, snapshot kept)
+- Production is the only deploy target (staging retired May 2026; VM, disk and
+  IPv4 deleted July 22, 2026; retirement snapshot kept)
 - Production VM: `catscan-production-sg` (asia-southeast1-b)
 - **Nothing serves traffic that isn't a pushed, sha-tagged image.** No
   hot-patching containers via `docker cp`, no unpushed commits on the VM,

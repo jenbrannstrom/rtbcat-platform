@@ -929,6 +929,55 @@ def validate_agent_daily_spend_payload(
         )
 
 
+def is_after_final_daily_run(now_utc: datetime, *, final_run_hour_utc: int) -> bool:
+    """Authorized Buyers reports arrive over several scheduled polls; D-1 is
+    allowed to stay pending until the final daily Gmail run hour (UTC)."""
+    return now_utc.hour >= final_run_hour_utc
+
+
+def validate_agent_daily_spend_d1_completeness(
+    payload: dict[str, Any],
+    *,
+    expected_date: date,
+    now_utc: datetime,
+    final_run_hour_utc: int,
+    allow_missing: bool,
+) -> None:
+    """Fail when the expected D-1 (UTC) day has no canonical spend rows.
+
+    Strict only after the final daily Gmail run hour; before that the day is
+    still allowed to be pending (reports can arrive on a later poll). The
+    allow_missing waiver disables the strict check entirely.
+    """
+    if allow_missing:
+        return
+    expected_iso = expected_date.isoformat()
+    rows = payload.get("rows") or []
+    row = next(
+        (
+            r
+            for r in rows
+            if isinstance(r, dict) and str(r.get("metric_date")) == expected_iso
+        ),
+        None,
+    )
+    if row is None:
+        # Expected date is outside the requested window; nothing to enforce.
+        return
+    if str(row.get("source_status")) == "present":
+        return
+    if not is_after_final_daily_run(now_utc, final_run_hour_utc=final_run_hour_utc):
+        print(
+            f"INFO  Agent daily-spend {expected_iso} still pending "
+            f"(before {final_run_hour_utc:02d}:00 UTC)"
+        )
+        return
+    raise SmokeFailure(
+        f"agent daily-spend has no source rows for {expected_iso} after "
+        f"{final_run_hour_utc:02d}:00 UTC (missing/late Authorized Buyers spend report)"
+    )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run v1 canary smoke checks against API.")
     parser.add_argument(
@@ -1018,6 +1067,21 @@ def main() -> int:
         dest="agent_require_positive_spend",
         action="store_false",
         help="Allow daily-spend windows with zero spend.",
+    )
+    parser.add_argument(
+        "--agent-allow-missing-yesterday",
+        action="store_true",
+        default=_env_bool("CATSCAN_AGENT_ALLOW_MISSING_YESTERDAY", False),
+        help="Waive the strict D-1 (UTC) daily-spend completeness check.",
+    )
+    parser.add_argument(
+        "--agent-final-run-hour-utc",
+        type=int,
+        default=int(os.getenv("CATSCAN_AGENT_FINAL_RUN_HOUR_UTC", "18")),
+        help=(
+            "UTC hour of the final daily Gmail import run. D-1 spend may stay "
+            "pending before this hour; strict after it (default: 18)."
+        ),
     )
     parser.add_argument(
         "--timeout",
@@ -1326,6 +1390,8 @@ def main() -> int:
         parser.error("--agent-days must be between 1 and 90")
     if args.agent_token_header not in {"x-catscan-agent-token", "authorization"}:
         parser.error("--agent-token-header must be x-catscan-agent-token or authorization")
+    if args.agent_final_run_hour_utc < 0 or args.agent_final_run_hour_utc > 23:
+        parser.error("--agent-final-run-hour-utc must be between 0 and 23")
     if args.token_auth_header not in {"auto", "authorization", "x-email"}:
         parser.error("--token-auth-header must be auto, authorization, or x-email")
     if args.workflow_score_limit < 1 or args.workflow_score_limit > 5000:
@@ -1488,6 +1554,14 @@ def main() -> int:
             f"window={agent_start_date.isoformat()}..{agent_end_date.isoformat()}, "
             f"days_with_source_rows={int(summary.get('days_with_source_rows') or 0)}, "
             f"total_spend_micros={int(summary.get('total_spend_micros') or 0)}"
+        )
+        now_utc = datetime.now(timezone.utc)
+        validate_agent_daily_spend_d1_completeness(
+            daily_spend,
+            expected_date=now_utc.date() - timedelta(days=1),
+            now_utc=now_utc,
+            final_run_hour_utc=int(args.agent_final_run_hour_utc),
+            allow_missing=bool(args.agent_allow_missing_yesterday),
         )
 
     def check_data_health() -> None:

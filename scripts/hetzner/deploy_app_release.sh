@@ -93,6 +93,10 @@ for scheduler_flag in \
     exit 1
   fi
 done
+if ! grep -qx 'CATSCAN_READ_ONLY_SHADOW=true' "$RUNTIME_ENV_FILE"; then
+  echo "Shadow runtime env must contain CATSCAN_READ_ONLY_SHADOW=true." >&2
+  exit 1
+fi
 
 release_value() {
   local key="$1"
@@ -193,11 +197,17 @@ if [[ "$(stat -c '%u:%g' "$DATA_DIR")" != "${CONTAINER_UID}:${CONTAINER_GID}" ]]
 fi
 export API_IMAGE DASHBOARD_IMAGE RELEASE_GIT_SHA RELEASE_VERSION
 export RTBCAT_RUNTIME_ENV_FILE="$RUNTIME_ENV_FILE"
-export RTBCAT_DB_AUTH_FILE="$POSTGRES_PASSWORD_FILE"
+export RTBCAT_POSTGRES_PASSWORD_FILE="$POSTGRES_PASSWORD_FILE"
 export RTBCAT_POSTGRES_CA_FILE="$POSTGRES_CA_FILE"
 export RTBCAT_GOOGLE_CREDENTIALS_FILE="$GOOGLE_CREDENTIALS_FILE"
 export RTBCAT_DATA_DIR="$DATA_DIR"
 export RTBCAT_DATABASE_PRIVATE_IP RTBCAT_DATABASE_NAME RTBCAT_DATABASE_OWNER
+# Never inherit activation controls from the operator shell. This entry point is
+# shadow-only and explicitly renders the safe mode.
+export RTBCAT_DEPLOY_READ_ONLY_SHADOW=true
+export RTBCAT_DEPLOY_GMAIL_SCHEDULER=false
+export RTBCAT_DEPLOY_PRECOMPUTE_SCHEDULER=false
+export RTBCAT_DEPLOY_CREATIVE_CACHE_SCHEDULER=false
 
 rendered_images="$(docker compose --project-name rtbcat-hetzner -f "$COMPOSE_FILE" config --images)"
 if ! grep -Fxq "$API_IMAGE" <<<"$rendered_images" || \

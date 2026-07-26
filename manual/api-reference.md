@@ -30,12 +30,16 @@ at `https://your-deployment.example.com/api/docs`.
 |--------|------|---------|
 | GET | `/seats` | List buyer seats |
 | GET | `/seats/{buyer_id}` | Get specific seat |
-| PUT | `/seats/{buyer_id}` | Update seat display name |
+| PATCH | `/seats/{buyer_id}` | Update seat display name and/or buyer currency |
 | POST | `/seats/populate` | Auto-create seats from data |
 | POST | `/seats/discover` | Discover seats from Google API |
 | POST | `/seats/{buyer_id}/sync` | Sync specific seat |
 | POST | `/seats/sync-all` | Full sync (all seats) |
 | POST | `/seats/collect-creatives` | Collect creative data |
+
+Buyer-seat responses include nullable `currency`. Seat admins can configure it
+with `PATCH /seats/{buyer_id}` and `{"currency":"EUR"}`. Spend micros throughout
+the buyer-spend pipeline are denominated in this currency, not implicitly USD.
 
 ## Creatives
 
