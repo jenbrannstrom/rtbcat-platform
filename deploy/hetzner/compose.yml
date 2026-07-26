@@ -1,7 +1,8 @@
 name: rtbcat-hetzner
 
-# Part 3 shadow deployment. It intentionally has no public reverse proxy,
-# Cloud SQL sidecar, scheduler, build context, or mutable image tag.
+# Immutable shadow/writable deployment. It intentionally has no public reverse
+# proxy, Cloud SQL sidecar, scheduler process, build context, or mutable image
+# tag. Deployment-control variables default to the safe shadow state.
 services:
   api:
     image: ${API_IMAGE:?Set API_IMAGE to a GHCR sha256 digest reference}
@@ -30,17 +31,18 @@ services:
       SECRETS_PREFER_ENV: "false"
       SECRETS_HEALTH_STRICT: "true"
       OAUTH2_PROXY_ENABLED: "false"
-      CATSCAN_READ_ONLY_SHADOW: "true"
-      # Part 5 must prove scheduler ownership before any of these can be true.
-      CATSCAN_ENABLE_GMAIL_IMPORT_SCHEDULER: "false"
-      CATSCAN_ENABLE_PRECOMPUTE_SCHEDULER: "false"
-      CATSCAN_ENABLE_CREATIVE_CACHE_SCHEDULER: "false"
+      CATSCAN_READ_ONLY_SHADOW: ${RTBCAT_DEPLOY_READ_ONLY_SHADOW:-true}
+      # Initial writable activation still owns no schedulers. Separate,
+      # approval-gated tooling is required before any flag can become true.
+      CATSCAN_ENABLE_GMAIL_IMPORT_SCHEDULER: ${RTBCAT_DEPLOY_GMAIL_SCHEDULER:-false}
+      CATSCAN_ENABLE_PRECOMPUTE_SCHEDULER: ${RTBCAT_DEPLOY_PRECOMPUTE_SCHEDULER:-false}
+      CATSCAN_ENABLE_CREATIVE_CACHE_SCHEDULER: ${RTBCAT_DEPLOY_CREATIVE_CACHE_SCHEDULER:-false}
     volumes:
       - type: bind
         source: ${RTBCAT_DATA_DIR:-/var/lib/rtbcat/app-data}
         target: /home/rtbcat/.catscan
       - type: bind
-        source: ${RTBCAT_DB_AUTH_FILE:?Set RTBCAT_DB_AUTH_FILE}
+        source: ${RTBCAT_POSTGRES_PASSWORD_FILE:?Set RTBCAT_POSTGRES_PASSWORD_FILE}
         target: /run/rtbcat-secrets/postgres-password
         read_only: true
       - type: bind

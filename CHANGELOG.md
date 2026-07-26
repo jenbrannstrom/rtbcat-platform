@@ -8,6 +8,10 @@ All notable changes to Cat-Scan are documented in this file.
 
 ### Added
 
+- Per-buyer ISO-4217 spend currency metadata, including migration 071,
+  seat-admin updates, and currency exposure through the Agent API and
+  `agent_read.accessible_buyers`. Uplivo / Tuky Internet is mapped to EUR;
+  other currently known seats are mapped to USD.
 - Data-trust contracts `C-DAT-001` (per-seat rtb_daily freshness) and
   `C-DAT-002` (per-seat, per-report-type column completeness) in
   `scripts/contracts_check.py`, with tests. Designed to catch the
@@ -27,6 +31,13 @@ All notable changes to Cat-Scan are documented in this file.
 
 ### Changed
 
+- Gmail report ingestion now treats a 100%-duplicate Postgres import as an
+  idempotent replay: it skips the parquet/BigQuery load and serving refresh,
+  records the skip in status output, and leaves published spend unchanged.
+- Agent stats now expose denomination-neutral `currency`, `spend`, and
+  `avg_cpm` fields. Legacy USD-named aliases are `null` for non-USD seats, and
+  generated summaries render the configured ISO currency instead of assuming
+  a dollar sign.
 - CLAUDE.md: production hot-patching allowance replaced with the
   sha-tagged-image invariant; stale `rtb_daily` size guidance corrected.
 

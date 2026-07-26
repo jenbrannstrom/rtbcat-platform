@@ -119,3 +119,57 @@ def test_gmail_pipeline_defers_bigquery_aggregation(tmp_path, monkeypatch) -> No
     assert gmail_import.run_pipeline_for_file(csv_path, "123", verbose=False) is True
     assert captured["metric_date"] == "2026-07-10"
     assert captured["skip_aggregate"] is True
+
+
+def test_pipeline_dispatch_skips_a_fully_duplicate_import(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    csv_path = tmp_path / "catscan-bidsinauction-123-yesterday-UTC.csv"
+    csv_path.write_text("#Day,Buyer account ID\n2026-07-10,123\n", encoding="utf-8")
+
+    def _unexpected_pipeline(*_args, **_kwargs):
+        raise AssertionError("100%-duplicate import must not reach the BQ pipeline")
+
+    monkeypatch.setattr(gmail_import, "run_pipeline_for_file", _unexpected_pipeline)
+    import_result = gmail_import.CatscanImportResult(
+        success=True,
+        report_type="buyer_spend",
+        rows_read=557_102,
+        rows_imported=0,
+        rows_duplicate=557_102,
+    )
+
+    outcome = gmail_import.run_pipeline_after_import(
+        csv_path, "123", import_result, verbose=False
+    )
+
+    assert outcome is gmail_import.PipelineOutcome.SKIPPED_DUPLICATE
+    warning = capsys.readouterr().out
+    assert "Skipping parquet/BigQuery load and publish" in warning
+    assert "restated report requires the replace workflow" in warning
+
+
+def test_pipeline_dispatch_runs_for_a_partial_overlap(tmp_path, monkeypatch) -> None:
+    csv_path = tmp_path / "catscan-bidsinauction-123-yesterday-UTC.csv"
+    csv_path.write_text("#Day,Buyer account ID\n2026-07-10,123\n", encoding="utf-8")
+    calls: list[tuple] = []
+
+    monkeypatch.setattr(
+        gmail_import,
+        "run_pipeline_for_file",
+        lambda *args, **kwargs: calls.append((args, kwargs)) or True,
+    )
+    import_result = gmail_import.CatscanImportResult(
+        success=True,
+        report_type="buyer_spend",
+        rows_read=10,
+        rows_imported=1,
+        rows_duplicate=9,
+    )
+
+    outcome = gmail_import.run_pipeline_after_import(
+        csv_path, "123", import_result, verbose=False
+    )
+
+    assert outcome is gmail_import.PipelineOutcome.SUCCESS
+    assert len(calls) == 1

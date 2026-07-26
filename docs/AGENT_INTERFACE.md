@@ -49,7 +49,7 @@ Initial views:
 
 | View | Purpose |
 |------|---------|
-| `agent_read.accessible_buyers` | Buyer seats visible to the current DB role |
+| `agent_read.accessible_buyers` | Buyer seats and configured spend currency visible to the current DB role |
 | `agent_read.creative_language_country_signals` | Creative language, country, latest geo scan, and performance signals |
 | `agent_read.creative_scan_queue` | Creatives needing language/geo scan, retry, refresh, or review |
 | `agent_read.buyer_daily_report_summary` | Buyer-level report completeness and mismatch counts |
@@ -67,10 +67,16 @@ API documented in [AGENT_API.md](AGENT_API.md).
 |------|----------|
 | Validate token | `GET /api/agent/v1/me` |
 | Pull email-ready stats | `GET /api/agent/v1/stats-summary` |
+| Pull date-explicit spend and completeness | `GET /api/agent/v1/daily-spend` |
 | Create/revoke tokens | `POST/DELETE /api/agent/v1/tokens` as sudo |
 
 Agent bearer tokens are stored hashed, are revocable, carry scopes, and remain
 bound to normal Cat-Scan users and buyer-seat grants.
+
+Spend is denominated in each buyer seat's configured currency. HTTP consumers
+must use the response `currency`, `spend`, and `avg_cpm` fields; direct SQL
+consumers can read `currency` from `agent_read.accessible_buyers`. Micros are
+denomination-neutral and must not be treated as USD without a USD seat mapping.
 
 ## Action Contract
 

@@ -1,8 +1,9 @@
 # Hetzner immutable shadow deployment — Part 3
 
-This deployment is prepared but has not been run. It starts the API and
-dashboard on the Hetzner app host without changing DNS, exposing either service
-publicly, starting schedulers, or disabling the GCP deployment.
+The immutable shadow deployment is accepted on the Hetzner app host. Its
+writable activation path is implemented but has not been run live. Neither
+entry point changes DNS, exposes either service publicly, starts schedulers or
+disables the GCP deployment.
 
 ## Runtime shape
 
@@ -132,6 +133,30 @@ The deployment is accepted only when:
 - no local PostgreSQL listener exists on the app host;
 - all scheduler ownership flags remain false; and
 - retained Google services are reachable from the target identity.
+
+## Initial writable activation (approval-gated)
+
+The same checksum-matched Compose artifact defaults to shadow mode. A separate
+entry point can render it writable only after final-sync evidence proves source
+writers are frozen, subscriber catch-up and sequence synchronization are
+complete, final reconciliation and target backup are accepted, DNS is
+unchanged, and no target scheduler is enabled:
+
+```bash
+sudo scripts/hetzner/activate_writable_release.sh \
+  --release-file /var/lib/rtbcat/releases/current.env \
+  --cutover-evidence /secure/evidence/writable-activation-input.json \
+  --json-out /secure/evidence/writable-activation-receipt.json \
+  --confirm ACTIVATE_WRITABLE_SCHEDULERS_OFF_NO_DNS
+```
+
+This command is not authorization to run it. It requires its own final-sync
+approval. It verifies the currently accepted immutable shadow first, keeps all
+three scheduler flags false, preserves loopback-only listeners and restores
+shadow mode automatically if activation verification fails. The check-only
+rehearsal uses the separate
+`REHEARSE_WRITABLE_SCHEDULERS_OFF_NO_DNS` confirmation and changes no
+containers.
 
 Use an SSH tunnel for shadow review, for example local port 33000 to target
 `127.0.0.1:3000`. Public DNS and ports 80/443 remain unused in this part.

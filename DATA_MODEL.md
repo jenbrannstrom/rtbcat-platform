@@ -93,6 +93,12 @@ Google Authorized Buyers has **field incompatibilities** that prevent getting al
 | 10 | Spend (buyer currency) | `spend_micros` | Spend in buyer currency |
 | 11 | Spend (bidder currency) | - | Spend in bidder currency |
 
+`spend_micros` means one millionth of the buyer account's currency; the column
+name is intentionally denomination-neutral. The CSV value does not reliably
+carry an ISO code, so currency comes from `buyer_seats.currency_code`. Never
+assume these values are USD. Unknown seat currencies remain `NULL` rather than
+being guessed.
+
 #### Sample Data (from `catscan-bidsinauction-123456789-yesterday-sample`)
 ```csv
 #Day,Country,Creative ID,Buyer account ID,Bids in auction,Auctions won,Bids,Reached queries,Impressions,Spend (buyer currency),Spend (bidder currency)
@@ -549,12 +555,29 @@ RTB buyer seats/accounts.
 | bidder_id | TEXT | Bidder account ID |
 | service_account_id | TEXT | FK to service_accounts |
 | display_name | TEXT | Display name |
+| currency_code | TEXT | Nullable three-letter ISO-4217 buyer spend currency |
 | active | INTEGER | Whether active |
 | creative_count | INTEGER | Number of creatives |
 | last_synced | TIMESTAMP | Last sync time |
 | created_at | TIMESTAMP | Creation time |
 
 **Unique Constraint:** (bidder_id, buyer_id)
+
+Migration `071_buyer_seat_currency.sql` adds and backfills `currency_code`.
+The current authoritative mappings are:
+
+| Buyer ID | Customer | Currency |
+|----------|----------|----------|
+| `1487810529` | Known USD seat | USD |
+| `299038253` | Known USD seat | USD |
+| `6574658621` | Known USD seat | USD |
+| `6634662463` | Known USD seat | USD |
+| `7942355670` | Known USD seat | USD |
+| `8087233591` | Uplivo / Tuky Internet | EUR |
+
+Discovery does not guess a currency for a new seat. A seat admin must set it
+with `PATCH /api/seats/{buyer_id}` and a body such as `{"currency":"EUR"}`.
+The value is also appended to `agent_read.accessible_buyers` as `currency`.
 
 ### Multi-Bidder Architecture
 

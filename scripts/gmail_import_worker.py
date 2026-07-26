@@ -90,6 +90,11 @@ def main() -> int:
     if int(result.get("files_imported", 0)) <= 0:
         _print("No files imported, skipping precompute refresh")
         return 0
+    if int(result.get("duplicate_downstream_skip_count", 0)) >= int(
+        result.get("files_imported", 0)
+    ):
+        _print("All imported files were exact duplicates, skipping precompute refresh")
+        return 0
 
     try:
         start_date = result.get("imported_date_start")

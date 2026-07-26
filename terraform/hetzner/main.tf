@@ -1,6 +1,7 @@
 locals {
-  app_name      = "${var.name_prefix}-app"
-  database_name = "${var.name_prefix}-db"
+  app_name                      = "${var.name_prefix}-app"
+  database_name                 = "${var.name_prefix}-db"
+  pgbackrest_restore_drill_name = "${var.name_prefix}-pgbackrest-restore"
 
   common_labels = merge(
     {
@@ -136,6 +137,38 @@ resource "hcloud_firewall" "database" {
   }
 }
 
+resource "hcloud_firewall" "pgbackrest_restore_drill" {
+  count = var.enable_pgbackrest_restore_drill_host ? 1 : 0
+
+  name = "${local.pgbackrest_restore_drill_name}-public"
+  labels = merge(
+    local.common_labels,
+    {
+      environment = "recovery-drill"
+      role        = "pgbackrest-restore-drill"
+    },
+  )
+
+  dynamic "rule" {
+    for_each = toset(var.ssh_source_cidrs)
+
+    content {
+      direction   = "in"
+      protocol    = "tcp"
+      port        = "22"
+      source_ips  = [rule.value]
+      description = "Recovery-drill SSH from an approved operator CIDR"
+    }
+  }
+
+  rule {
+    direction   = "in"
+    protocol    = "icmp"
+    source_ips  = ["0.0.0.0/0"]
+    description = "IPv4 path diagnostics"
+  }
+}
+
 resource "hcloud_server" "app" {
   name        = local.app_name
   server_type = var.app_server_type
@@ -218,6 +251,45 @@ resource "hcloud_server" "database" {
   }
 
   labels = merge(local.common_labels, { role = "database" })
+}
+
+resource "hcloud_server" "pgbackrest_restore_drill" {
+  count = var.enable_pgbackrest_restore_drill_host ? 1 : 0
+
+  name        = local.pgbackrest_restore_drill_name
+  server_type = var.pgbackrest_restore_drill_server_type
+  image       = var.image
+  location    = var.location
+  ssh_keys    = [hcloud_ssh_key.operator.id]
+
+  backups                  = false
+  delete_protection        = false
+  rebuild_protection       = false
+  firewall_ids             = [hcloud_firewall.pgbackrest_restore_drill[0].id]
+  shutdown_before_deletion = true
+
+  public_net {
+    ipv4_enabled = true
+    ipv6_enabled = false
+  }
+
+  user_data = templatefile("${path.module}/cloud-init/pgbackrest-restore-drill.yaml.tftpl", {
+    hostname                = local.pgbackrest_restore_drill_name
+    operator_ssh_public_key = trimspace(var.operator_ssh_public_key)
+    ssh_source_cidrs        = var.ssh_source_cidrs
+  })
+
+  lifecycle {
+    ignore_changes = [user_data]
+  }
+
+  labels = merge(
+    local.common_labels,
+    {
+      environment = "recovery-drill"
+      role        = "pgbackrest-restore-drill"
+    },
+  )
 }
 
 resource "hcloud_volume" "database" {

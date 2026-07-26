@@ -31,6 +31,7 @@ def _build_client() -> SyncASGIClient:
 def test_scheduled_creative_cache_refresh_can_return_queued_response(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setenv("CATSCAN_ENABLE_CREATIVE_CACHE_SCHEDULER", "true")
     calls: list[dict[str, object]] = []
 
     async def _refresh_active_creatives(self, **kwargs):
@@ -64,3 +65,21 @@ def test_scheduled_creative_cache_refresh_can_return_queued_response(
             "force_html_thumbnail_retry": False,
         }
     ]
+
+
+def test_scheduled_creative_cache_refresh_is_blocked_when_disabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("CATSCAN_ENABLE_CREATIVE_CACHE_SCHEDULER", "false")
+
+    client = _build_client()
+    response = client.post(
+        "/api/creatives/cache/refresh/scheduled",
+        headers={"X-Creative-Cache-Refresh-Secret": "scheduler-secret"},
+    )
+
+    assert response.status_code == 503
+    assert (
+        response.json()["detail"]
+        == "Scheduler disabled by CATSCAN_ENABLE_CREATIVE_CACHE_SCHEDULER"
+    )

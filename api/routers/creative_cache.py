@@ -11,6 +11,7 @@ from pydantic import BaseModel
 from api.dependencies import get_store, get_config
 from config import ConfigManager
 from services.creative_cache_service import CreativeCacheService
+from services.scheduler_guard import require_scheduler_enabled
 from services.secrets_manager import get_secrets_manager
 
 router = APIRouter(tags=["Creatives"])
@@ -38,6 +39,8 @@ async def refresh_creative_cache_scheduled(
     config: ConfigManager = Depends(get_config),
 ) -> CreativeCacheRefreshResponse:
     """Refresh live creative cache for active creatives during off-hours."""
+    require_scheduler_enabled("CATSCAN_ENABLE_CREATIVE_CACHE_SCHEDULER")
+
     secret = get_secrets_manager().get("CREATIVE_CACHE_REFRESH_SECRET")
     header_secret = request.headers.get("X-Creative-Cache-Refresh-Secret")
     if not secret or not header_secret or not hmac.compare_digest(header_secret, secret):

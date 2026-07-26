@@ -43,7 +43,9 @@ from scripts.gmail_import import (
     archive_to_s3,
     canonical_report_kind_for_tracking,
     record_import_run,
-    run_pipeline_for_file,
+    record_processed_message,
+    run_pipeline_after_import,
+    PipelineOutcome,
     SEAT_ID_ALLOWLIST,
     CATSCAN_DIR,
     LOGS_DIR,
@@ -178,24 +180,34 @@ def run_batch_import(
 
             if skipped:
                 log(f"  Skipped: seat_id={seat_id or 'unknown'}")
+                record_processed_message(
+                    message_id, status="skipped_seat", subject=subject, seat_id=seat_id
+                )
                 checkpoint["processed_ids"].append(message_id)
                 mark_as_read(service, message_id)
                 session_processed += 1
 
             elif not downloaded_files:
                 log("  No CSV found")
+                record_processed_message(
+                    message_id, status="no_csv", subject=subject, seat_id=seat_id
+                )
                 checkpoint["processed_ids"].append(message_id)
                 mark_as_read(service, message_id)  # Prevent reprocessing
                 session_processed += 1
 
             else:
                 message_fully_processed = True
+                last_filename = None
+                last_batch_id = None
                 for filepath in downloaded_files:
                     # Archive to S3
                     archive_to_s3(filepath, verbose=False)
 
                     # Import to database
                     imp = import_to_catscan(filepath)
+                    last_filename = filepath.name
+                    last_batch_id = imp.batch_id or None
                     report_kind = canonical_report_kind_for_tracking(
                         filepath.name,
                         parsed_report_type=imp.report_type,
@@ -221,9 +233,11 @@ def run_batch_import(
                     if imp.success:
                         log(f"  Imported: {imp.rows_imported} rows ({report_kind})")
                         session_imported += 1
-                        # Run pipeline
-                        pipeline_ok = run_pipeline_for_file(filepath, seat_id, verbose=False)
-                        if not pipeline_ok:
+                        # Run parquet/BQ only for files that contributed new PG rows.
+                        pipeline_outcome = run_pipeline_after_import(
+                            filepath, seat_id, imp, verbose=False
+                        )
+                        if pipeline_outcome is PipelineOutcome.FAILURE:
                             log(f"  Pipeline failed: {filepath.name}")
                             session_errors += 1
                             message_fully_processed = False
@@ -232,6 +246,14 @@ def run_batch_import(
                         session_errors += 1
                         message_fully_processed = False
 
+                record_processed_message(
+                    message_id,
+                    status="imported" if message_fully_processed else "failed",
+                    subject=subject,
+                    seat_id=seat_id,
+                    filename=last_filename,
+                    batch_id=last_batch_id,
+                )
                 if message_fully_processed:
                     mark_as_read(service, message_id)
                     checkpoint["processed_ids"].append(message_id)

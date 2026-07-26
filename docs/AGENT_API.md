@@ -136,6 +136,17 @@ curl -u "agent:${CATSCAN_AGENT_BASIC_PASSWORD}" \
 For a one-buyer agent user, `buyer_id` may be omitted. Sudo or multi-buyer
 agents must pass `buyer_id` explicitly.
 
+Pull date-explicit spend rows:
+
+```bash
+curl "https://YOUR_HOST/api/agent/v1/daily-spend?buyer_id=8087233591&start_date=2026-07-01&end_date=2026-07-13" \
+  -H "Authorization: Bearer ${CATSCAN_AGENT_TOKEN}"
+```
+
+`include_empty=true` is the default. It returns one row for every requested
+date so a missing source row cannot be mistaken for a genuine zero-spend day.
+The maximum range per request is 90 days.
+
 ## Response Contract
 
 `GET /api/agent/v1/stats-summary` returns:
@@ -149,6 +160,52 @@ agents must pass `buyer_id` explicitly.
 - `top_apps`
 - `email_summary`: subject, bullets, and markdown ready for an email body
 - `data_sources`: the precomputed tables used
+
+Money fields use the buyer account's configured ISO-4217 currency:
+
+- `buyer.currency` is the authoritative currency for the response.
+- `totals.currency`, `totals.spend`, and `totals.avg_cpm` are the preferred
+  fields for new `stats-summary` consumers.
+- `totals.spend_micros` is one millionth of the buyer currency. It is not
+  necessarily USD.
+- `spend_usd` and `avg_cpm_usd` are compatibility aliases. They contain values
+  only for USD seats and are `null` for EUR or unconfigured seats.
+- Entries in `top_apps` follow the same currency contract.
+- Email summaries prefix monetary amounts with the ISO code, for example
+  `EUR 4,159.98`, and never add a dollar sign to non-USD spend.
+
+Example currency portion for Uplivo / Tuky Internet (`8087233591`):
+
+```json
+{
+  "buyer": {
+    "buyer_id": "8087233591",
+    "currency": "EUR"
+  },
+  "totals": {
+    "spend_micros": 4159980000,
+    "currency": "EUR",
+    "spend": 4159.98,
+    "spend_usd": null
+  }
+}
+```
+
+`GET /api/agent/v1/daily-spend` returns:
+
+- `buyer.currency` and `data_source.currency`
+- one date-explicit row per requested day by default
+- `source_status`: `present` or `missing` for each row
+- `summary.complete`, `summary.missing_dates`, and
+  `summary.latest_complete_date`
+- totals in `summary.total_spend_micros`, denominated in
+  `data_source.currency`
+
+Do not infer currency from CSV symbols or from a field name containing `usd`.
+The Authorized Buyers source column is `Spend (buyer currency)`, while the
+currency code is seat metadata. If a seat is not configured,
+`buyer.currency` and `data_source.currency` are `null`; consumers must not
+guess.
 
 The endpoint reads only precomputed tables:
 
@@ -178,6 +235,23 @@ curl -X DELETE https://YOUR_HOST/api/agent/v1/tokens/TOKEN_ID \
 
 Agent tokens cannot create, list, or revoke agent tokens.
 
+## Configure Buyer Currency
+
+Seat admins and sudo users can set or correct the currency independently of an
+agent token:
+
+```bash
+curl -X PATCH https://YOUR_HOST/api/seats/8087233591 \
+  -H 'Content-Type: application/json' \
+  -H 'Cookie: rtbcat_session=<seat-admin-session>' \
+  -d '{"currency":"EUR"}'
+```
+
+The value is normalized to uppercase and must be a three-letter ISO-4217 code.
+Migration `071_buyer_seat_currency.sql` backfills all currently known seats:
+Uplivo / Tuky Internet (`8087233591`) as EUR and the other known seats as USD.
+New or unknown seats remain unconfigured until an operator sets their currency.
+
 ## Operational Notes
 
 - Use one token per external agent or workflow.
@@ -188,3 +262,4 @@ Agent tokens cannot create, list, or revoke agent tokens.
   - `agent_token_create`
   - `agent_token_revoke`
   - `agent_stats_summary_read`
+  - `agent_daily_spend_read`

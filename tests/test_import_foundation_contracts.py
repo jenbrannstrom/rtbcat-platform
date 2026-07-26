@@ -245,11 +245,12 @@ def test_rtb_daily_missing_metric_columns_are_null_not_zero():
     )
 
     mock_conn, mock_cursor = _mock_conn()
+    exporter = MagicMock()
     with (
         patch("importers.unified_importer.get_postgres_connection", return_value=mock_conn),
         patch("importers.unified_importer.ParquetExportManager") as mock_pem,
     ):
-        mock_pem.from_env.return_value = None
+        mock_pem.from_env.return_value = exporter
         result = unified_import(
             csv_path,
             source_filename="catscan-quality-3333333333-yesterday-UTC.csv",
@@ -264,6 +265,39 @@ def test_rtb_daily_missing_metric_columns_are_null_not_zero():
     assert row[18] is None  # spend column absent from report
     assert row[19] is None  # bids column absent from report
     assert row[27] == result.report_type  # lineage to source report
+    exporter.finalize.assert_called_once_with()
+    exporter.discard.assert_not_called()
+
+
+def test_fully_duplicate_import_discards_raw_export_before_bigquery():
+    tmpdir = tempfile.mkdtemp()
+    csv_path = os.path.join(tmpdir, "daily_duplicate.csv")
+    _write_csv(
+        csv_path,
+        ["Day", "Buyer Account ID", "Billing ID", "Impressions"],
+        [["2026-07-05", "6634662463", "cfg-1", "100"]],
+    )
+
+    mock_conn, mock_cursor = _mock_conn()
+    mock_cursor.rowcount = 0
+    exporter = MagicMock()
+    with (
+        patch("importers.unified_importer.get_postgres_connection", return_value=mock_conn),
+        patch("importers.unified_importer.ParquetExportManager") as mock_pem,
+    ):
+        mock_pem.from_env.return_value = exporter
+        result = unified_import(
+            csv_path,
+            source_filename="catscan-bidsinauction-6634662463-yesterday-UTC.csv",
+        )
+
+    assert result.success is True
+    assert result.rows_read == 1
+    assert result.rows_imported == 0
+    assert result.rows_duplicate == 1
+    assert result.is_fully_duplicate is True
+    exporter.discard.assert_called_once_with()
+    exporter.finalize.assert_not_called()
 
 
 def test_bid_filtering_missing_metric_columns_are_null_not_zero():

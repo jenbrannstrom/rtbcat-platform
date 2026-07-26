@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 from api.dependencies import get_current_user, require_admin
 from services.auth_service import User
 from services.gmail_service import GmailService
+from services.scheduler_guard import require_scheduler_enabled
 from services.secrets_manager import get_secrets_manager
 
 logger = logging.getLogger(__name__)
@@ -51,6 +52,20 @@ class GmailStatusResponse(BaseModel):
     )
     last_file_failure_count: int = Field(
         0, description="Number of file-level import failures from the last Gmail import run"
+    )
+    last_duplicate_downstream_skips: list[dict] = Field(
+        default_factory=list,
+        description="Exact-replay files withheld from parquet/BQ and publication",
+    )
+    last_duplicate_downstream_skip_count: int = Field(
+        0, description="Number of exact-replay files withheld from downstream publication"
+    )
+    expected_spend_missing: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Allowlisted seat IDs with no canonical buyer_spend rows for "
+            "yesterday (UTC) as of the last import run"
+        ),
     )
 
 
@@ -134,6 +149,8 @@ async def trigger_gmail_import_scheduled(
 
     Requires header: X-Gmail-Import-Secret matching GMAIL_IMPORT_SECRET.
     """
+    require_scheduler_enabled("CATSCAN_ENABLE_GMAIL_IMPORT_SCHEDULER")
+
     secret = get_secrets_manager().get("GMAIL_IMPORT_SECRET")
     header_secret = request.headers.get("X-Gmail-Import-Secret")
     if not secret or not header_secret or not hmac.compare_digest(header_secret, secret):

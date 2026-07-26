@@ -1,20 +1,20 @@
 # GCP to Hetzner migration plan
 
-Last updated: July 24, 2026
+Last updated: July 26, 2026
 
 The migration is intentionally split into independently reviewable parts. A
 part is complete only when its verification evidence exists; completing code
 does not by itself authorize provisioning or production cutover.
 
-## Current execution checkpoint — July 24, 2026
+## Current execution checkpoint — July 26, 2026
 
-Resume from **Part 2 independent backup configuration**, not provisioning,
-discovery or application cutover. Part 0 is complete and Part 1 is provisioned
-and accepted. The full read-only database rehearsal copy has moved, but
-production authority has not. The non-credential `.catscan` application-data
-rehearsal copy and local read-only application shadow checks are complete. No
-migration image has been published, and DNS and production writers are
-unchanged.
+Resume from **Parts 5–6 final-sync engineering**, not provisioning, discovery,
+independent backup configuration, another bulk rehearsal or application
+cutover. Parts 0–2 are accepted and the Part 3 immutable target-host shadow is
+running. The database restore, application-data copy, reconciliations, six-hour
+API soak, immutable A→B→A application rollback, encrypted backup/WAL chain and
+clean-host PITR rehearsal are complete. Production authority, DNS and writers
+are unchanged.
 
 Current target state:
 
@@ -33,7 +33,9 @@ Current target state:
   is closed and the app-to-database private TCP/5432 path passes;
 - PostgreSQL 15.17 is installed on the protected 750 GB Volume with
   `en_US.UTF-8`, data checksums and TLS. It listens only on loopback and
-  `10.60.1.20`. pgBackRest 2.58.0 is installed but has no repository yet;
+  `10.60.1.20`. pgBackRest 2.58.0 archives encrypted WAL to a dedicated native
+  GCS repository in Singapore. Two full backups, recurring timers and a
+  before-present/after-absent clean-host PITR restore are accepted;
 - the protected 150 GB app-data Volume is mounted at
   `/var/lib/rtbcat/app-data`. A direct server-to-server bulk rsync plus online
   delta copied 12,476 regular non-credential files and 100,810,997,029 logical
@@ -45,10 +47,9 @@ Current target state:
   tailnet is auxiliary access, not an RTBcat isolation boundary. Public SSH
   therefore remains restricted to the operator `/32` until default-deny
   tailnet grants/tags or a separate tailnet are accepted; and
-- on July 23 the owner explicitly directed that retained Cloud SQL managed
-  backups/PITR are the recovery copy for the online rehearsal and deferred a
-  separate S3 account until after the migration test. Independent target
-  backup/restore proof remains mandatory before production cutover;
+- retained Cloud SQL managed backups/PITR protected the initial online
+  rehearsal. On July 26 the independent target backup/WAL and clean-host
+  recovery gate was added and accepted against native GCS in Singapore;
 - the complete online dump/restore rehearsal ran from
   `2026-07-23T18:49:38Z` through `2026-07-24T02:40:25Z`. The 452,996,676,967-byte
   source dumped in 8,037 seconds and restored/analyzed in 20,042 seconds. The
@@ -79,7 +80,27 @@ Current target state:
   responsive. The data-health response was deliberately `degraded` because
   expected source report types are absent and one 15-second completeness scan
   timed out; this is visible product/data health, not a source-target mismatch;
-  and
+- sanitized release `332ec985084085edef714525d118f6c6ad2db8d4` was merged,
+  built by the passing manual GHCR workflow and published as immutable API and
+  dashboard digests. The exact digest-pinned release is running on the target
+  app host against `rtbcat_serving_rehearsal`. Deployment acceptance passed
+  private PostgreSQL TLS, Secret Manager, BigQuery, GCS, image revision,
+  loopback-listener and scheduler checks;
+- the same target-host smoke ran inside the API container. All 15 authenticated
+  GET contracts returned 200 and both mutation probes returned 405. The two
+  slowest requests completed in 35.3 and 31.1 seconds while concurrent health
+  returned in 0.054 seconds. Evidence is in the ignored
+  `TARGET-HOST-SHADOW-APPLICATION-2026-07-24.json`; and
+- the paired application soak is now automated by
+  `scripts/catscan_api_read_only_soak.py`. Its July 25 baseline passed all 15
+  Hetzner GETs with every read-only shadow header present. GCP returned two
+  HTTP 500s on the RTB funnel/publisher paths and timed out the 90-day QPS
+  summary at 120 seconds; seats and 90-day spend matched exactly. A supervised
+  six-hour run completed 20 cycles and 300/300 successful target requests with
+  zero missing read-only headers. Snapshot-age value drift is reported separately from
+  request and JSON-shape failures. GCP is on revision `30f24771`, not the
+  target's accepted `332ec985084085edef714525d118f6c6ad2db8d4`, so these are
+  real deployed-behavior comparisons rather than same-build benchmarks; and
 - the one-use transfer key and source `/32` firewall/UFW path were removed
   after the app-data copy, and source-to-target SSH is blocked again. A
   lifecycle guard now prevents post-provision cloud-init template edits from
@@ -105,6 +126,7 @@ USD 261.01 after removing 400 GB. The API reported USD billing and zero VAT.
 ### Exact continuation order for the next engineer
 
 1. Preserve the dirty worktree. Read this file, the readiness brief and
+   `docs/HETZNER_MIGRATION_NEXT_ENGINEER.md`, then
    `docs/internal/rtbcat-migration/GCP-FULL-MIGRATION-INVENTORY-CHECKLIST.md`.
    Never force-add `docs/internal/` or `terraform.tfvars`.
 2. Do not reapply or recreate the provisioned foundation. A fresh Terraform
@@ -116,17 +138,27 @@ USD 261.01 after removing 400 GB. The API reported USD billing and zero VAT.
 5. Preserve the completed app-data manifest and read-only application-shadow
    evidence. Do not repeat the 100.8 GB bulk transfer without a new reason;
    production remains live, so a later bounded delta is still required.
-6. Resolve the branch privacy gate and approved renewable off-GCP Google
-   identity, then freeze a sanitized immutable SHA, publish its image digests
-   and run the same application suite on the target app host.
-7. Before production cutover, add the independent target backup/WAL chain and
-   clean-host recovery proof that the owner deferred for this rehearsal.
+6. Preserve the accepted immutable release and target-host smoke evidence.
+   The six-hour soak and tree-identical A→B→A immutable rollback drill are
+   accepted. Preserve their private evidence and the restored current manifest
+   for SHA `332ec985084085edef714525d118f6c6ad2db8d4`. Do not enable a target
+   writer or scheduler. The installed existing service-account key is an
+   explicitly approved migration bridge, not the final renewable identity
+   design.
+7. Preserve the accepted independent target backup/WAL and clean-host recovery
+   proof. Approved cleanup destroyed the disposable restore host/firewall,
+   retired the unused HMAC/legacy environment and dropped the PITR witness
+   database; the post-cleanup Terraform plan is empty.
 8. Resolve the shared-tailnet policy before closing `/32` public SSH. This must
    not delay the backup or online restore rehearsal, but the shared tailnet must
    not be treated as project isolation.
-9. Only after the privacy/identity gates pass, deploy the Part 3 digest-pinned
-   shadow application with every target scheduler disabled. Keep it loopback
-   only; this does not authorize DNS or writers.
+9. Keep the deployed Part 3 shadow loopback-only with every target scheduler
+   disabled. Its successful acceptance does not authorize DNS or writers.
+10. Follow `docs/HETZNER_FINAL_SYNC_RUNBOOK.md`. The July 22 database cannot be
+    incrementally caught up because no logical slot retained its missing WAL;
+    prepare a fresh logical-replication initial copy and continuous catch-up.
+    Do not restart Cloud SQL, replace the rehearsal DB, freeze writers, change
+    DNS or enable target writes without their separate approvals.
 
 Do not replace the full rehearsal with a sample. The roughly 420 GiB database
 moves server-to-server from Cloud SQL to the Hetzner database host; the laptop
@@ -204,7 +236,7 @@ The live source was checked read-only on July 22: public IPv4 is enabled and no
 private network is configured, so this direct Auth Proxy path does not require
 a laptop tunnel or a new authorized-network rule.
 
-## Part 3 — immutable hybrid application deploy (tooling prepared, not run)
+## Part 3 — immutable hybrid application shadow (deployed and accepted)
 
 - Add a Hetzner compose file with a direct private PostgreSQL DSN and no Cloud
   SQL Auth Proxy.
@@ -221,7 +253,7 @@ outside image/state and hard-disables all three schedulers. Deployment verifies
 the full image revision, Compose checksum, target database, retained Google
 services and rollback manifest before activation.
 
-Exit criteria before this part is operationally complete:
+Accepted shadow evidence:
 
 - one frozen commit passes the manual GHCR build and produces two digest refs;
 - the target pulls the images without a mutable tag or a source checkout build;
@@ -229,7 +261,11 @@ Exit criteria before this part is operationally complete:
 - target PostgreSQL TLS and health pass while Cloud SQL remains authoritative;
 - read-only Secret Manager, BigQuery and GCS probes pass from the Hetzner ADC;
 - both app ports remain loopback-only and all scheduler flags remain false; and
-- a previous digest rollback is executed successfully before any writer cutover.
+- the full target-host suite passes 15/15 GET contracts and blocks both tested
+  mutation routes.
+
+The July 25 tree-identical A→B→A rehearsal exercised the rollback command and
+restored the accepted current manifest successfully.
 
 ## Part 4 — full restore rehearsal
 
@@ -251,14 +287,47 @@ Exit criteria before this part is operationally complete:
 - Run each operation once on target while the old scheduler is disabled.
 - Prove that GCP and Hetzner never deliver or ingest concurrently.
 
+The July 25 read-only inventory found three enabled Cloud Scheduler HTTP jobs:
+Gmail import, precompute and creative-cache refresh. Their targets use the
+public hostname and therefore follow DNS. The feature flags previously affected
+only secrets-health reporting and did not block those endpoints. Local code now
+enforces each flag and defaults it to disabled; it must be reviewed, published
+and included in the immutable cutover release before activation. The guarded
+writable/all-schedulers-off Compose rendering and check-only activation
+rehearsal pass locally; the changed release is not yet published,
+shadow-deployed or live-rehearsed.
+
+The GCP API is itself a general writer through authenticated mutations,
+conversion postbacks and background jobs. The database also has the dormant
+finance-schema owner role (name in private evidence) that owns the private
+finance schema. Its external controller currently uses local SQLite and the
+read-only RTBcat HTTP API, so this is a dormant future-runtime login rather
+than an observed active PostgreSQL writer;
+block it during freeze anyway. The exact drain/pause/NOLOGIN and session checks
+are in
+[`HETZNER_FINAL_SYNC_RUNBOOK.md`](HETZNER_FINAL_SYNC_RUNBOOK.md).
+
 ## Part 6 — cutover rehearsal and production cutover
 
 - Lower DNS TTL in advance and preflight TLS, OAuth redirect behavior, agent
   consumers, egress allowlists and health checks.
-- Freeze writers, confirm quiescence, take the final sync/dump and reconcile.
+- Enable Cloud SQL logical decoding in a separately approved restart window.
+  Replace the July 22 target with a fresh schema-matched logical subscriber,
+  allow the initial copy to finish and continuously catch up while GCP remains
+  authoritative.
+- Freeze writers, confirm quiescence, wait for the subscriber to pass the
+  freeze LSN, transfer all sequence state, take the final non-credential
+  `.catscan` delta and reconcile.
 - State the rollback cutoff explicitly: rollback is safe only before target
   writers resume unless reverse synchronization has been proven.
 - Change DNS in a separately approved action and resume one scheduler system.
+
+The executable planning record is
+[`HETZNER_FINAL_SYNC_RUNBOOK.md`](HETZNER_FINAL_SYNC_RUNBOOK.md). PostgreSQL
+logical replication does not transfer DDL or sequences, and the target Volume
+cannot hold the old rehearsal plus a second full database. Replacing that
+database, creating source replication state, freezing writers and changing DNS
+are separate approval gates.
 
 ## Part 7 — soak and decommission
 
