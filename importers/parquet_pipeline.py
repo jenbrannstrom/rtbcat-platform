@@ -406,6 +406,23 @@ class ParquetExportManager:
         logger.info("Parquet export: finalize complete")
         return uploaded
 
+    def discard(self) -> None:
+        """Close and remove a buffered export without uploading or loading it."""
+        for writer in self._writers.values():
+            try:
+                writer.close()
+            except Exception as exc:
+                self._append_error(f"Failed to close discarded Parquet writer: {exc}")
+        for path in self._paths.values():
+            try:
+                path.unlink(missing_ok=True)
+            except OSError as exc:
+                self._append_error(f"Failed to remove discarded Parquet file {path}: {exc}")
+        self._buffers.clear()
+        self._writers.clear()
+        self._paths.clear()
+        logger.info("Discarded buffered Parquet export without GCS/BQ publication")
+
     def _upload_files(self) -> list[str]:
         if not _HAS_GCS:
             self._append_error("google-cloud-storage not installed; skipping GCS upload.")

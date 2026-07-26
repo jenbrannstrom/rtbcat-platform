@@ -27,7 +27,6 @@ from api.dependencies import (
     get_config,
     get_current_user,
     get_allowed_buyer_ids,
-    get_allowed_service_account_ids,
     require_buyer_access,
 )
 from services.auth_service import User
@@ -177,6 +176,7 @@ class BuyerSeatResponse(BaseModel):
     buyer_id: str
     bidder_id: str
     display_name: Optional[str] = None
+    currency: Optional[str] = None
     active: bool = True
     creative_count: int = 0
     last_synced: Optional[str] = None
@@ -228,6 +228,7 @@ class DiscoverSeatsResponse(BaseModel):
 class UpdateSeatRequest(BaseModel):
     """Request model for updating a buyer seat."""
     display_name: Optional[str] = None
+    currency: Optional[str] = None
 
 
 # =============================================================================
@@ -500,10 +501,20 @@ async def update_seat(
     store: StoreType = Depends(get_store),
     user: User = Depends(get_current_user),
 ) -> BuyerSeatResponse:
-    """Update a buyer seat's display name."""
+    """Update a buyer seat's display name and/or spend currency."""
     await require_buyer_admin_access(buyer_id, user=user)
     if request.display_name:
         success = await seats_service.update_display_name(buyer_id, request.display_name)
+        if not success:
+            raise HTTPException(status_code=404, detail="Buyer seat not found")
+    if request.currency:
+        currency = request.currency.strip().upper()
+        if len(currency) != 3 or not currency.isalpha():
+            raise HTTPException(
+                status_code=400,
+                detail="currency must be a three-letter ISO-4217 code.",
+            )
+        success = await seats_service.update_currency(buyer_id, currency)
         if not success:
             raise HTTPException(status_code=404, detail="Buyer seat not found")
 

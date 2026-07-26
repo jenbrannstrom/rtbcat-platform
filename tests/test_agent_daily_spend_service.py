@@ -12,6 +12,7 @@ _DEFAULT_BUYER = {
     "buyer_id": "buyer-1",
     "bidder_id": "bidder-1",
     "display_name": "Buyer One",
+    "currency_code": "USD",
     "active": True,
     "last_synced": None,
 }
@@ -81,6 +82,8 @@ async def test_daily_spend_distinguishes_missing_from_present_and_totals() -> No
     }
     assert payload["warnings"] == ["No RTBcat spend source rows found for 2026-07-02."]
     assert payload["data_source"]["table"] == "rtb_buyer_spend_daily"
+    assert payload["buyer"]["currency"] == "USD"
+    assert payload["data_source"]["currency"] == "USD"
     assert repo.row_calls == [("buyer-1", date(2026, 7, 1), date(2026, 7, 2))]
 
 
@@ -100,6 +103,122 @@ async def test_daily_spend_include_empty_false_drops_missing_days() -> None:
     # Missing days stay visible in summary/warnings even when rows are dropped.
     assert payload["summary"]["days_with_source_rows"] == 1
     assert payload["warnings"] == ["No RTBcat spend source rows found for 2026-07-02."]
+
+
+@pytest.mark.asyncio
+async def test_daily_spend_labels_uplivo_as_eur() -> None:
+    buyer = {
+        **_DEFAULT_BUYER,
+        "buyer_id": "8087233591",
+        "display_name": "Tuky internet",
+        "currency_code": "eur",
+    }
+    repo = _StubRepo(buyer=buyer, rows=[_rows_for_two_days()[0]])
+    service = AgentStatsService(repo=repo)
+
+    payload = await service.get_daily_spend(
+        buyer_id="8087233591",
+        start_date=date(2026, 7, 1),
+        end_date=date(2026, 7, 1),
+    )
+
+    assert payload["buyer"]["currency"] == "EUR"
+    assert payload["data_source"]["currency"] == "EUR"
+    assert payload["summary"]["total_spend_micros"] == 12_500_000
+
+
+class _StatsStubRepo(_StubRepo):
+    async def get_funnel_totals(self, _buyer_id: str, _days: int):
+        return {
+            "start_date": date(2026, 7, 1),
+            "end_date": date(2026, 7, 13),
+            "reached_queries": 1000,
+            "impressions": 100,
+            "bids": 50,
+            "successful_responses": 900,
+            "bid_requests": 1000,
+            "auctions_won": 10,
+        }
+
+    async def get_auction_totals(self, _buyer_id: str, _days: int):
+        return {"bids_in_auction": 20, "auctions_won": 10}
+
+    async def get_spend_totals(self, _buyer_id: str, _days: int):
+        return {
+            "start_date": date(2026, 7, 1),
+            "end_date": date(2026, 7, 13),
+            "impressions": 100,
+            "clicks": 2,
+            "spend_micros": 4_159_980_000,
+            "app_count": 1,
+            "billing_count": 1,
+        }
+
+    async def get_top_publishers(self, _buyer_id: str, _days: int, _limit: int):
+        return []
+
+    async def get_top_geos(self, _buyer_id: str, _days: int, _limit: int):
+        return []
+
+    async def get_top_configs(self, _buyer_id: str, _days: int, _limit: int):
+        return []
+
+    async def get_top_apps(self, _buyer_id: str, _days: int, _limit: int):
+        return [
+            {
+                "app_name": "Example",
+                "app_id": "example.app",
+                "reached_queries": 100,
+                "impressions": 100,
+                "clicks": 2,
+                "spend_micros": 1_500_000,
+            }
+        ]
+
+
+@pytest.mark.asyncio
+async def test_stats_summary_uses_buyer_currency_and_nulls_usd_aliases_for_eur() -> None:
+    buyer = {
+        **_DEFAULT_BUYER,
+        "buyer_id": "8087233591",
+        "display_name": "Tuky internet",
+        "currency_code": "EUR",
+    }
+    service = AgentStatsService(repo=_StatsStubRepo(buyer=buyer))
+
+    payload = await service.get_stats_summary(
+        buyer_id="8087233591",
+        days=14,
+        top_limit=10,
+    )
+
+    assert payload["buyer"]["currency"] == "EUR"
+    assert payload["totals"]["currency"] == "EUR"
+    assert payload["totals"]["spend"] == 4159.98
+    assert payload["totals"]["spend_usd"] is None
+    assert payload["totals"]["avg_cpm_usd"] is None
+    assert payload["top_apps"][0]["currency"] == "EUR"
+    assert payload["top_apps"][0]["spend"] == 1.5
+    assert payload["top_apps"][0]["spend_usd"] is None
+    assert "EUR 4,159.98" in payload["email_summary"]["markdown"]
+    assert "$" not in payload["email_summary"]["markdown"]
+
+
+@pytest.mark.asyncio
+async def test_stats_summary_keeps_usd_compatibility_aliases_for_usd_buyer() -> None:
+    service = AgentStatsService(repo=_StatsStubRepo())
+
+    payload = await service.get_stats_summary(
+        buyer_id="buyer-1",
+        days=14,
+        top_limit=10,
+    )
+
+    assert payload["totals"]["currency"] == "USD"
+    assert payload["totals"]["spend"] == 4159.98
+    assert payload["totals"]["spend_usd"] == 4159.98
+    assert payload["totals"]["avg_cpm_usd"] == payload["totals"]["avg_cpm"]
+    assert "USD 4,159.98" in payload["email_summary"]["markdown"]
 
 
 def _row(metric_date: date, *, present: bool) -> dict:

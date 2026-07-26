@@ -34,21 +34,15 @@ def _is_authing_enabled() -> bool:
 
 
 def _is_gmail_scheduler_enabled() -> bool:
-    return _env_true("CATSCAN_ENABLE_GMAIL_IMPORT_SCHEDULER", default=False) or bool(
-        os.getenv("GMAIL_IMPORT_SECRET")
-    )
+    return _env_true("CATSCAN_ENABLE_GMAIL_IMPORT_SCHEDULER", default=False)
 
 
 def _is_precompute_scheduler_enabled() -> bool:
-    return _env_true("CATSCAN_ENABLE_PRECOMPUTE_SCHEDULER", default=False) or any(
-        os.getenv(k) for k in ("PRECOMPUTE_REFRESH_SECRET", "PRECOMPUTE_MONITOR_SECRET")
-    )
+    return _env_true("CATSCAN_ENABLE_PRECOMPUTE_SCHEDULER", default=False)
 
 
 def _is_creative_cache_scheduler_enabled() -> bool:
-    return _env_true("CATSCAN_ENABLE_CREATIVE_CACHE_SCHEDULER", default=False) or bool(
-        os.getenv("CREATIVE_CACHE_REFRESH_SECRET")
-    )
+    return _env_true("CATSCAN_ENABLE_CREATIVE_CACHE_SCHEDULER", default=False)
 
 
 def _language_ai_provider_env() -> str:

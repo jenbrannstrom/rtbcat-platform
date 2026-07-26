@@ -41,6 +41,19 @@ def _cpm(spend_micros: int, impressions: int) -> float:
     return round((spend_micros / 1_000_000) / impressions * 1000, 4)
 
 
+def _currency_code(value: object) -> str | None:
+    """Return a normalized ISO-4217 code, or None for unconfigured seats."""
+    code = str(value or "").strip().upper()
+    return code if len(code) == 3 and code.isalpha() else None
+
+
+def _format_money(amount: float, currency: str | None) -> str:
+    """Format buyer-currency money without guessing an unknown currency."""
+    if currency:
+        return f"{currency} {amount:,.2f}"
+    return f"{amount:,.2f} buyer-currency units"
+
+
 @dataclass
 class AgentStatsRepository:
     """SQL access for precomputed agent stats."""
@@ -50,7 +63,7 @@ class AgentStatsRepository:
     async def get_buyer(self, buyer_id: str) -> dict[str, Any] | None:
         return await pg_query_one(
             """
-            SELECT buyer_id, bidder_id, display_name, active, last_synced
+            SELECT buyer_id, bidder_id, display_name, active, last_synced, currency_code
             FROM buyer_seats
             WHERE buyer_id = %s
             """,
@@ -288,7 +301,13 @@ class AgentStatsService:
         top_configs = await self._repo.get_top_configs(buyer_id, safe_days, safe_limit)
         top_apps = await self._repo.get_top_apps(buyer_id, safe_days, safe_limit)
 
-        totals = self._build_totals(funnel_row, spend_row, auction_row)
+        currency = _currency_code(buyer.get("currency_code"))
+        totals = self._build_totals(
+            funnel_row,
+            spend_row,
+            auction_row,
+            currency=currency,
+        )
         freshness = self._build_freshness(funnel_row, spend_row)
         has_data = bool(totals["reached_queries"] or totals["impressions"] or totals["spend_micros"])
         warnings = self._build_warnings(
@@ -299,7 +318,7 @@ class AgentStatsService:
             "top_publishers": [self._publisher_payload(row) for row in top_publishers],
             "top_geos": [self._geo_payload(row) for row in top_geos],
             "top_configs": [self._config_payload(row) for row in top_configs],
-            "top_apps": [self._app_payload(row) for row in top_apps],
+            "top_apps": [self._app_payload(row, currency=currency) for row in top_apps],
         }
 
         email_summary = self._build_email_summary(
@@ -308,6 +327,7 @@ class AgentStatsService:
             totals=totals,
             sections=sections,
             warnings=warnings,
+            currency=currency,
         )
 
         return {
@@ -317,6 +337,7 @@ class AgentStatsService:
                 "bidder_id": buyer.get("bidder_id"),
                 "display_name": buyer.get("display_name"),
                 "active": bool(buyer.get("active", True)),
+                "currency": currency,
                 "last_synced": str(buyer.get("last_synced")) if buyer.get("last_synced") else None,
             },
             "period": {
@@ -366,6 +387,7 @@ class AgentStatsService:
 
         raw_rows = await self._repo.get_daily_spend_rows(buyer_id, start_date, end_date)
         rows = [self._daily_spend_payload(row, buyer_id) for row in raw_rows]
+        currency = _currency_code(buyer.get("currency_code"))
 
         missing_dates = [row["metric_date"] for row in rows if row["source_status"] == "missing"]
         # Latest date D such that every requested date <= D has source rows;
@@ -386,6 +408,7 @@ class AgentStatsService:
                 "bidder_id": buyer.get("bidder_id"),
                 "display_name": buyer.get("display_name"),
                 "active": bool(buyer.get("active", True)),
+                "currency": currency,
                 "last_synced": str(buyer.get("last_synced")) if buyer.get("last_synced") else None,
             },
             "period": {
@@ -397,8 +420,7 @@ class AgentStatsService:
                 "table": "rtb_buyer_spend_daily",
                 "precomputed_only": True,
                 "source_metric": "Spend (buyer currency)",
-                # RTBcat does not store report currency; consumers map it externally.
-                "currency": None,
+                "currency": currency,
             },
             "rows": rows,
             "summary": {
@@ -436,6 +458,8 @@ class AgentStatsService:
         funnel_row: dict[str, Any],
         spend_row: dict[str, Any],
         auction_row: dict[str, Any],
+        *,
+        currency: str | None = None,
     ) -> dict[str, Any]:
         reached_queries = _int(funnel_row.get("reached_queries"))
         impressions = _int(funnel_row.get("impressions"))
@@ -448,6 +472,8 @@ class AgentStatsService:
         spend_micros = _int(spend_row.get("spend_micros"))
         clicks = _int(spend_row.get("clicks"))
         spend_impressions = _int(spend_row.get("impressions"))
+        spend = _money_from_micros(spend_micros)
+        avg_cpm = _cpm(spend_micros, spend_impressions or impressions)
 
         return {
             "reached_queries": reached_queries,
@@ -459,7 +485,9 @@ class AgentStatsService:
             "impressions": impressions,
             "clicks": clicks,
             "spend_micros": spend_micros,
-            "spend_usd": _money_from_micros(spend_micros),
+            "currency": currency,
+            "spend": spend,
+            "spend_usd": spend if currency == "USD" else None,
             # Win rate per METRICS_GUIDE.md: Auctions Won / Bids in Auction.
             # Both terms come from home_config_daily so the ratio is consistent.
             "win_rate_pct": _rate(auction_wins, bids_in_auction),
@@ -467,7 +495,8 @@ class AgentStatsService:
             "bid_rate_pct": _rate(bids, reached_queries),
             "response_rate_pct": _rate(successful_responses, bid_requests),
             "ctr_pct": _rate(clicks, spend_impressions or impressions),
-            "avg_cpm_usd": _cpm(spend_micros, spend_impressions or impressions),
+            "avg_cpm": avg_cpm,
+            "avg_cpm_usd": avg_cpm if currency == "USD" else None,
             "app_count": _int(spend_row.get("app_count")),
             "billing_count": _int(spend_row.get("billing_count")),
         }
@@ -554,10 +583,17 @@ class AgentStatsService:
             "win_rate_pct": _rate(auctions_won, bids_in_auction),
         }
 
-    def _app_payload(self, row: dict[str, Any]) -> dict[str, Any]:
+    def _app_payload(
+        self,
+        row: dict[str, Any],
+        *,
+        currency: str | None = None,
+    ) -> dict[str, Any]:
         impressions = _int(row.get("impressions"))
         clicks = _int(row.get("clicks"))
         spend_micros = _int(row.get("spend_micros"))
+        spend = _money_from_micros(spend_micros)
+        avg_cpm = _cpm(spend_micros, impressions)
         return {
             "app_name": row.get("app_name"),
             "app_id": row.get("app_id"),
@@ -565,9 +601,12 @@ class AgentStatsService:
             "impressions": impressions,
             "clicks": clicks,
             "spend_micros": spend_micros,
-            "spend_usd": _money_from_micros(spend_micros),
+            "currency": currency,
+            "spend": spend,
+            "spend_usd": spend if currency == "USD" else None,
             "ctr_pct": _rate(clicks, impressions),
-            "avg_cpm_usd": _cpm(spend_micros, impressions),
+            "avg_cpm": avg_cpm,
+            "avg_cpm_usd": avg_cpm if currency == "USD" else None,
         }
 
     def _build_email_summary(
@@ -578,6 +617,7 @@ class AgentStatsService:
         totals: dict[str, Any],
         sections: dict[str, list[dict[str, Any]]],
         warnings: list[str],
+        currency: str | None,
     ) -> dict[str, Any]:
         subject = f"{buyer_name} {days}-day Cat-Scan performance summary"
         bullets = [
@@ -586,7 +626,7 @@ class AgentStatsService:
                 f"{totals['impressions']:,} impressions."
             ),
             (
-                f"Spend was ${totals['spend_usd']:,.2f} with "
+                f"Spend was {_format_money(totals['spend'], currency)} with "
                 f"{totals['clicks']:,} clicks and {totals['ctr_pct']:.2f}% CTR."
             ),
             (
@@ -597,7 +637,8 @@ class AgentStatsService:
         top_app = sections["top_apps"][0] if sections["top_apps"] else None
         if top_app:
             bullets.append(
-                f"Top app by spend was {top_app['app_name']} at ${top_app['spend_usd']:,.2f}."
+                f"Top app by spend was {top_app['app_name']} at "
+                f"{_format_money(top_app['spend'], currency)}."
             )
         top_geo = sections["top_geos"][0] if sections["top_geos"] else None
         if top_geo:

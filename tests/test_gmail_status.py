@@ -84,6 +84,28 @@ def test_gmail_status_includes_file_failures(tmp_path, monkeypatch):
     assert status["recent_history"][0]["file_failures"] == [failure]
 
 
+def test_gmail_status_api_model_exposes_duplicate_downstream_skips() -> None:
+    from api.routers.gmail import GmailStatusResponse
+
+    skip = {
+        "message_id": "msg-duplicate",
+        "filename": "catscan-bidsinauction-123.csv",
+        "seat_id": "123",
+        "report_kind": "catscan-bidsinauction",
+        "rows_read": 10,
+        "rows_duplicate": 10,
+    }
+    payload = GmailStatusResponse(
+        configured=True,
+        authorized=True,
+        last_duplicate_downstream_skips=[skip],
+        last_duplicate_downstream_skip_count=1,
+    ).model_dump()
+
+    assert payload["last_duplicate_downstream_skip_count"] == 1
+    assert payload["last_duplicate_downstream_skips"] == [skip]
+
+
 def test_gmail_status_includes_expected_spend_missing(tmp_path, monkeypatch):
     _stub_google_modules()
 

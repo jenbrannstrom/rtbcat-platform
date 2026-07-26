@@ -6,6 +6,10 @@ __pycache__/
 venv/
 .venv/
 .env
+deploy/hetzner/runtime.env
+deploy/hetzner/release.env
+deploy/hetzner/hetzner-release.env
+/hetzner-release.env
 
 # Node
 node_modules/

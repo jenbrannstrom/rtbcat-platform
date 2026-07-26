@@ -87,6 +87,7 @@ CREATE TABLE IF NOT EXISTS buyer_seats (
     bidder_id TEXT NOT NULL,
     service_account_id TEXT REFERENCES service_accounts(id) ON DELETE SET NULL,
     display_name TEXT,
+    currency_code TEXT CHECK (currency_code IS NULL OR currency_code ~ '^[A-Z]{3}$'),
     active BOOLEAN DEFAULT TRUE,
     creative_count INTEGER DEFAULT 0,
     last_synced TIMESTAMPTZ,

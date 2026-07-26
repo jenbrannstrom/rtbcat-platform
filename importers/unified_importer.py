@@ -97,6 +97,16 @@ class UnifiedImportResult:
     # Errors
     errors: List[str] = field(default_factory=list)
 
+    @property
+    def is_fully_duplicate(self) -> bool:
+        """Whether every row read was rejected by PG as already present."""
+        return (
+            self.success
+            and self.rows_read > 0
+            and self.rows_imported == 0
+            and self.rows_duplicate == self.rows_read
+        )
+
 
 def compute_row_hash(row_data: Dict, keys: List[str]) -> str:
     """Compute hash of specified keys for deduplication."""
@@ -1528,7 +1538,15 @@ def unified_import(
             result.error_message = f"Unknown target table: {target_table}"
     finally:
         if parquet_exporter:
-            parquet_exporter.finalize()
+            if result.is_fully_duplicate:
+                logger.warning(
+                    "Skipping GCS/BQ export for 100%%-duplicate import batch %s (%s rows)",
+                    result.batch_id,
+                    result.rows_duplicate,
+                )
+                parquet_exporter.discard()
+            else:
+                parquet_exporter.finalize()
 
     return result
 

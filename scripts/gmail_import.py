@@ -25,6 +25,7 @@ import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
+from enum import Enum
 from typing import Optional, Dict, Any, List, Callable
 import uuid
 import time
@@ -181,6 +182,8 @@ def load_status() -> Dict[str, Any]:
         "last_unread_report_emails": 0,
         "last_file_failures": [],
         "last_file_failure_count": 0,
+        "last_duplicate_downstream_skips": [],
+        "last_duplicate_downstream_skip_count": 0,
         "expected_spend_missing": [],
     }
 
@@ -206,6 +209,7 @@ def update_status(
     rows_on_latest_metric_date: int = 0,
     unread_report_emails: Optional[int] = None,
     file_failures: Optional[List[Dict[str, str]]] = None,
+    duplicate_downstream_skips: Optional[List[Dict[str, Any]]] = None,
     emails_skipped: int = 0,
     skipped_seat_ids: Optional[List[str]] = None,
     expected_spend_missing: Optional[List[str]] = None,
@@ -232,6 +236,11 @@ def update_status(
     if file_failures is not None:
         status["last_file_failures"] = file_failures
         status["last_file_failure_count"] = len(file_failures)
+    if duplicate_downstream_skips is not None:
+        status["last_duplicate_downstream_skips"] = duplicate_downstream_skips
+        status["last_duplicate_downstream_skip_count"] = len(
+            duplicate_downstream_skips
+        )
     status["last_emails_skipped"] = int(emails_skipped)
     status["last_skipped_seat_ids"] = sorted(set(skipped_seat_ids or []))
     if expected_spend_missing is not None:
@@ -250,6 +259,8 @@ def update_status(
         "unread_report_emails": unread_report_emails,
         "file_failures": file_failures or [],
         "file_failure_count": len(file_failures or []),
+        "duplicate_downstream_skips": duplicate_downstream_skips or [],
+        "duplicate_downstream_skip_count": len(duplicate_downstream_skips or []),
         "expected_spend_missing": sorted(set(expected_spend_missing or [])),
     })
     status["history"] = status["history"][:50]
@@ -277,6 +288,12 @@ def get_status() -> Dict[str, Any]:
         "last_unread_report_emails": int(status.get("last_unread_report_emails") or 0),
         "last_file_failures": status.get("last_file_failures", []),
         "last_file_failure_count": int(status.get("last_file_failure_count") or 0),
+        "last_duplicate_downstream_skips": status.get(
+            "last_duplicate_downstream_skips", []
+        ),
+        "last_duplicate_downstream_skip_count": int(
+            status.get("last_duplicate_downstream_skip_count") or 0
+        ),
         "expected_spend_missing": status.get("expected_spend_missing", []),
     }
 
@@ -1293,6 +1310,49 @@ class CatscanImportResult:
     file_size_bytes: int = 0
 
 
+class PipelineOutcome(Enum):
+    """Outcome of dispatching an imported file to the parquet/BQ lane."""
+
+    SUCCESS = "success"
+    FAILURE = "failure"
+    SKIPPED_DUPLICATE = "skipped_duplicate"
+
+
+def is_fully_duplicate_import(result: CatscanImportResult) -> bool:
+    """Return whether Postgres rejected every input row as already known.
+
+    Requiring the duplicate count to equal the read count avoids treating an
+    empty or wholly-invalid file as an idempotent replay.
+    """
+    return (
+        result.rows_read > 0
+        and result.rows_imported == 0
+        and result.rows_duplicate == result.rows_read
+    )
+
+
+def run_pipeline_after_import(
+    filepath: Path,
+    seat_id: Optional[str],
+    import_result: CatscanImportResult,
+    verbose: bool = True,
+) -> PipelineOutcome:
+    """Dispatch a successful PG import without replaying exact duplicates."""
+    if is_fully_duplicate_import(import_result):
+        print(
+            f"  WARNING: Skipping parquet/BigQuery load and publish for "
+            f"100%-duplicate import {filepath.name} "
+            f"({import_result.rows_duplicate:,} rows). Existing published data "
+            "is unchanged; a restated report requires the replace workflow.",
+            flush=True,
+        )
+        return PipelineOutcome.SKIPPED_DUPLICATE
+
+    if run_pipeline_for_file(filepath, seat_id, verbose=verbose):
+        return PipelineOutcome.SUCCESS
+    return PipelineOutcome.FAILURE
+
+
 def import_to_catscan(filepath: Path) -> CatscanImportResult:
     """
     Import the CSV into Cat-Scan database directly using the unified importer.
@@ -1334,12 +1394,18 @@ def import_to_catscan(filepath: Path) -> CatscanImportResult:
                 )
             if response.status_code == 200:
                 data = response.json()
-                print(f"  Imported: {data.get('rows_imported', 0)} rows")
+                rows_imported = int(data.get("rows_imported", 0) or 0)
+                rows_duplicate = int(data.get("rows_duplicate", 0) or 0)
+                rows_read = int(
+                    data.get("rows_read", rows_imported + rows_duplicate) or 0
+                )
+                print(f"  Imported: {rows_imported} rows")
                 return CatscanImportResult(
                     success=True,
                     report_type="api_import",
-                    rows_imported=data.get("rows_imported", 0),
-                    rows_duplicate=data.get("rows_duplicate", 0),
+                    rows_imported=rows_imported,
+                    rows_duplicate=rows_duplicate,
+                    rows_read=rows_read,
                     batch_id=data.get("batch_id", ""),
                     file_size_bytes=file_size,
                 )
@@ -1552,6 +1618,8 @@ def run_import(
         "files_imported": 0,
         "file_failures": [],
         "file_failure_count": 0,
+        "duplicate_downstream_skips": [],
+        "duplicate_downstream_skip_count": 0,
         "unread_report_emails": 0,
         "emails_skipped": 0,
         "skipped_seat_ids": [],
@@ -1623,6 +1691,7 @@ def run_import(
             rows_on_latest_metric_date=result["rows_on_latest_metric_date"],
             unread_report_emails=result.get("unread_report_emails"),
             file_failures=result.get("file_failures", []),
+            duplicate_downstream_skips=result.get("duplicate_downstream_skips", []),
             emails_skipped=result.get("emails_skipped", 0),
             skipped_seat_ids=result.get("skipped_seat_ids", []),
             expected_spend_missing=result.get("expected_spend_missing", []),
@@ -1776,9 +1845,14 @@ def run_import(
                         for imported_date in (imp.date_range_start, imp.date_range_end):
                             if imported_date:
                                 imported_dates.append(str(imported_date))
-                        # Run pipeline for BigQuery/Postgres
-                        pipeline_ok = run_pipeline_for_file(filepath, seat_id, verbose=verbose)
-                        if not pipeline_ok:
+                        # Run parquet/BQ only for files that contributed new PG rows.
+                        pipeline_outcome = run_pipeline_after_import(
+                            filepath,
+                            seat_id,
+                            imp,
+                            verbose=verbose,
+                        )
+                        if pipeline_outcome is PipelineOutcome.FAILURE:
                             message_fully_processed = False
                             failure = {
                                 "message_id": message_id,
@@ -1793,6 +1867,17 @@ def run_import(
                             )
                             if verbose:
                                 print(f"  Pipeline failed: {filepath.name}")
+                        elif pipeline_outcome is PipelineOutcome.SKIPPED_DUPLICATE:
+                            result["duplicate_downstream_skips"].append(
+                                {
+                                    "message_id": message_id,
+                                    "filename": filepath.name,
+                                    "seat_id": seat_id or "",
+                                    "report_kind": report_kind,
+                                    "rows_read": imp.rows_read,
+                                    "rows_duplicate": imp.rows_duplicate,
+                                }
+                            )
                         elif (
                             report_kind == "catscan-bidsinauction"
                             and seat_id
@@ -1866,6 +1951,9 @@ def run_import(
 
         result["success"] = True
         result["file_failure_count"] = len(result["file_failures"])
+        result["duplicate_downstream_skip_count"] = len(
+            result["duplicate_downstream_skips"]
+        )
         if imported_dates:
             result["imported_date_start"] = min(imported_dates)
             result["imported_date_end"] = max(imported_dates)

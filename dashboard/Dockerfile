@@ -24,7 +24,9 @@ ENV NEXT_TELEMETRY_DISABLED=1
 
 # OAuth2 Proxy mode - disables API rewrites so requests go through nginx
 ARG OAUTH2_PROXY_MODE=false
+ARG API_HOST=localhost
 ENV OAUTH2_PROXY_MODE=${OAUTH2_PROXY_MODE}
+ENV API_HOST=${API_HOST}
 
 RUN npm run build
 

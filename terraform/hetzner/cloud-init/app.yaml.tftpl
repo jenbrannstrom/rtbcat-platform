@@ -1,0 +1,68 @@
+#cloud-config
+hostname: ${hostname}
+manage_etc_hosts: true
+ssh_pwauth: false
+disable_root: true
+package_update: true
+package_upgrade: true
+
+users:
+  - default
+  - name: rtbcat
+    gecos: RTBcat runtime operator
+    groups: [adm, docker, sudo]
+    lock_passwd: true
+    shell: /bin/bash
+    sudo: ["ALL=(ALL) NOPASSWD:ALL"]
+    ssh_authorized_keys:
+      - ${jsonencode(operator_ssh_public_key)}
+
+packages:
+  - ca-certificates
+  - curl
+  - docker-compose-v2
+  - docker.io
+  - fail2ban
+  - iproute2
+  - jq
+  - openssl
+  - python3
+  - unattended-upgrades
+  - ufw
+
+write_files:
+  - path: /etc/sysctl.d/60-rtbcat-network.conf
+    permissions: "0644"
+    content: |
+      net.ipv4.conf.all.accept_redirects = 0
+      net.ipv4.conf.default.accept_redirects = 0
+      net.ipv4.conf.all.send_redirects = 0
+      net.ipv4.conf.default.send_redirects = 0
+  - path: /etc/rtbcat/app-host.env
+    owner: root:root
+    permissions: "0644"
+    content: |
+      RTBCAT_APP_PRIVATE_IP=${app_private_ip}
+      RTBCAT_DATABASE_PRIVATE_IP=${database_private_ip}
+      RTBCAT_DATABASE_NAME=rtbcat_serving
+      RTBCAT_DATABASE_OWNER=rtbcat_serving
+
+runcmd:
+  - [mkdir, -p, /opt/rtbcat, /var/lib/rtbcat/app-data, /var/lib/rtbcat/releases]
+  - [chown, -R, "rtbcat:rtbcat", /opt/rtbcat, /var/lib/rtbcat/app-data]
+  - [chmod, "0755", /var/lib/rtbcat/releases]
+  - [systemctl, enable, --now, docker]
+  - [systemctl, enable, --now, fail2ban]
+  - [ufw, --force, reset]
+  - [ufw, default, deny, incoming]
+  - [ufw, default, allow, outgoing]
+%{ for cidr in ssh_source_cidrs ~}
+  - [ufw, allow, from, ${jsonencode(cidr)}, to, any, port, "22", proto, tcp]
+%{ endfor ~}
+  - [ufw, allow, "80/tcp"]
+  - [ufw, allow, "443/tcp"]
+  - [ufw, allow, "41641/udp"]
+  - [ufw, --force, enable]
+  - [sysctl, --system]
+
+final_message: "RTBcat app foundation is ready; application deployment is intentionally deferred."

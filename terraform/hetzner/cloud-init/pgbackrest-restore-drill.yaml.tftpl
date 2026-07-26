@@ -1,0 +1,46 @@
+#cloud-config
+hostname: ${hostname}
+manage_etc_hosts: true
+ssh_pwauth: false
+disable_root: true
+package_update: true
+package_upgrade: true
+
+users:
+  - default
+  - name: rtbcat
+    gecos: RTBcat recovery-drill operator
+    groups: [adm, sudo]
+    lock_passwd: true
+    shell: /bin/bash
+    sudo: ["ALL=(ALL) NOPASSWD:ALL"]
+    ssh_authorized_keys:
+      - ${jsonencode(operator_ssh_public_key)}
+
+packages:
+  - ca-certificates
+  - curl
+  - fail2ban
+  - jq
+  - unattended-upgrades
+  - ufw
+
+write_files:
+  - path: /etc/rtbcat/restore-drill-host.env
+    owner: root:root
+    permissions: "0644"
+    content: |
+      RTBCAT_RESTORE_DRILL=true
+      RTBCAT_RESTORE_DRILL_MIN_ROOT_GB=600
+
+runcmd:
+  - [systemctl, enable, --now, fail2ban]
+  - [ufw, --force, reset]
+  - [ufw, default, deny, incoming]
+  - [ufw, default, allow, outgoing]
+%{ for cidr in ssh_source_cidrs ~}
+  - [ufw, allow, from, ${jsonencode(cidr)}, to, any, port, "22", proto, tcp]
+%{ endfor ~}
+  - [ufw, --force, enable]
+
+final_message: "RTBcat disposable pgBackRest restore-drill host is ready for guarded bootstrap."

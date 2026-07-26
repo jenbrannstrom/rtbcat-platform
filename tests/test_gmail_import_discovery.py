@@ -260,3 +260,91 @@ def test_run_import_records_imported_message_and_marks_read(tmp_path, monkeypatc
         }
     ]
     assert marked_read == ["m-1"]
+
+
+def test_run_import_exact_redelivery_skips_pipeline_and_publish(tmp_path, monkeypatch, capsys):
+    _stub_google_modules()
+    from scripts import gmail_import
+
+    monkeypatch.setattr(gmail_import, "STATUS_PATH", tmp_path / "gmail_import_status.json")
+    monkeypatch.setattr(gmail_import, "LOCK_PATH", tmp_path / "gmail_import.lock")
+    monkeypatch.setattr(gmail_import, "start_scheduler_ingestion_run", lambda *_a, **_k: "run-1")
+    monkeypatch.setattr(gmail_import, "finish_scheduler_ingestion_run", lambda *_a, **_k: None)
+    monkeypatch.setattr(
+        gmail_import,
+        "get_runtime_freshness_snapshot",
+        lambda: {
+            "runtime_path_verified": True,
+            "latest_metric_date": "2026-07-10",
+            "rows_on_latest_metric_date": 1,
+        },
+    )
+    monkeypatch.setattr(gmail_import, "get_expected_spend_missing_seats", lambda: [])
+    monkeypatch.setattr(gmail_import, "get_gmail_service", lambda: (object(), object()))
+    monkeypatch.setattr(gmail_import, "build_access_token_provider", lambda *_a, **_k: lambda *_: "token")
+    monkeypatch.setattr(gmail_import, "find_report_emails", lambda _service: [{"id": "m-duplicate"}])
+    monkeypatch.setattr(gmail_import, "prioritize_report_messages", lambda _service, messages: messages)
+
+    csv_path = tmp_path / "catscan-bidsinauction-123-yesterday-UTC.csv"
+    csv_path.write_text("#Day,Buyer account ID\n2026-07-10,123\n", encoding="utf-8")
+    monkeypatch.setattr(
+        gmail_import,
+        "process_message",
+        lambda *_a, **_k: ([csv_path], "123", "subject", False),
+    )
+    monkeypatch.setattr(gmail_import, "archive_to_s3", lambda *_a, **_k: None)
+    monkeypatch.setattr(gmail_import, "record_import_run", lambda *_a, **_k: None)
+
+    import_result = gmail_import.CatscanImportResult(
+        success=True,
+        report_type="buyer_spend",
+        rows_read=557_102,
+        rows_imported=0,
+        rows_duplicate=557_102,
+        batch_id="batch-replay",
+        date_range_start="2026-07-10",
+        date_range_end="2026-07-10",
+        columns_found="Day,Buyer account ID",
+        file_size_bytes=10,
+    )
+    monkeypatch.setattr(gmail_import, "import_to_catscan", lambda _filepath: import_result)
+
+    def _unexpected(*_args, **_kwargs):
+        raise AssertionError("exact redelivery must not load or publish")
+
+    monkeypatch.setattr(gmail_import, "run_pipeline_for_file", _unexpected)
+    monkeypatch.setattr(gmail_import, "publish_buyer_spend_range", _unexpected)
+    recorded: list[dict] = []
+    monkeypatch.setattr(
+        gmail_import,
+        "record_processed_message",
+        lambda message_id, **kwargs: recorded.append({"message_id": message_id, **kwargs}),
+    )
+    marked_read: list[str] = []
+    monkeypatch.setattr(
+        gmail_import, "mark_as_read", lambda _service, message_id: marked_read.append(message_id)
+    )
+
+    result = gmail_import.run_import(verbose=False, job_id="job-duplicate")
+
+    assert result["success"] is True
+    assert result["file_failure_count"] == 0
+    assert result["duplicate_downstream_skip_count"] == 1
+    assert result["duplicate_downstream_skips"] == [
+        {
+            "message_id": "m-duplicate",
+            "filename": csv_path.name,
+            "seat_id": "123",
+            "report_kind": "catscan-bidsinauction",
+            "rows_read": 557_102,
+            "rows_duplicate": 557_102,
+        }
+    ]
+    assert recorded[0]["status"] == "imported"
+    assert marked_read == ["m-duplicate"]
+    assert "Existing published data is unchanged" in capsys.readouterr().out
+    status = gmail_import.get_status()
+    assert status["last_duplicate_downstream_skip_count"] == 1
+    assert status["last_duplicate_downstream_skips"] == result[
+        "duplicate_downstream_skips"
+    ]

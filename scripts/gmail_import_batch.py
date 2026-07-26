@@ -44,7 +44,8 @@ from scripts.gmail_import import (
     canonical_report_kind_for_tracking,
     record_import_run,
     record_processed_message,
-    run_pipeline_for_file,
+    run_pipeline_after_import,
+    PipelineOutcome,
     SEAT_ID_ALLOWLIST,
     CATSCAN_DIR,
     LOGS_DIR,
@@ -232,9 +233,11 @@ def run_batch_import(
                     if imp.success:
                         log(f"  Imported: {imp.rows_imported} rows ({report_kind})")
                         session_imported += 1
-                        # Run pipeline
-                        pipeline_ok = run_pipeline_for_file(filepath, seat_id, verbose=False)
-                        if not pipeline_ok:
+                        # Run parquet/BQ only for files that contributed new PG rows.
+                        pipeline_outcome = run_pipeline_after_import(
+                            filepath, seat_id, imp, verbose=False
+                        )
+                        if pipeline_outcome is PipelineOutcome.FAILURE:
                             log(f"  Pipeline failed: {filepath.name}")
                             session_errors += 1
                             message_fully_processed = False

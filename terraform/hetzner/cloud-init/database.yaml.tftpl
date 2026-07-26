@@ -1,0 +1,54 @@
+#cloud-config
+hostname: ${hostname}
+manage_etc_hosts: true
+ssh_pwauth: false
+disable_root: true
+package_update: true
+package_upgrade: true
+
+users:
+  - default
+  - name: rtbcat
+    gecos: RTBcat database operator
+    groups: [adm, sudo]
+    lock_passwd: true
+    shell: /bin/bash
+    sudo: ["ALL=(ALL) NOPASSWD:ALL"]
+    ssh_authorized_keys:
+      - ${jsonencode(operator_ssh_public_key)}
+
+packages:
+  - ca-certificates
+  - curl
+  - fail2ban
+  - jq
+  - unattended-upgrades
+  - ufw
+  - xfsprogs
+
+write_files:
+  - path: /etc/sysctl.d/60-rtbcat-database.conf
+    permissions: "0644"
+    content: |
+      vm.swappiness = 1
+      net.ipv4.conf.all.accept_redirects = 0
+      net.ipv4.conf.default.accept_redirects = 0
+      net.ipv4.conf.all.send_redirects = 0
+      net.ipv4.conf.default.send_redirects = 0
+
+runcmd:
+  - [systemctl, enable, --now, fail2ban]
+  - [ufw, --force, reset]
+  - [ufw, default, deny, incoming]
+  - [ufw, default, allow, outgoing]
+%{ for cidr in ssh_source_cidrs ~}
+  - [ufw, allow, from, ${jsonencode(cidr)}, to, any, port, "22", proto, tcp]
+%{ endfor ~}
+  # Hetzner Cloud Firewalls do not filter private-network traffic. This host
+  # rule is the control that limits PostgreSQL to the app's fixed private IP.
+  - [ufw, allow, from, ${jsonencode(app_private_ip)}, to, any, port, "5432", proto, tcp]
+  - [ufw, allow, "41641/udp"]
+  - [ufw, --force, enable]
+  - [sysctl, --system]
+
+final_message: "RTBcat database host foundation is ready; PostgreSQL installation and restore are intentionally deferred."
