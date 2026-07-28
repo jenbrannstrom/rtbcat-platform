@@ -1,5 +1,63 @@
 # Handover
 
+## Workstation reboot checkpoint — July 28, 2026 (Track A/B checklist)
+
+Safe to reboot the operator workstation. Resume from this checklist; do not
+re-derive state from scratch.
+
+**Current state (all verified today):**
+
+- GCP production: `main` @ `10c45949` (health `sha-10c4594`), stable; all
+  three post-deploy proofs PASS July 27. Deploy run `30247640095`; pre-deploy
+  backup `1785138478528`.
+- Hetzner: loopback-only read-only shadow @ the same SHA. **Writable
+  activation is NOT authorized** — it needs its own CTO directive (B1 below).
+- `origin/main` = `20e385ad` (PR #113: July-27 production checkpoint merged
+  July 28). Local `main` in sync, worktree clean.
+- Local branches: `release/hetzner-shadow-guards-20260726` = phase artifact
+  (keep); `fix/uplivo-agent-currency` holds a private force-added commit —
+  **NEVER push it**.
+- Private evidence: `docs/internal/rtbcat-migration/` (mode 0600, never
+  commit). Post-deploy ops brief:
+  `docs/internal/rtbcat-migration/gcp-deploy-10c45949/postdeploy-proofs-brief-2026-07-27.md`.
+  ADT note draft (unsent):
+  `docs/internal/rtbcat-migration/gcp-deploy-10c45949/adt-note-draft-2026-07-28.md`.
+
+**Track A checklist (this week):**
+
+- [ ] **A1 — watch week through Fri Aug 1** (passive; alert → incident, no
+  self-remediation): watchdog `ok:false` beyond the two knowns (seat
+  `299038253` by-design; late non-spend kinds that arrive by 19:15) →
+  incident; any duplicate-batch alert → incident;
+  `duplicate_downstream_skip_count` should decay to ~0 by Wed — still
+  elevated Thu → investigate what is re-delivering; D-1 spend rows present
+  for active seats at 13:45; `/api/health` stays `sha-10c4594`; Friday: one
+  BQ multi-batch probe over July (expect zero) + watch-week summary.
+- [ ] **A2 — ADT note**: CTO draft saved (path above). Awaiting Jen sign-off.
+  **No send without explicit go.**
+- [ ] **A3 — BQ `_bak_` table drops**: blocked on ADT confirmation (A2).
+- [ ] **A4 — Cloud SQL backup break-glass**: CTO ruling = custom role with
+  only `cloudsql.backupRuns.create/get/list` + `cloudsql.instances.get`,
+  granted to `cat-scan@rtb.cat`. Write exact plan → CTO approval → execute →
+  prove with one create+list.
+- [ ] **A5 — Node-24 actions bump PR**: open as normal PR (checkout,
+  upload-artifact, google-github-actions to Node-24-ready versions). Known
+  dependency-audit reds carry the standing #112/#113 waiver.
+
+**Track B (each gate = its own CTO directive + explicit approval):**
+
+- [ ] **B1 — live writable rehearsal on Hetzner**: CTO directive pending
+  (next artifact). Execute nothing before it is issued.
+- [ ] **B2 — Cloud SQL logical decoding** (instance restart): explicitly NOT
+  this week (watch week).
+- [ ] **B3+ — subscriber replace → catch-up validation → cutover →
+  decommission**: sequenced in the July-28 next-steps plan; later.
+
+**Standing rules:** redaction grep before staging any handover/migration doc
+(patterns in the private checkpoint-2 record); no deploy or prod mutation
+without a directive; `docs/internal/` never committed; Hetzner shadow stays
+untouched pending B1.
+
 ## Next engineer resume — July 27, 2026, ~22:50 UTC (GCP production @ 10c45949)
 
 Read this section before running anything. The detailed, chronological evidence
