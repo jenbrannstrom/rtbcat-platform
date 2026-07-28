@@ -96,7 +96,7 @@ jobs:
           echo "Reason: ${{ github.event.inputs.reason }}"
 
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
@@ -430,7 +430,7 @@ jobs:
 
       - name: Upload contract check artifact
         if: ${{ always() && github.event.inputs.run_contract_check != 'false' && env.ARTIFACT_PATH != '' }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: contracts-${{ steps.vm.outputs.name }}-${{ github.sha }}
           path: ${{ env.ARTIFACT_PATH }}

@@ -42,7 +42,7 @@ jobs:
       CATSCAN_POSTGRES_DSN: ${{ secrets.CATSCAN_POSTGRES_DSN || secrets.POSTGRES_DSN }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Validate inputs
         shell: bash

@@ -85,7 +85,7 @@ jobs:
       CATSCAN_RUNTIME_HEALTH_CONVERSION_READINESS_WAIVER_JSON: ${{ vars.CATSCAN_RUNTIME_HEALTH_CONVERSION_READINESS_WAIVER_JSON }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Resolve smoke configuration
         id: config
@@ -232,7 +232,7 @@ jobs:
 
       - name: Upload smoke log
         if: always() && steps.config.outputs.should_run == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: live-major-smoke-log
           path: /tmp/live_major_smoke.log
