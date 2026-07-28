@@ -1,24 +1,148 @@
 # Handover
 
-## Next engineer resume — July 26, 2026, 17:01 SAST
+## Next engineer resume — July 27, 2026, ~22:50 UTC (GCP production @ 10c45949)
 
 Read this section before running anything. The detailed, chronological evidence
 follows below.
 
-Current authority and safety boundary:
+### GCP production checkpoint — deploy `main` @ `10c45949` accepted
+
+Production (`catscan-production-sg`, project `catscan-prod-202601`) is serving
+`main` @ `10c45949d08f671c69743e9fc557cb9956921487` (health `git_sha`
+`sha-10c4594`). Deployed 2026-07-27 morning via manual CD run `30247640095`
+(contract gate included). Pre-deploy Cloud SQL on-demand backup
+`1785138478528` SUCCESSFUL ~07:50 UTC. Migrations **070**
+(`gmail_processed_messages` ledger) and **071** (`buyer_seats.currency_code`,
+Tuky internet `8087233591` = EUR) applied at startup.
+
+**What is live on GCP production:**
+
+- parquet→BQ idempotency option A (100%-duplicate redelivery → raw export
+  discarded + inline publish skipped);
+- buyer currency contract (EUR seat returns EUR; legacy `spend_usd` null where
+  appropriate);
+- daily-spend completeness fields + unread-independent Gmail discovery via the
+  070 ledger;
+- D+1 missing-spend alerting;
+- scheduler ownership guards (all three `CATSCAN_ENABLE_*_SCHEDULER=true` in
+  the production container; `CATSCAN_READ_ONLY_SHADOW` absent).
+
+**Time-based proofs (2026-07-27):**
+
+| Proof | Result |
+|-------|--------|
+| 10:15 Gmail import | **PASS** — completed 12:44 UTC; 86 files; 49 duplicate-downstream skips; ledger 86 `imported`; MobYoung metric 07-26 present single-valued; Jul 1–20 continuity verified against baseline (exact values in private evidence only) |
+| 13:45 + 19:15 watchdog | **PASS** with known notes — no multi-batch; seat `299038253` spend-lane missing is known/by-design; a few non-spend report kinds late with spend-lane still ok on active seats |
+| 22:30 precompute | **PASS** — refresh began 22:30:01 UTC (home + config breakdowns for 07-26→07-27); **no 503 / no “Scheduler disabled”**; Cloud Scheduler reports status code 4 (DEADLINE_EXCEEDED) while work continues inside the API (retries visible) — flag path healthy |
+
+Private evidence (mode 0600, never commit):  
+`docs/internal/rtbcat-migration/gcp-deploy-10c45949/`.
+
+### Debt register (carry forward)
+
+1. **Cloud SQL backup break-glass** — human `gcloud sql backups create` 403 for
+   operator accounts; only `catscan-ci` has `cloudsql.editor`. Nearly cost the
+   pre-dispatch window. Document a Token Creator / break-glass path.
+2. **GitHub Actions Node.js 20 deprecation** annotations on deploy workflow
+   actions (Node 24 default cutoff risk).
+
+### Optional business follow-ups (not this phase)
+
+- Notify ADT that completeness fields + currency contract are live.
+- Document permanent −1.08% residual on metric 07-05.
+- Drop BQ `_bak_` tables once ADT confirms reconciliation.
+
+### Authority boundary (unchanged for Hetzner cutover)
+
+- Hetzner remains a loopback-only **read-only shadow**; shadow acceptance still
+  does **not** authorize writable activation.
+- No DNS, Cloud Scheduler *config*, or Cloud SQL flag changes were made in
+  this phase (jobs left as scheduled).
+- Do not redeploy or hot-patch from this checkpoint without a new phase
+  directive.
+
+Exact next action for migration work: still **writable activation blocked**
+until separate explicit approval. Production feature ship of `10c45949` is
+**closed**.
+
+## Previous resume — July 26, 2026, 21:42 SAST (Hetzner shadow)
+
+(Superseded for “what is on GCP production” by the July 27 checkpoint above;
+retained for Hetzner shadow chronology.)
+
+Current authority and safety boundary (Hetzner / migration):
 
 - the migration has **not** cut over;
 - Cloud SQL, GCP ingress, DNS and the three Cloud Scheduler jobs remain
   authoritative and unchanged;
-- the Hetzner application is still a loopback-only, read-only shadow with every
+- the Hetzner application is a loopback-only, **read-only shadow** with every
   scheduler flag false;
+- **shadow acceptance does not authorize writable activation** — that is a
+  separate phase with its own explicit approval;
 - no live writer activation, DNS change, scheduler change or Cloud SQL restart
   is authorized; and
-- the worktree is intentionally dirty. Preserve unrelated/user changes: do not
+- private evidence stays under `docs/internal/` mode 0600, never committed.
+
+### Accepted shadow release (this phase)
+
+- Immutable merge SHA on `main`: `10c45949d08f671c69743e9fc557cb9956921487`
+  (tree `9ff2ffae83decddc727d720384df780b202cb5a5`), PR #112 squash.
+- Manual GHCR run `30215441691` (85 deployment-critical tests including
+  scheduler/activation/shadow guards).
+- Digests on Hetzner:
+  - API `ghcr.io/jenbrannstrom/catscan-api@sha256:e046d1c355fb9a6436e85b9c18d43b91a7b57b365bb83798fa3494434574251f`
+  - Dashboard `ghcr.io/jenbrannstrom/catscan-dashboard@sha256:c4becb3191772f7f02a43aeb6400675f0abbc22bd30bb105534dfd75804943ce`
+- Prior accepted shadow still archived for rollback:
+  `332ec985084085edef714525d118f6c6ad2db8d4`.
+- Verification: digests match, API/dashboard on `127.0.0.1` only, **15/15**
+  GET contracts `200` with `X-CatScan-Shadow: read-only`, **2/2** mutations
+  `405`, all three scheduler flags `false`, Google access probes ok, rollback
+  list includes prior + new release.
+- One soak cycle vs GCP: **target_request_failures=0**,
+  **target_shadow_header_failures=0**, 15/15 target `200`+shadow header;
+  source had 2 request failures and expected snapshot drift (strict exit
+  nonzero is not a target regression).
+- Guardian note (auth): agent/API token GET may write `last_used_at`; soak ran
+  on the July 25 baseline auth pattern; "zero mutations" is qualified that
+  way. Production was not written as a soak target.
+
+Rollback under incident (compose var rename this release):
+
+```bash
+export RTBCAT_DB_AUTH_FILE=/etc/rtbcat/secrets/postgres-password
+# then rollback_app_release.sh to 332ec985… (artifacts under /var/lib/rtbcat/releases/)
+```
+
+Stage new releases **outside** `/var/lib/rtbcat/releases/` (e.g.
+`/root/releases/<sha>/`) so stray compose files never shadow archived
+checksums.
+
+Private evidence: `docs/internal/rtbcat-migration/shadow-release-2026-07/`.
+
+Exact next action: **writable activation remains blocked** until a separate
+explicit approval. Do not run `activate_writable_release.sh` live. Logical
+decoding, subscriber replacement, source writer freeze, DNS cutover, target
+writes and target schedulers retain their own later gates.
+
+## Previous resume — July 26, 2026, 17:01 SAST
+
+(Superseded by the 21:42 shadow-acceptance resume above for “what is running
+now”; retained for chronology.)
+
+Current authority and safety boundary at 17:01:
+
+- the migration had **not** cut over;
+- Cloud SQL, GCP ingress, DNS and the three Cloud Scheduler jobs remained
+  authoritative and unchanged;
+- the Hetzner application was still a loopback-only, read-only shadow with every
+  scheduler flag false;
+- no live writer activation, DNS change, scheduler change or Cloud SQL restart
+  was authorized; and
+- the worktree was intentionally dirty. Preserve unrelated/user changes: do not
   reset, clean, restore or broadly stage it, and do not force-add
   `docs/internal/`.
 
-Accepted gates:
+Accepted gates at 17:01:
 
 - encrypted pgBackRest backup/WAL archival uses the dedicated native-GCS
   repository in Singapore, not Johannesburg; two full backups, timers and a
@@ -42,15 +166,6 @@ Private evidence is under `docs/internal/rtbcat-migration/`, including:
 Keep that evidence mode 0600 and outside commits. The operating references are
 `docs/HETZNER_MIGRATION_NEXT_ENGINEER.md` and
 `docs/HETZNER_FINAL_SYNC_RUNBOOK.md`.
-
-Exact next action: review and preserve the current tree, then obtain explicit
-user approval before creating a scoped immutable commit, pushing it, running
-the manual GHCR build workflow, or deploying its digest-pinned release to
-Hetzner. The first deployment must remain a read-only shadow. Shadow acceptance
-still does not authorize writable activation; request separate approval for
-the live writable rehearsal. Logical-decoding restart, subscriber replacement,
-source writer freeze, DNS cutover, target writes and target schedulers retain
-their own later approval gates.
 
 ## Writable activation guard — check-only accepted — July 26, 2026, 16:54 SAST
 
@@ -926,8 +1041,13 @@ applies to all seats.
    language-market alerts, 207 `no content` analysis errors, broad geo alerts.
 5. Run a full Terraform plan with privileged credentials and review drift.
 6. Address the GitHub Actions Node.js 20 deprecation warnings before GitHub's
-   Node 24 default cutoff (June 16, 2026 per run annotations).
-7. Untracked local files not from this work: `manual/explainers/`,
+   Node 24 default cutoff (June 16, 2026 per run annotations). **Carried from
+   2026-07-27 production deploy close-out.**
+7. **Cloud SQL on-demand backup break-glass** — operator accounts cannot
+   `gcloud sql backups create` (403); only `catscan-ci` holds
+   `roles/cloudsql.editor`. Document Token Creator / break-glass before the
+   next production deploy that needs a pre-dispatch backup. **New 2026-07-27.**
+8. Untracked local files not from this work: `manual/explainers/`,
    `manual/index.md` (modified), and
    `.github/workflows/trigger-docs-freshness.yml` — review and commit or
    discard deliberately.
