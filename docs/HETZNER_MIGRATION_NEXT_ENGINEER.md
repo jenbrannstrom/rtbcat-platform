@@ -1,17 +1,20 @@
 # Hetzner migration — next engineer checkpoint
 
-Last updated: July 26, 2026
+Last updated: July 26, 2026 (shadow release `10c45949` accepted)
 
 ## Read this first
 
 The migration has **not cut over**. Cloud SQL, GCP application ingress, DNS and
 the three production Cloud Scheduler jobs remain authoritative and unchanged.
-The Hetzner application is still a loopback-only, read-only shadow with all
+The Hetzner application is a loopback-only, **read-only shadow** with all
 scheduler flags false.
 
-The local worktree is intentionally dirty and contains unrelated owner work.
-Do not reset, clean, restore or broadly stage it. Never force-add
-`docs/internal/` or Terraform variable/state material.
+**Shadow acceptance does not authorize writable activation.** Do not run
+`scripts/hetzner/activate_writable_release.sh` live without a separate explicit
+approval. That next phase has its own gates (source writer freeze, sequence
+sync, final reconciliation, evidence mode 0600, exact confirmation token).
+
+Never force-add `docs/internal/` or Terraform variable/state material.
 
 Primary operating documents:
 
@@ -23,6 +26,34 @@ Primary operating documents:
 5. `handover.md` — chronological engineering and incident context.
 6. Private exact inventory:
    `docs/internal/rtbcat-migration/GCP-FULL-MIGRATION-INVENTORY-CHECKLIST.md`.
+
+## July 26 immutable shadow release — accepted
+
+- **Accepted SHA:** `10c45949d08f671c69743e9fc557cb9956921487` (tree
+  `9ff2ffae83decddc727d720384df780b202cb5a5`), merged via PR #112.
+- **Prior rollback SHA:** `332ec985084085edef714525d118f6c6ad2db8d4` (artifacts
+  remain under `/var/lib/rtbcat/releases/`).
+- **GHCR run:** `30215441691` — digest-pinned API and dashboard images.
+- **Host posture:** API `127.0.0.1:8000`, dashboard `127.0.0.1:3000`;
+  `CATSCAN_READ_ONLY_SHADOW=true`; all three scheduler flags false; serving DB
+  is the Hetzner private rehearsal (`10.60.1.20` /
+  `rtbcat_serving_rehearsal`).
+- **Acceptance:** 15/15 GET contracts with `X-CatScan-Shadow: read-only`, 2/2
+  mutation probes `405`, Google access probes ok, one soak cycle with
+  **zero target request failures** and **zero target shadow-header failures**.
+- **Rollback note:** this release renames the compose password bind env to
+  `RTBCAT_POSTGRES_PASSWORD_FILE`. Rolling back to `332ec985…` through tooling
+  that still renders the old compose requires:
+
+  ```bash
+  export RTBCAT_DB_AUTH_FILE=/etc/rtbcat/secrets/postgres-password
+  ```
+
+- **Staging rule:** place new release env/compose under
+  `/root/releases/<sha>/` (not a loose file in `/var/lib/rtbcat/releases/`) so
+  archived per-SHA compose checksums stay authoritative.
+- Private evidence:
+  `docs/internal/rtbcat-migration/shadow-release-2026-07/`.
 
 ## July 26 backup gate — accepted
 
