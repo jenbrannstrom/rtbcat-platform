@@ -1,64 +1,112 @@
 # Handover
 
-## Workstation reboot checkpoint — July 28, 2026 (Track A/B checklist)
+## Next engineer resume — July 28, 2026, ~08:35 UTC (urgent workstation reboot)
 
-Safe to reboot the operator workstation. Resume from this checklist; do not
-re-derive state from scratch.
+**Safe to reboot this PC.** Resume here. Do not re-derive production state from
+scratch.
 
-**Current state (all verified today):**
+### Snapshot (verified ~08:23–08:35 UTC)
 
-- GCP production: `main` @ `10c45949` (health `sha-10c4594`), stable; all
-  three post-deploy proofs PASS July 27. Deploy run `30247640095`; pre-deploy
-  backup `1785138478528`.
-- Hetzner: loopback-only read-only shadow @ the same SHA. **Writable
-  activation is NOT authorized** — it needs its own CTO directive (B1 below).
-- `origin/main` = `20e385ad` (PR #113: July-27 production checkpoint merged
-  July 28). Local `main` in sync, worktree clean.
-- Local branches: `release/hetzner-shadow-guards-20260726` = phase artifact
-  (keep); `fix/uplivo-agent-currency` holds a private force-added commit —
-  **NEVER push it**.
-- Private evidence: `docs/internal/rtbcat-migration/` (mode 0600, never
-  commit). Post-deploy ops brief:
-  `docs/internal/rtbcat-migration/gcp-deploy-10c45949/postdeploy-proofs-brief-2026-07-27.md`.
-  ADT note draft (unsent):
-  `docs/internal/rtbcat-migration/gcp-deploy-10c45949/adt-note-draft-2026-07-28.md`.
+| Item | Value |
+|------|--------|
+| GCP production | healthy `git_sha` **`sha-10c4594`** (`main` image **`10c45949`**) |
+| Production host | `catscan-production-sg` / project `catscan-prod-202601` / zone `asia-southeast1-b` |
+| `origin/main` (docs tip) | **`f2070069`** — PR #115 reboot checklist; prior **`20e385ad`** PR #113 production checkpoint |
+| App SHA serving traffic | still **`10c45949`** (do **not** redeploy without a new directive) |
+| Hetzner | loopback **read-only shadow** @ same app SHA; **writable activation NOT authorized** |
+| Deploy run that shipped 10c45949 | `30247640095` |
+| Pre-deploy Cloud SQL backup | `1785138478528` SUCCESSFUL |
+| Migrations live | 070 ledger + 071 currency |
 
-**Track A checklist (this week):**
+### Exact next actions (priority order)
 
-- [ ] **A1 — watch week through Fri Aug 1** (passive; alert → incident, no
-  self-remediation): watchdog `ok:false` beyond the two knowns (seat
-  `299038253` by-design; late non-spend kinds that arrive by 19:15) →
-  incident; any duplicate-batch alert → incident;
-  `duplicate_downstream_skip_count` should decay to ~0 by Wed — still
-  elevated Thu → investigate what is re-delivering; D-1 spend rows present
-  for active seats at 13:45; `/api/health` stays `sha-10c4594`; Friday: one
-  BQ multi-batch probe over July (expect zero) + watch-week summary.
-- [ ] **A2 — ADT note**: CTO draft saved (path above). Awaiting Jen sign-off.
-  **No send without explicit go.**
-- [ ] **A3 — BQ `_bak_` table drops**: blocked on ADT confirmation (A2).
-- [ ] **A4 — Cloud SQL backup break-glass**: CTO ruling = custom role with
-  only `cloudsql.backupRuns.create/get/list` + `cloudsql.instances.get`,
-  granted to `cat-scan@rtb.cat`. Write exact plan → CTO approval → execute →
-  prove with one create+list.
-- [ ] **A5 — Node-24 actions bump PR**: open as normal PR (checkout,
-  upload-artifact, google-github-actions to Node-24-ready versions). Known
-  dependency-audit reds carry the standing #112/#113 waiver.
+1. **After reboot — reauth if needed**  
+   `gcloud auth login --account=cat-scan@rtb.cat`  
+   (IAP SSH and A1 checks require it. Last good reauth was morning Jul 28.)
 
-**Track B (each gate = its own CTO directive + explicit approval):**
+2. **A1 watch week (already armed — keep it running through ~Fri Aug 1)**  
+   - Checker:  
+     `docs/internal/rtbcat-migration/gcp-deploy-10c45949/a1-watch-check.sh`  
+   - Criteria:  
+     `…/a1-watch-week-criteria.md`  
+   - Artifacts:  
+     `…/a1-checks/check-*.txt`  
+   - Scheduled task: durable **every 4h** (Grok scheduler id `019fa7b99abb` —
+     re-create if lost after reboot).  
+   - Manual smoke after reauth:  
+     `bash docs/internal/rtbcat-migration/gcp-deploy-10c45949/a1-watch-check.sh`  
+     Expect `A1_RESULT=CLEAN` outside incident criteria.  
+   - **Last CLEAN run:** `20260728T082330Z` — health ok, `skip_count=0`,
+     watchdog only knowns (299038253 + late non-spend kinds), D-1 check
+     deferred until ≥13:45 UTC.  
+   - **Incident = report to CTO, no self-remediation / no redeploy:**  
+     unknown watchdog `ok:false`; **any** duplicate-batch alert;  
+     `duplicate_downstream_skip_count` still elevated **Thu+** (expect ~0 by
+     Wed); D-1 spend missing for active seats **at 13:45+ checks**; health
+     leaves `10c4594`.  
+   - **Friday close-out:** BQ multi-batch probe over July (expect zero) +
+     watch-week summary.
 
-- [ ] **B1 — live writable rehearsal on Hetzner**: CTO directive pending
-  (next artifact). Execute nothing before it is issued.
-- [ ] **B2 — Cloud SQL logical decoding** (instance restart): explicitly NOT
-  this week (watch week).
-- [ ] **B3+ — subscriber replace → catch-up validation → cutover →
-  decommission**: sequenced in the July-28 next-steps plan; later.
+3. **A2 ADT note — draft only, unsent**  
+   Paths (same content family):  
+   - `docs/internal/rtbcat-migration/gcp-deploy-10c45949/adt-daily-spend-notification-draft.md`  
+   - `docs/internal/rtbcat-migration/gcp-deploy-10c45949/adt-note-draft-2026-07-28.md`  
+   **No send without Jen’s explicit go.**
 
-**Standing rules:** redaction grep before staging any handover/migration doc
-(patterns in the private checkpoint-2 record); no deploy or prod mutation
-without a directive; `docs/internal/` never committed; Hetzner shadow stays
-untouched pending B1.
+4. **A3 BQ `_bak_` drops** — **blocked** on ADT confirmation (A2).  
+   Tables (when approved): `rtb_daily_dupbatch_0705x6_bak_20260721` + the two
+   July 13/14 `_bak_` tables. One approved session, counts before/after.
 
-## Next engineer resume — July 27, 2026, ~22:50 UTC (GCP production @ 10c45949)
+5. **A4 Cloud SQL backup break-glass — plan ready, not executed**  
+   Plan:  
+   `docs/internal/rtbcat-migration/gcp-deploy-10c45949/a4-cloudsql-backup-role-plan.md`  
+   Custom role `catscanCloudSqlBackupOperator`  
+   (`backupRuns.create/get/list` + `instances.get`) → `cat-scan@rtb.cat`.  
+   **Execute only after CTO “approve A4”** then prove one create+list.
+
+6. **A5 Node-24 actions PR — open**  
+   **https://github.com/jenbrannstrom/rtbcat-platform/pull/114**  
+   Branch `chore/node24-actions-ready`.  
+   Bumps `checkout` v4→v5, `upload-artifact` v4→v5, `setup-node` v4→v5.  
+   Standing dependency-audit waiver applies if those reds gate merge.
+
+7. **B1 live writable Hetzner rehearsal** — **CTO directive not issued yet**.  
+   Execute nothing. **B2+ (logical decoding restart, etc.) not this week**
+   (watch week).
+
+### Private evidence (mode 0600 — never force-add / commit)
+
+`docs/internal/rtbcat-migration/gcp-deploy-10c45949/` including:
+
+- `postdeploy-proofs-brief-2026-07-27.md`  
+- `proof1-*`, `proof1-and-2-*`, `proof3-*`, `watchdog-2026-07-27-1915.txt`  
+- `phase-close-2026-07-27.json`  
+- A1/A2/A4 files above  
+
+### Standing rules
+
+- Redaction grep before staging tracked docs (8 patterns; zero hits required;
+  never paste spend totals into tracked docs).  
+- Nothing serves that isn’t a pushed sha-tagged image — no hot-patch / `docker cp`.  
+- Hetzner shadow stays untouched until B1 directive.  
+- Local branch note: `fix/uplivo-agent-currency` may hold a private force-added
+  commit — **never push it**.
+
+### SSH (production, read-mostly)
+
+```bash
+gcloud compute ssh catscan-production-sg \
+  --project=catscan-prod-202601 --zone=asia-southeast1-b \
+  --account=cat-scan@rtb.cat --tunnel-through-iap
+```
+
+Inside API container: `sudo docker exec catscan-api …`  
+Async DB: `python3 -c "import asyncio; from storage.postgres_database import pg_query; … asyncio.run(...)"`  
+Avoid single quotes in SQL through SSH (`make_date` / `::bigint`).
+
+---
+
+## Previous resume — July 27, 2026, ~22:50 UTC (GCP production @ 10c45949)
 
 Read this section before running anything. The detailed, chronological evidence
 follows below.
