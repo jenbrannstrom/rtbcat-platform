@@ -1,13 +1,14 @@
 # Hetzner migration — next engineer checkpoint
 
-Last updated: July 29, 2026 (B1 bounded live writable rehearsal accepted)
+Last updated: July 29, 2026 (temporary public-path acceptance complete)
 
 ## Read this first
 
 The migration has **not cut over**. Cloud SQL, GCP application ingress, DNS and
 the three production Cloud Scheduler jobs remain authoritative and unchanged.
-The Hetzner application is a loopback-only, **read-only shadow** with all
-scheduler flags false.
+The Hetzner application remains a **read-only shadow** with its application and
+OAuth listeners on loopback and all scheduler flags false. Only the guarded
+Nginx temporary-host path is public, restricted to the operator `/32`.
 
 **Shadow acceptance does not authorize writable activation.** Do not run
 `scripts/hetzner/activate_writable_release.sh` live without a separate explicit
@@ -48,6 +49,35 @@ Private mode-0600 evidence:
 
 GCP, Cloud SQL, DNS and source scheduler ownership were unchanged. B1 does not
 authorize the final activation command or any B2+ action.
+
+## July 29 temporary public-path gate — accepted
+
+`scan-hetzner.rtb.cat` is a DNS-only Cloudflare `A` record to the stable
+Hetzner app IPv4. Nginx 1.24 serves a valid Let's Encrypt certificate and
+allows HTTPS only from loopback and the current operator `/32`; a request from
+the Hetzner database host returned 403. Production `scan.rtb.cat` still resolves
+to GCP.
+
+The temporary host returns healthy release `10c45949`, Google as its only
+read-only-host login provider, and 405 for each of the three scheduled POST
+endpoints. API/dashboard/OAuth listeners remain loopback-only, shadow mode is
+true, the database is `rtbcat_serving_rehearsal` and all scheduler flags are
+false. OAuth2 Proxy 7.6.0 uses the same valid client as the running GCP service.
+The temporary callback was additively registered while preserving
+`https://scan.rtb.cat/oauth2/callback`; a real browser Google login succeeded
+and `/api/auth/me` returned 200.
+
+The API trusts OAuth identity only from loopback plus the exact discovered
+Docker gateway, currently `172.18.0.1`. Password login is hidden on this
+read-only rehearsal because it creates database session/audit rows; restore it
+only with the separately approved writable activation. GCP has the same
+loopback-only OAuth trust issue and the operator reports Google never worked
+there; this gate did not change production.
+
+The guarded paths are `scripts/hetzner/manage_temp_public_ingress.sh`,
+`scripts/hetzner/install_temp_google_oauth_proxy.sh` and
+`scripts/hetzner/rehearse_temp_google_login.sh`. Do not edit production DNS or
+start B2.
 
 ## July 26 immutable shadow release — accepted
 

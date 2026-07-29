@@ -1,5 +1,40 @@
 # Handover
 
+## Temporary public-path acceptance complete — July 29, 2026
+
+The DNS-only Cloudflare `A` record `scan-hetzner.rtb.cat` now resolves only to
+the stable Hetzner app IPv4. Nginx 1.24 serves a valid Let's Encrypt certificate
+and restricts HTTPS to loopback plus the operator `/32`; an independent request
+from the Hetzner database host returned 403. Production `scan.rtb.cat` still
+resolves to GCP.
+
+The temporary path returns healthy release `10c45949` and routes OAuth through
+a hardened OAuth2 Proxy 7.6.0 listener on `127.0.0.1:4180`. The initial
+secret-store client was stale and deleted; it was replaced through an
+encrypted, non-persistent stream from the live GCP OAuth configuration.
+`https://scan-hetzner.rtb.cat/oauth2/callback` was additively registered on the
+existing Web OAuth client without removing the production callback. A real
+browser login as the existing RTBcat account succeeded at 10:34 UTC, and
+subsequent `/api/auth/me` requests returned 200.
+
+The first browser attempt exposed that the API trusted only loopback even
+though host-published Docker traffic arrives from gateway `172.18.0.1`.
+Temporary Compose now discovers and trusts that exact gateway in addition to
+loopback; it does not trust a broad Docker/private CIDR. Password login is
+hidden only on this read-only rehearsal because creating a password session
+writes session/audit rows. It remains unchanged on production and returns when
+the Hetzner database is activated writable. The production GCP Google flow has
+the same loopback-only trust setting and the operator reports it never worked;
+production was not changed during this gate.
+
+The API/dashboard remain on loopback, `CATSCAN_READ_ONLY_SHADOW=true`, the
+database remains `rtbcat_serving_rehearsal`, and all three scheduler flags are
+false. All three scheduled POST endpoints returned 405. The repo guards are
+`scripts/hetzner/manage_temp_public_ingress.sh`,
+`scripts/hetzner/install_temp_google_oauth_proxy.sh` and
+`scripts/hetzner/rehearse_temp_google_login.sh`. GCP, Cloud SQL, production
+writers and source schedulers are unchanged.
+
 ## B1 accepted — July 29, 2026, 08:11 UTC
 
 The separately approved B1 boundary is complete. The accepted immutable

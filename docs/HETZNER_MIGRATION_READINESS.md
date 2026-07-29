@@ -116,6 +116,20 @@ database then returned to verified read-only shadow posture. Fresh encrypted
 differential backups bracketed the rehearsal, and GCP, Cloud SQL, DNS and
 source scheduler ownership were unchanged.
 
+The temporary public path is active at `scan-hetzner.rtb.cat`. Its DNS-only
+Cloudflare record resolves only to the Hetzner app IPv4; Nginx serves a valid
+Let's Encrypt certificate and restricts HTTPS to loopback plus the operator
+`/32`. A second Hetzner host received 403. Health, provider discovery and all
+three read-only scheduler refusals passed while the API/dashboard/OAuth
+listeners remained loopback-only, shadow mode remained true and every target
+scheduler remained false. Google OAuth routing uses the current live production
+client, and its temporary callback was additively registered without removing
+the production callback. A real browser Google login completed and
+`/api/auth/me` returned 200. The API trusts only loopback plus its exact Docker
+gateway for injected OAuth identity. Password login is intentionally hidden
+while the rehearsal database remains read-only because password sessions write
+database state. The production hostname is unchanged.
+
 On July 25, `scripts/catscan_api_read_only_soak.py` began the paired
 application soak. The one-cycle baseline completed all 15 Hetzner GETs with
 zero missing read-only shadow headers. GCP returned HTTP 500 on the 90-day RTB

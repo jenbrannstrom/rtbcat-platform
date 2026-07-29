@@ -320,6 +320,12 @@ are in
 
 - Lower DNS TTL in advance and preflight TLS, OAuth redirect behavior, agent
   consumers, egress allowlists and health checks.
+- Validate the public path first on a DNS-only temporary Hetzner hostname. Keep
+  it operator-restricted, read-only and scheduler-disabled; seal it again
+  before the production cutover window. The temporary record does not replace
+  the final production-hostname switch. Public TLS, routing, provider parity
+  and read-only scheduler refusal passed on July 29; the temporary callback was
+  additively registered and real browser Google sign-in passed.
 - Enable Cloud SQL logical decoding in a separately approved restart window.
   Replace the July 22 target with a fresh schema-matched logical subscriber,
   allow the initial copy to finish and continuously catch up while GCP remains

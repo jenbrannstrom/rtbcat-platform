@@ -105,6 +105,11 @@ Before requesting the final window:
 - target backups include this fresh database and a restore is proven;
 - the immutable writable release and a scheduler-disabled activation have been
   rehearsed;
+- the temporary Hetzner-only hostname has passed public TLS, reverse-proxy and
+  representative read-only checks while restricted to approved operators, with
+  every target scheduler still disabled; the temporary callback was additively
+  registered and a real interactive Google sign-in plus `/api/auth/me`
+  succeeded;
 - DNS TTL, TLS, OAuth callbacks, API clients and rollback ownership are signed
   off; and
 - a named operator and verifier are assigned to every approval gate.
@@ -186,19 +191,22 @@ No target write is allowed if any convergence or validation check differs.
 
 These are separately approved mutations:
 
-1. Start the immutable Hetzner release writable with all three scheduler flags
+1. Seal the temporary hostname before opening the production cutover window.
+   Preserve its TLS/public-path acceptance evidence, but do not treat the
+   temporary record as production routing.
+2. Start the immutable Hetzner release writable with all three scheduler flags
    still false by using `scripts/hetzner/activate_writable_release.sh` and the
    accepted final-sync evidence. The activation command does not change DNS;
    retain its mode-0600 receipt and validate health privately.
-2. Switch DNS and verify TLS, OAuth, dashboard, API health and representative
+3. Switch DNS and verify TLS, OAuth, dashboard, API health and representative
    reads from public paths.
-3. Keep GCP API/writers stopped. Enable the three scheduler endpoint flags on
+4. Keep GCP API/writers stopped. Enable the three scheduler endpoint flags on
    exactly one Hetzner API deployment, then resume the existing three Cloud
    Scheduler jobs as the sole phase-one trigger set. Do not install a parallel
    Hetzner timer set for the same work.
-4. Run one controlled import/refresh cycle and verify PostgreSQL, BigQuery/GCS
+5. Run one controlled import/refresh cycle and verify PostgreSQL, BigQuery/GCS
    idempotency, finance-facing aggregates and delivery monitoring.
-5. Keep Cloud SQL frozen and intact as the rollback snapshot.
+6. Keep Cloud SQL frozen and intact as the rollback snapshot.
 
 ## Rollback boundary
 
