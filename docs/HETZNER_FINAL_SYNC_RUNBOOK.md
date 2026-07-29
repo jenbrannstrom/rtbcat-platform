@@ -2,10 +2,12 @@
 
 Last updated: July 29, 2026
 
-Status: **B3a source login/publication accepted; target replacement and later
-phases are not authorized for execution**. This runbook does not authorize
+Status: **B3b target replacement accepted; schema restore, subscription and
+later phases are not authorized for execution**. The stale July rehearsal
+database has been removed, the shadow application is stopped and the empty
+`rtbcat_serving` cutover database remains. This runbook does not authorize
 repeating the Cloud SQL restart or source setup, creating an idle slot,
-replacing the July 22 rehearsal database, a writer freeze, DNS changes or
+restoring schema, creating a subscription, a writer freeze, DNS changes or
 target writes.
 
 ## Synchronization decision
@@ -62,8 +64,12 @@ Do not start the initial copy until all of these are accepted:
    commit `553c6127`, the explicit 98-table publication checksum
    `c2af91c3598c914e5c2493532e81adb8` and zero-slot state. Do not repeat source
    setup or create a slot until the subscriber can consume immediately.
-6. Explicit approval to preserve the accepted rehearsal evidence and replace
-   the July 22 database. The target Volume cannot hold both full databases.
+6. Target replacement accepted as B3b on July 29. The July dump passed its
+   complete checksum verification, a final encrypted differential backup
+   `20260726-113211F_20260729-144851D` completed, the shadow application was
+   stopped and the 438,948,781,415-byte rehearsal database was removed. The
+   empty `rtbcat_serving` database remains and the target Volume has about
+   785 GB free. Preserve the private B3b receipt.
 7. A separately approved cutover window covering writer freeze, final
    reconciliation, `.catscan` delta, DNS and writer activation.
 
@@ -81,9 +87,12 @@ This phase does not move production authority.
    `rtbcat_migration_pub`. It contains the accepted 98 tables explicitly and
    excludes `agent_private`; do not repeat setup or broaden it to
    `FOR ALL TABLES`.
-5. Stop the Hetzner shadow app. Preserve the July 22 validation records and
-   checksummed dump, then—in a separately approved destructive action—replace
-   the rehearsal database with an empty cutover database on the same Volume.
+5. Completed as B3b July 29: the Hetzner API/dashboard and temporary OAuth
+   service are stopped; the July validation records and checksum-verified dump
+   remain on protected storage; final differential backup
+   `20260726-113211F_20260729-144851D` protects the pre-drop state; and only
+   stale database `rtbcat_serving_rehearsal` was removed. Empty cutover
+   database `rtbcat_serving` remains on the same Volume.
 6. Restore schema only, including the exact extensions, collation, generated
    expressions, owners and grants needed at cutover. Validate the expected
    schemas, 98 tables, 38 sequences and zero invalid indexes before copying

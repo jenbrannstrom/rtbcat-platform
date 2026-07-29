@@ -33,8 +33,11 @@ The reviewable, part-by-part execution plan is tracked in
 [`HETZNER_MIGRATION_PLAN.md`](HETZNER_MIGRATION_PLAN.md). Its July 25 execution
 checkpoint is the authoritative resume order for the next engineer. Part 1 has
 a local Terraform implementation under `terraform/hetzner/` and is now
-provisioned in the isolated RTBcat Hetzner project. The read-only rehearsal copy
-exists, but production authority, DNS and writer state have not changed.
+provisioned in the isolated RTBcat Hetzner project. The accepted read-only
+rehearsal evidence remains protected, but B3b stopped the shadow and removed
+the stale rehearsal database to make room for the fresh logical subscriber.
+Empty `rtbcat_serving` remains. Production authority, DNS and writer state have
+not changed.
 The concise resume checkpoint is
 [`HETZNER_MIGRATION_NEXT_ENGINEER.md`](HETZNER_MIGRATION_NEXT_ENGINEER.md).
 

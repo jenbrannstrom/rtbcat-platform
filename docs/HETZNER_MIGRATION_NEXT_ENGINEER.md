@@ -1,14 +1,15 @@
 # Hetzner migration — next engineer checkpoint
 
-Last updated: July 29, 2026 (B3a source role/publication accepted)
+Last updated: July 29, 2026 (B3b target replacement accepted)
 
 ## Read this first
 
 The migration has **not cut over**. Cloud SQL, GCP application ingress, DNS and
 the three production Cloud Scheduler jobs remain authoritative and unchanged.
-The Hetzner application remains a **read-only shadow** with its application and
-OAuth listeners on loopback and all scheduler flags false. Only the guarded
-Nginx temporary-host path is public, restricted to the operator `/32`.
+After accepted B3b, the Hetzner API/dashboard containers and temporary OAuth
+service are stopped. Nginx still terminates the guarded temporary hostname but
+returns HTTP 502 because the shadow is deliberately sealed. The deployed
+artifact still defaults to read-only mode with all scheduler flags false.
 
 **Shadow acceptance does not authorize writable activation.** Do not run
 `scripts/hetzner/activate_writable_release.sh` live without a separate explicit
@@ -27,6 +28,26 @@ Primary operating documents:
 5. `handover.md` — chronological engineering and incident context.
 6. Private exact inventory:
    `docs/internal/rtbcat-migration/GCP-FULL-MIGRATION-INVENTORY-CHECKLIST.md`.
+
+## July 29 B3b target replacement — accepted
+
+The owner explicitly approved preserving the rehearsal evidence, stopping the
+shadow and replacing only stale database `rtbcat_serving_rehearsal`. Before the
+drop, every July dump checksum passed again, the pgBackRest repository check
+passed, the database had zero active sessions and final encrypted differential
+backup `20260726-113211F_20260729-144851D` completed.
+
+The guarded preflight resolved exactly one 438,948,781,415-byte rehearsal
+database, exactly one empty `rtbcat_serving` database and zero user tables in
+the latter. Only the rehearsal database was dropped. PostgreSQL 15.17,
+checksums, WAL archiving and the protected dump Volume remain healthy; the
+database Volume now has about 785 GB free. GCP production health and
+`scan.rtb.cat` DNS were unchanged. The private execution receipt is
+`docs/internal/rtbcat-migration/B3B-TARGET-REPLACEMENT-2026-07-29.md`.
+
+The next gate is schema-only restore plus subscription/slot creation and
+monitored initial copy. It requires separate approval. Do not start it from the
+B3b approval.
 
 ## July 29 B3a source role and publication — accepted
 
@@ -49,10 +70,10 @@ before auto-growth. Create the slot only as part of subscriber creation when
 the target is ready to consume immediately. Production health, schedulers, DNS
 and both application postures remained unchanged.
 
-The next phase is separately destructive: preserve the July 22 evidence, stop
-the shadow, replace `rtbcat_serving_rehearsal`, restore the exact empty schema,
-start the subscriber and monitor source WAL/target copy. It is not authorized
-by B3a.
+The separately approved B3b phase later preserved the July evidence, stopped
+the shadow and removed `rtbcat_serving_rehearsal`. Restoring the exact empty
+schema, starting the subscriber and monitoring source WAL/target copy remain a
+separate gate.
 
 ## July 29 B2 Cloud SQL logical decoding — accepted
 
@@ -247,8 +268,8 @@ snapshot. The safe plan is:
 4. Preserve the accepted B3a source role/publication and zero-slot state; do
    not create the slot before a ready subscriber.
 5. Preserve the accepted July 22 evidence and dump.
-6. Under separate destructive approval, replace the old rehearsal database
-   with an empty schema-matched logical subscriber.
+6. Preserve accepted B3b: the old rehearsal database is gone and empty
+   `rtbcat_serving` remains. Do not recreate the stale rehearsal database.
 7. Let the initial copy and continuous logical catch-up finish while GCP
    remains authoritative.
 8. In the approved cutover window, freeze every source writer, wait past the
@@ -340,8 +361,7 @@ gates.
    checksum and the root-only target credential; do not repeat source setup.
 8. Preserve the measured autovacuum WAL burst and Cloud SQL disk-headroom
    evidence. Do not create a slot until the subscriber can consume immediately.
-9. Request separate approvals for:
-   - stopping the shadow and replacing the July 22 rehearsal DB;
+9. Preserve accepted B3b and request separate approvals for:
    - schema-only restore plus subscription/slot creation and monitored copy;
    - writer freeze and final `.catscan` delta;
    - subscription/slot finalization at the caught-up LSN;
@@ -360,7 +380,8 @@ backup chain; do not describe Cloud SQL as a current backup.
 
 - Do not change DNS or enable a target scheduler during preparation.
 - Do not repeat the accepted Cloud SQL restart.
-- Do not drop `rtbcat_serving_rehearsal` without explicit destructive approval.
+- Do not recreate or restore `rtbcat_serving_rehearsal`; preserve the accepted
+  B3b receipt and use empty `rtbcat_serving` for the fresh subscriber.
 - Do not leave an unused logical slot retaining unbounded WAL.
 - Do not run both GCP and Hetzner application writers.
 - Do not install parallel systemd triggers for the three existing Cloud
