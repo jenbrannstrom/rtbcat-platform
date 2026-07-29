@@ -134,6 +134,27 @@ The deployment is accepted only when:
 - all scheduler ownership flags remain false; and
 - retained Google services are reachable from the target identity.
 
+## Bounded live writable rehearsal (B1)
+
+This target-only rehearsal is distinct from final activation. It is restricted
+to `rtbcat_serving_rehearsal`, keeps the release loopback-only, keeps every
+scheduler false, arms a 15-minute read-only restoration deadman, verifies that
+all scheduled endpoints refuse execution, performs a rollback-only database
+write probe and restores both application and database read-only posture:
+
+```bash
+sudo scripts/hetzner/rehearse_live_writable_release.sh \
+  --release-file /var/lib/rtbcat/releases/current.env \
+  --json-out /secure/evidence/b1-writable-rehearsal.json \
+  --confirm REHEARSE_LIVE_WRITABLE_SCHEDULERS_OFF_NO_DNS
+```
+
+Bracket B1 with target differential backups. Writable startup can apply
+pending migrations and maintenance changes to the stale rehearsal database;
+record those separately from the rollback-only probe. B1 never authorizes DNS,
+GCP, source-writer, Cloud SQL or scheduler changes and always returns the
+target to shadow mode.
+
 ## Initial writable activation (approval-gated)
 
 The same checksum-matched Compose artifact defaults to shadow mode. A separate

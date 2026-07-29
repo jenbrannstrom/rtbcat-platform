@@ -1,6 +1,6 @@
 # Hetzner migration readiness
 
-Last updated: July 26, 2026
+Last updated: July 29, 2026
 
 ## Decision
 
@@ -107,6 +107,14 @@ returned 200 in 0.054 seconds. Deployment acceptance also passed exact image
 revision, PostgreSQL TLS, Secret Manager, BigQuery, GCS, scheduler guards and
 loopback-only listener checks. DNS, production writers and production
 schedulers remain unchanged.
+
+On July 29, the separately approved B1 boundary briefly ran the accepted
+release in private writable mode against the stale rehearsal database with all
+three schedulers disabled. Each scheduled endpoint refused with HTTP 503; a
+real database probe write rolled back with no residue. The application and
+database then returned to verified read-only shadow posture. Fresh encrypted
+differential backups bracketed the rehearsal, and GCP, Cloud SQL, DNS and
+source scheduler ownership were unchanged.
 
 On July 25, `scripts/catscan_api_read_only_soak.py` began the paired
 application soak. The one-cycle baseline completed all 15 Hetzner GETs with
@@ -220,11 +228,11 @@ That cleanup saves about USD 17/month independently of the migration.
 - Cloud SQL logical decoding is off and enabling it requires a separately
   approved restart. A fresh logical subscriber, WAL/slot monitoring and
   source-to-target catch-up rehearsal are not yet complete.
-- The current immutable target deployment remains shadow-only. Guarded
-  scheduler-disabled writable activation is implemented and its check-only
-  Compose/evidence rehearsal passes, but the changed release is not yet
-  reviewed, published, deployed as a shadow or live-rehearsed. Single-owner
-  scheduler enable remains a later approval gate.
+- The current immutable target deployment has returned to shadow-only after
+  the accepted bounded B1 live writable rehearsal. Final synchronized
+  activation still requires source freeze, logical catch-up, exact sequence
+  state, reconciliation and backup evidence. Single-owner scheduler enable
+  remains a later approval gate.
 - The private-finance schema owner is traced to the separate ADT finance
   controller. Its active runtime uses local SQLite plus read-only RTBcat HTTP,
   not Cloud SQL, but the dormant owner login must still be recreated on target

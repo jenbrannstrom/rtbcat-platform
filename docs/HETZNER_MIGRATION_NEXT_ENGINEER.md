@@ -1,6 +1,6 @@
 # Hetzner migration — next engineer checkpoint
 
-Last updated: July 26, 2026 (shadow release `10c45949` accepted)
+Last updated: July 29, 2026 (B1 bounded live writable rehearsal accepted)
 
 ## Read this first
 
@@ -26,6 +26,28 @@ Primary operating documents:
 5. `handover.md` — chronological engineering and incident context.
 6. Private exact inventory:
    `docs/internal/rtbcat-migration/GCP-FULL-MIGRATION-INVENTORY-CHECKLIST.md`.
+
+## July 29 B1 bounded live writable rehearsal — accepted
+
+The accepted `10c45949` release ran briefly in writable mode against the stale
+Hetzner rehearsal database while API/dashboard remained loopback-only and all
+three scheduler flags remained false. All scheduled endpoints refused with
+HTTP 503. A real database write was inserted in a transaction, rolled back and
+proved residue-free. The application and database were then restored to
+read-only shadow posture and verified.
+
+The first attempt safely restored after an immediate post-Compose verifier
+connection reset. That startup applied the expected migrations 070 and 071 to
+the rehearsal database. Verifier retries were added to the bounded operator
+path, 28 focused tests passed and the controlled retry was accepted. Fresh
+encrypted differential backups completed immediately before and after B1; WAL
+archival still has zero failures.
+
+Private mode-0600 evidence:
+`docs/internal/rtbcat-migration/b1-live-writable-rehearsal-2026-07-29/`.
+
+GCP, Cloud SQL, DNS and source scheduler ownership were unchanged. B1 does not
+authorize the final activation command or any B2+ action.
 
 ## July 26 immutable shadow release — accepted
 
@@ -201,13 +223,17 @@ target and still set it `NOLOGIN` during freeze.
   `git diff --check` pass.
 
 The checksum-matched Compose artifact still defaults to read-only shadow mode.
-Local `activate_writable_release.sh` engineering and its check-only rehearsal
-are accepted: it requires final-sync evidence, renders writable mode with every
-scheduler false, retains loopback listeners and restores shadow mode after a
-failed live verification. The new Compose/tooling and scheduler guards have
-not been published or deployed. A new immutable release must be reviewed,
-published and deployed as a shadow before a separately approved live writable
-rehearsal.
+`activate_writable_release.sh` remains the final-sync-only command: it requires
+source freeze, subscriber catch-up, exact sequence state, reconciliation and
+backup evidence. Release `10c45949`, including its scheduler guards and
+activation tooling, is published and deployed as the accepted shadow.
+
+The bounded B1 path is implemented separately in
+`scripts/hetzner/rehearse_live_writable_release.sh`. It is restricted to the
+stale rehearsal database, arms a 15-minute restoration deadman, performs only
+a rollback-only probe and always returns the database and application to
+read-only shadow posture. B1 acceptance does not weaken the final activation
+gates.
 
 ## Exact resume order
 
@@ -228,11 +254,11 @@ rehearsal.
    database have been removed.
 5. Preserve the accepted private sequence-sync rehearsal evidence; do not
    repeat it without a new reason.
-6. Preserve the accepted check-only writable-activation evidence.
-7. Under explicit publication/deployment approval, review and publish the
-   scheduler guards plus activation tooling in a new immutable release, deploy
-   it as a shadow, and then request separate live writable-rehearsal approval.
-8. Measure source WAL generation and set explicit slot/disk alarm and abort
+6. Preserve the accepted B1 evidence and both pre/post differential backups.
+7. Review and source-control the bounded B1 operator script and its focused
+   tests; do not confuse it with final activation.
+8. Complete the A1 production watch week, then measure source WAL generation
+   and set explicit slot/disk alarm and abort
    thresholds.
 9. Request separate approvals for:
    - Cloud SQL logical-decoding restart;

@@ -1,6 +1,6 @@
 # Hetzner final database synchronization and cutover runbook
 
-Last updated: July 25, 2026
+Last updated: July 29, 2026
 
 Status: **planned, not authorized for execution**. This runbook does not
 authorize a Cloud SQL restart, replacement of the July 22 rehearsal database,
@@ -45,10 +45,11 @@ Do not start the initial copy until all of these are accepted:
 1. Independent encrypted target WAL backup, PITR and clean-host restore proof
    (accepted July 26; preserve the private pgBackRest execution evidence).
 2. A reviewed immutable application release containing the enforced scheduler
-   endpoint guards, plus a rehearsed production activation path. Local
-   writable/all-schedulers-off rendering and refusal guards pass, but the
-   changed immutable release is not yet published, shadow-deployed or
-   live-rehearsed.
+   endpoint guards, plus a rehearsed production activation path (accepted B1
+   July 29). Release `10c45949` passed a bounded private writable rehearsal:
+   all scheduler endpoints refused, a rollback-only database write left no
+   residue, and the app/database returned to read-only shadow posture. Preserve
+   its private receipts and pre/post differential backups.
 3. Current source schema and migration state frozen and reproduced on the empty
    subscriber. No DDL may change from schema capture through cutover unless it
    is applied to the subscriber first and separately verified.

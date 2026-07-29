@@ -51,6 +51,7 @@ jobs:
             tests/test_scheduler_guard.py \
             tests/test_precompute_scheduler_guard.py \
             tests/test_creative_cache_router.py \
+            tests/test_live_writable_rehearsal_guards.py \
             tests/test_writable_activation_guards.py \
             -q
 
