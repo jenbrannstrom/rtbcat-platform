@@ -17,8 +17,10 @@ clean-host PITR rehearsal are complete. Production authority, DNS and writers
 are unchanged. The separately approved B1 bounded live writable rehearsal is
 also accepted; the target returned to read-only shadow mode afterward. The
 separately approved B2 Cloud SQL restart is also accepted:
-`cloudsql.logical_decoding=on` and PostgreSQL reports `wal_level=logical`, with
-no publication or slot created.
+`cloudsql.logical_decoding=on` and PostgreSQL reports `wal_level=logical`.
+B3a is accepted as well: restricted login `rtbcat_migration_repl` and explicit
+98-table publication `rtbcat_migration_pub` exist, while the slot count remains
+zero until a ready subscriber can consume it immediately.
 
 Current target state:
 
@@ -168,9 +170,10 @@ USD 261.01 after removing 400 GB. The API reported USD billing and zero VAT.
 10. Follow `docs/HETZNER_FINAL_SYNC_RUNBOOK.md`. The July 22 database cannot be
     incrementally caught up because no logical slot retained its missing WAL;
     prepare a fresh logical-replication initial copy and continuous catch-up.
-    Preserve accepted B2 and do not repeat the Cloud SQL restart. Do not create
-    a publication/slot/login, replace the rehearsal DB, freeze writers, change
-    DNS or enable target writes without their separate approvals.
+    Preserve accepted B2/B3a and do not repeat the Cloud SQL restart or source
+    role/publication setup. Do not create an idle slot, replace the rehearsal
+    DB, freeze writers, change DNS or enable target writes without their
+    separate approvals.
 
 Do not replace the full rehearsal with a sample. The roughly 420 GiB database
 moves server-to-server from Cloud SQL to the Hetzner database host; the laptop

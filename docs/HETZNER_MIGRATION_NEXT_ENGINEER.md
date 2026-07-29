@@ -1,6 +1,6 @@
 # Hetzner migration — next engineer checkpoint
 
-Last updated: July 29, 2026 (B2 logical decoding accepted)
+Last updated: July 29, 2026 (B3a source role/publication accepted)
 
 ## Read this first
 
@@ -28,6 +28,32 @@ Primary operating documents:
 6. Private exact inventory:
    `docs/internal/rtbcat-migration/GCP-FULL-MIGRATION-INVENTORY-CHECKLIST.md`.
 
+## July 29 B3a source role and publication — accepted
+
+Guarded source setup commit `553c6127` passed 111 deployment-critical tests and
+its exact copy ran against Cloud SQL. Login `rtbcat_migration_repl` has
+`LOGIN`/`REPLICATION`, database connect, both schema usage grants and SELECT on
+exactly 98 accepted tables. It is not a superuser, `cloudsqlsuperuser` member,
+role/database creator or RLS bypasser.
+
+Publication `rtbcat_migration_pub` explicitly contains the 84 `public` and 14
+`financial_viability` tables, excludes the single `agent_private` table and is
+not `FOR ALL TABLES`. Its ordered table-name checksum is
+`c2af91c3598c914e5c2493532e81adb8`. The transaction-scoped finance-owner grant
+was revoked before commit. The credential is root-only on the Hetzner app host
+and a real login verified all 98 SELECT grants.
+
+There is deliberately **no slot yet**. A live autovacuum produced roughly
+640 MB of WAL in 30 seconds while Cloud Monitoring showed about 45 GB free
+before auto-growth. Create the slot only as part of subscriber creation when
+the target is ready to consume immediately. Production health, schedulers, DNS
+and both application postures remained unchanged.
+
+The next phase is separately destructive: preserve the July 22 evidence, stop
+the shadow, replace `rtbcat_serving_rehearsal`, restore the exact empty schema,
+start the subscriber and monitor source WAL/target copy. It is not authorized
+by B3a.
+
 ## July 29 B2 Cloud SQL logical decoding — accepted
 
 After an active production Gmail import completed, on-demand backup
@@ -41,13 +67,14 @@ replication workers.
 Six consecutive GCP database-backed health checks passed after recovery, Gmail
 import was idle, the three Cloud Scheduler jobs remained enabled on
 `scan.rtb.cat`, and both DNS records remained unchanged. No publication,
-replication slot or replication login was created. The existing
+replication slot or replication login was created during B2. The existing
 `billing@amazingdo.com` Editor identity performed the backup and patch after the
 read-only `cat-scan@rtb.cat` attempt was denied; no IAM binding changed.
 
-**Do not repeat B2.** Its acceptance does not authorize publication/slot/login
-creation, replacement of `rtbcat_serving_rehearsal`, subscription initial copy,
-writer freeze, DNS or target writer/scheduler activation.
+**Do not repeat B2.** The later B3a checkpoint created the bounded login and
+publication, but not a slot. Neither checkpoint authorizes replacement of
+`rtbcat_serving_rehearsal`, subscription initial copy, writer freeze, DNS or
+target writer/scheduler activation.
 
 ## July 29 B1 bounded live writable rehearsal — accepted
 
@@ -208,23 +235,26 @@ Private acceptance evidence:
 
 Do not attempt an ad hoc delta from `rtbcat_serving_rehearsal`.
 
-Cloud SQL now has `cloudsql.logical_decoding=on`, but it still has no
-publication or retained migration slot. A slot created now cannot reproduce
-changes since the July 22 snapshot. The safe plan is:
+Cloud SQL now has `cloudsql.logical_decoding=on` plus the accepted B3a
+restricted login and explicit publication, but it still has no retained
+migration slot. A slot created now cannot reproduce changes since the July 22
+snapshot. The safe plan is:
 
 1. Preserve the accepted independent Hetzner backup/PITR evidence.
 2. Freeze DDL.
 3. Preserve the accepted July 29 B2 logical-decoding/restart evidence; do not
    repeat the restart.
-4. Preserve the accepted July 22 evidence and dump.
-5. Under separate destructive approval, replace the old rehearsal database
+4. Preserve the accepted B3a source role/publication and zero-slot state; do
+   not create the slot before a ready subscriber.
+5. Preserve the accepted July 22 evidence and dump.
+6. Under separate destructive approval, replace the old rehearsal database
    with an empty schema-matched logical subscriber.
-6. Let the initial copy and continuous logical catch-up finish while GCP
+7. Let the initial copy and continuous logical catch-up finish while GCP
    remains authoritative.
-7. In the approved cutover window, freeze every source writer, wait past the
+8. In the approved cutover window, freeze every source writer, wait past the
    captured source LSN, synchronize all sequence state, run the final
    non-credential `.catscan` delta and reconcile.
-8. Switch DNS, start one writable Hetzner deployment, and enable one scheduler
+9. Switch DNS, start one writable Hetzner deployment, and enable one scheduler
    owner only.
 
 The target contains 98 ordinary tables, all with primary keys, 38 sequences and
@@ -306,16 +336,15 @@ gates.
 5. Preserve the accepted private sequence-sync rehearsal evidence; do not
    repeat it without a new reason.
 6. Preserve the accepted B1 evidence and both pre/post differential backups.
-7. Review and source-control the bounded B1 operator script and its focused
-   tests; do not confuse it with final activation.
-8. Complete the A1 production watch week, then measure source WAL generation
-   and set explicit slot/disk alarm and abort
-   thresholds.
+7. Preserve pushed B3a setup commit `553c6127`, the exact 98-table publication
+   checksum and the root-only target credential; do not repeat source setup.
+8. Preserve the measured autovacuum WAL burst and Cloud SQL disk-headroom
+   evidence. Do not create a slot until the subscriber can consume immediately.
 9. Request separate approvals for:
-   - source publication/replication role/slot creation;
    - stopping the shadow and replacing the July 22 rehearsal DB;
+   - schema-only restore plus subscription/slot creation and monitored copy;
    - writer freeze and final `.catscan` delta;
-   - subscription/slot finalization;
+   - subscription/slot finalization at the caught-up LSN;
    - DNS;
    - first target write and scheduler enablement.
 10. Execute the final-sync runbook exactly; do not combine approval gates.

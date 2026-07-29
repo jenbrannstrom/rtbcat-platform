@@ -137,6 +137,20 @@ PostgreSQL reports `wal_level=logical`, six consecutive database-backed health
 checks passed, and scheduler ownership plus both DNS records were unchanged.
 No publication, replication slot or replication login was created.
 
+Later on July 29, approved B3a used guarded source setup commit `553c6127` to
+create restricted login `rtbcat_migration_repl` and explicit publication
+`rtbcat_migration_pub`. The login can connect and SELECT exactly the accepted
+98 tables but has no superuser, `cloudsqlsuperuser`, role/database-creation or
+RLS-bypass authority. The publication excludes `agent_private`, is not
+`FOR ALL TABLES` and has ordered table-name checksum
+`c2af91c3598c914e5c2493532e81adb8`. The transaction-scoped finance-owner grant
+was revoked before commit.
+
+No slot was created. A production autovacuum advanced WAL by about 640 MB over
+30 seconds, and Cloud Monitoring showed about 45 GB free before automatic disk
+growth. The subscriber must therefore create and immediately consume the slot;
+do not retain WAL while the old target database is still present.
+
 On July 25, `scripts/catscan_api_read_only_soak.py` began the paired
 application soak. The one-cycle baseline completed all 15 Hetzner GETs with
 zero missing read-only shadow headers. GCP returned HTTP 500 on the 90-day RTB
@@ -153,8 +167,10 @@ behavior but was not a controlled same-build provider benchmark.
 The harness and evidence format are documented in
 [`CATSCAN_API_READ_ONLY_SOAK.md`](CATSCAN_API_READ_ONLY_SOAK.md).
 
-The July 25 final-sync audit found that Cloud SQL has no logical-decoding flag,
-publication or retained migration slot. The July 22 rehearsal database
+The July 25 final-sync audit found that Cloud SQL then had no logical-decoding
+flag, publication or retained migration slot. B2 and B3a have since enabled
+logical decoding and created the source login/publication, but there is still
+no retained slot. The July 22 rehearsal database
 therefore cannot be retroactively caught up: it must be preserved as evidence
 and replaced by a fresh schema-matched logical subscriber, which can take an
 online initial copy and then continuously catch up. All 98 target tables have
@@ -247,9 +263,9 @@ That cleanup saves about USD 17/month independently of the migration.
   warehouse. Target read access is proven; ownership and one-time cutover of
   every writer/scheduler still need an explicit manifest.
 - Cloud SQL logical decoding is on after accepted B2 and PostgreSQL reports
-  `wal_level=logical`. A fresh logical subscriber, WAL/slot monitoring and
-  source-to-target catch-up rehearsal are not yet complete; no publication or
-  slot exists yet.
+  `wal_level=logical`. B3a added the restricted login and explicit 98-table
+  publication. A fresh logical subscriber, active slot monitoring and
+  source-to-target catch-up rehearsal are not yet complete; no slot exists yet.
 - The current immutable target deployment has returned to shadow-only after
   the accepted bounded B1 live writable rehearsal. Final synchronized
   activation still requires source freeze, logical catch-up, exact sequence

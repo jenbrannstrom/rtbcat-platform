@@ -2,10 +2,11 @@
 
 Last updated: July 29, 2026
 
-Status: **B2 logical decoding accepted; remaining phases are planned and not
-authorized for execution**. This runbook does not authorize repeating the
-Cloud SQL restart, creating a publication/slot/login, replacing the July 22
-rehearsal database, a writer freeze, DNS changes or target writes.
+Status: **B3a source login/publication accepted; target replacement and later
+phases are not authorized for execution**. This runbook does not authorize
+repeating the Cloud SQL restart or source setup, creating an idle slot,
+replacing the July 22 rehearsal database, a writer freeze, DNS changes or
+target writes.
 
 ## Synchronization decision
 
@@ -57,9 +58,13 @@ Do not start the initial copy until all of these are accepted:
 4. Cloud SQL logical-decoding restart accepted July 29 as B2. Preserve backup
    `1785323946722` and update operation
    `708af4fa-da73-4f34-8fa4-5dd400000031`; do not repeat it.
-5. Explicit approval to preserve the accepted rehearsal evidence and replace
+5. Source login/publication accepted July 29 as B3a. Preserve guarded setup
+   commit `553c6127`, the explicit 98-table publication checksum
+   `c2af91c3598c914e5c2493532e81adb8` and zero-slot state. Do not repeat source
+   setup or create a slot until the subscriber can consume immediately.
+6. Explicit approval to preserve the accepted rehearsal evidence and replace
    the July 22 database. The target Volume cannot hold both full databases.
-6. A separately approved cutover window covering writer freeze, final
+7. A separately approved cutover window covering writer freeze, final
    reconciliation, `.catscan` delta, DNS and writer activation.
 
 ## Phase A — create the continuously catching-up database
@@ -72,9 +77,10 @@ This phase does not move production authority.
 3. Preserve the accepted B2 state: `cloudsql.logical_decoding=on`,
    `wal_level=logical`, 10 slots, 10 WAL senders and 4 logical workers. The
    restart completed and production recovery passed; do not repeat it.
-4. Create a dedicated least-privilege replication login and an explicit
-   publication containing the accepted 98 tables. Do not use `FOR ALL TABLES`;
-   additions must remain deliberate.
+4. Preserve the accepted B3a login `rtbcat_migration_repl` and publication
+   `rtbcat_migration_pub`. It contains the accepted 98 tables explicitly and
+   excludes `agent_private`; do not repeat setup or broaden it to
+   `FOR ALL TABLES`.
 5. Stop the Hetzner shadow app. Preserve the July 22 validation records and
    checksummed dump, then—in a separately approved destructive action—replace
    the rehearsal database with an empty cutover database on the same Volume.
@@ -83,7 +89,8 @@ This phase does not move production authority.
    schemas, 98 tables, 38 sequences and zero invalid indexes before copying
    data.
 7. Run a long-lived, loopback-only Cloud SQL Auth Proxy on the database host.
-   Create one subscription with `copy_data=true`. The target app must remain
+   Create one subscription with `copy_data=true`, allowing it to create and
+   immediately consume the single migration slot. The target app must remain
    stopped and have no writable database credentials during this copy.
 8. Monitor until all subscription-table states are `ready`. Continue monitoring
    source retained WAL, source disk/autoresize, subscriber conflicts, target

@@ -44,9 +44,11 @@ Production cutover is later and separately approved:
 4. Repoint the app DSN and resume writers on Hetzner.
 5. Keep Cloud SQL read-only through soak. Do not delete it at cutover.
 
-Native logical replication is not enabled by these scripts because it changes
-the live Cloud SQL instance settings and requires a restart, publication/slot
-design, sequence handling and a separately approved rollback boundary.
+Native logical replication remains approval-gated. The guarded source helper
+can create only the restricted login and explicit publication after logical
+decoding is already enabled; it deliberately does not create a slot. Target
+replacement, subscriber creation, sequence handling and the rollback boundary
+remain separate actions.
 
 ## Order of operations
 
@@ -240,7 +242,33 @@ shrunk, which is why dump capacity is temporary rather than permanent.
 This first restore is deliberately as-is. The partitioned `rtb_daily` Path A
 and zero-difference financial/data validation remain Part 4 acceptance work.
 
-### 7. Compare and transfer frozen sequence state
+### 7. Prepare the logical-replication source
+
+Run the read-only preflight from an environment with the live source DSN:
+
+```bash
+scripts/hetzner/setup_source_logical_replication.py
+```
+
+It requires exactly 84 `public` plus 14 `financial_viability` tables, primary
+keys on all 98, no RLS, one excluded `agent_private` table, logical WAL and zero
+existing slots. Applying requires a password on stdin and both explicit gates:
+
+```bash
+secret_command \
+  | scripts/hetzner/setup_source_logical_replication.py \
+      --apply \
+      --confirm CREATE_SOURCE_REPLICATION \
+      --password-stdin
+```
+
+The helper creates fixed role `rtbcat_migration_repl` and fixed publication
+`rtbcat_migration_pub`. It grants SELECT on the explicit 98-table list, never
+uses `FOR ALL TABLES`, and revokes the temporary finance-owner membership
+before committing. It creates no slot. Let a ready subscriber create and
+immediately consume the slot so an idle migration cannot retain unbounded WAL.
+
+### 8. Compare and transfer frozen sequence state
 
 Native logical replication does not copy sequence counters. The final-sync
 runbook therefore uses a separate guarded helper after source writers are

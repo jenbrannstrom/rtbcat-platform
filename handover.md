@@ -1,5 +1,40 @@
 # Handover
 
+## B3a source replication objects accepted — July 29, 2026
+
+The owner directed the next migration step after B2. Guarded source tooling was
+committed and pushed as `553c6127`, then its exact SHA-256-matched copy ran
+against Cloud SQL. The deployment-critical suite passed 111 tests.
+
+Accepted source state:
+
+- login `rtbcat_migration_repl` has `LOGIN` and `REPLICATION`, but is not a
+  superuser, `cloudsqlsuperuser` member, role/database creator or RLS bypasser;
+- the login has database connect, usage on `public` and
+  `financial_viability`, and SELECT on exactly 98 accepted tables;
+- publication `rtbcat_migration_pub` explicitly contains those 98 tables,
+  is not `FOR ALL TABLES`, publishes insert/update/delete/truncate, and has
+  ordered table-name checksum `c2af91c3598c914e5c2493532e81adb8`;
+- the one `agent_private` table is excluded;
+- the temporary finance-owner membership existed only inside the creation
+  transaction and was revoked before commit;
+- the credential is escrowed root-only on the Hetzner application host; it was
+  streamed for creation and login verification without being printed; and
+- Cloud SQL still has zero replication slots. Production, DNS, all three Cloud
+  Scheduler jobs and both GCP/Hetzner application postures remain unchanged.
+
+An active `rtb_daily` autovacuum advanced WAL by about 640 MB in a 30-second
+sample. Cloud Monitoring showed approximately 469.4 GB used of 514.3 GB before
+auto-growth, while `pg_ls_waldir()` later reported about 1.49 GB of current WAL.
+An unattached slot could therefore retain WAL dangerously quickly. The slot
+must be created by the subscriber only when it is ready to consume immediately.
+
+**Next authority boundary:** preserve the July 22 evidence, stop the Hetzner
+shadow, replace the stale rehearsal database, restore the exact empty schema
+and start the monitored subscriber. This is destructive and remains separately
+approval-gated. Do not create an idle slot, freeze source writers, change DNS
+or enable target writers/schedulers.
+
 ## B2 Cloud SQL logical decoding accepted — July 29, 2026, 11:23 UTC
 
 The owner explicitly approved immediate B2 execution, overriding the earlier
@@ -25,16 +60,17 @@ Accepted evidence:
 - all three Cloud Scheduler jobs remained enabled against `scan.rtb.cat`;
   production and temporary DNS continued to resolve to their original GCP and
   Hetzner IPv4 addresses; and
-- zero publications and zero replication slots exist after B2.
+- zero publications and zero replication slots existed immediately after B2.
 
 The first backup attempt under read-only `cat-scan@rtb.cat` was denied without
 creating anything. The successful backup and patch used the existing
 `billing@amazingdo.com` Editor binding; no IAM grant or active-account default
 was changed.
 
-**Next authority boundary:** B2 does not authorize a replication login,
-publication, slot, target rehearsal-database replacement, subscriber, writer
-freeze, DNS change or target writer/scheduler.
+This section predates the separately accepted B3a source-role/publication
+checkpoint above. B2 by itself did not authorize those objects or any target
+rehearsal-database replacement, subscriber, writer freeze, DNS change or target
+writer/scheduler.
 
 ## Temporary public-path acceptance complete — July 29, 2026
 
