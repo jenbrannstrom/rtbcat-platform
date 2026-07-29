@@ -55,6 +55,7 @@ jobs:
             tests/test_temp_google_oauth_proxy_guards.py \
             tests/test_temp_google_login_rehearsal_guards.py \
             tests/test_temp_public_ingress_guards.py \
+            tests/test_source_logical_replication_setup.py \
             tests/test_writable_activation_guards.py \
             -q
 
