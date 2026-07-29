@@ -15,7 +15,10 @@ running. The database restore, application-data copy, reconciliations, six-hour
 API soak, immutable A→B→A application rollback, encrypted backup/WAL chain and
 clean-host PITR rehearsal are complete. Production authority, DNS and writers
 are unchanged. The separately approved B1 bounded live writable rehearsal is
-also accepted; the target returned to read-only shadow mode afterward.
+also accepted; the target returned to read-only shadow mode afterward. The
+separately approved B2 Cloud SQL restart is also accepted:
+`cloudsql.logical_decoding=on` and PostgreSQL reports `wal_level=logical`, with
+no publication or slot created.
 
 Current target state:
 
@@ -165,7 +168,8 @@ USD 261.01 after removing 400 GB. The API reported USD billing and zero VAT.
 10. Follow `docs/HETZNER_FINAL_SYNC_RUNBOOK.md`. The July 22 database cannot be
     incrementally caught up because no logical slot retained its missing WAL;
     prepare a fresh logical-replication initial copy and continuous catch-up.
-    Do not restart Cloud SQL, replace the rehearsal DB, freeze writers, change
+    Preserve accepted B2 and do not repeat the Cloud SQL restart. Do not create
+    a publication/slot/login, replace the rehearsal DB, freeze writers, change
     DNS or enable target writes without their separate approvals.
 
 Do not replace the full rehearsal with a sample. The roughly 420 GiB database
@@ -326,8 +330,8 @@ are in
   the final production-hostname switch. Public TLS, routing, provider parity
   and read-only scheduler refusal passed on July 29; the temporary callback was
   additively registered and real browser Google sign-in passed.
-- Enable Cloud SQL logical decoding in a separately approved restart window.
-  Replace the July 22 target with a fresh schema-matched logical subscriber,
+- Preserve the accepted B2 logical-decoding state. Under separate approvals,
+  replace the July 22 target with a fresh schema-matched logical subscriber,
   allow the initial copy to finish and continuously catch up while GCP remains
   authoritative.
 - Freeze writers, confirm quiescence, wait for the subscriber to pass the

@@ -130,6 +130,13 @@ gateway for injected OAuth identity. Password login is intentionally hidden
 while the rehearsal database remains read-only because password sessions write
 database state. The production hostname is unchanged.
 
+On July 29, approved B2 completed after the active Gmail import became idle.
+On-demand backup `1785323946722` succeeded, and the single-flag Cloud SQL
+update set `cloudsql.logical_decoding=on`. The instance returned `RUNNABLE`,
+PostgreSQL reports `wal_level=logical`, six consecutive database-backed health
+checks passed, and scheduler ownership plus both DNS records were unchanged.
+No publication, replication slot or replication login was created.
+
 On July 25, `scripts/catscan_api_read_only_soak.py` began the paired
 application soak. The one-cycle baseline completed all 15 Hetzner GETs with
 zero missing read-only shadow headers. GCP returned HTTP 500 on the 90-day RTB
@@ -239,9 +246,10 @@ That cleanup saves about USD 17/month independently of the migration.
 - The live analytics lane still writes to object storage and reads/writes the
   warehouse. Target read access is proven; ownership and one-time cutover of
   every writer/scheduler still need an explicit manifest.
-- Cloud SQL logical decoding is off and enabling it requires a separately
-  approved restart. A fresh logical subscriber, WAL/slot monitoring and
-  source-to-target catch-up rehearsal are not yet complete.
+- Cloud SQL logical decoding is on after accepted B2 and PostgreSQL reports
+  `wal_level=logical`. A fresh logical subscriber, WAL/slot monitoring and
+  source-to-target catch-up rehearsal are not yet complete; no publication or
+  slot exists yet.
 - The current immutable target deployment has returned to shadow-only after
   the accepted bounded B1 live writable rehearsal. Final synchronized
   activation still requires source freeze, logical catch-up, exact sequence

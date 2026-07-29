@@ -1,6 +1,6 @@
 # Hetzner migration — next engineer checkpoint
 
-Last updated: July 29, 2026 (temporary public-path acceptance complete)
+Last updated: July 29, 2026 (B2 logical decoding accepted)
 
 ## Read this first
 
@@ -27,6 +27,27 @@ Primary operating documents:
 5. `handover.md` — chronological engineering and incident context.
 6. Private exact inventory:
    `docs/internal/rtbcat-migration/GCP-FULL-MIGRATION-INVENTORY-CHECKLIST.md`.
+
+## July 29 B2 Cloud SQL logical decoding — accepted
+
+After an active production Gmail import completed, on-demand backup
+`1785323946722` succeeded. Cloud SQL update operation
+`708af4fa-da73-4f34-8fa4-5dd400000031` then set only
+`cloudsql.logical_decoding=on` and completed in 31.5 seconds. The instance is
+`RUNNABLE`, PITR remains enabled with seven-day log retention, and PostgreSQL
+reports `wal_level=logical`, 10 replication slots, 10 WAL senders and 4 logical
+replication workers.
+
+Six consecutive GCP database-backed health checks passed after recovery, Gmail
+import was idle, the three Cloud Scheduler jobs remained enabled on
+`scan.rtb.cat`, and both DNS records remained unchanged. No publication,
+replication slot or replication login was created. The existing
+`billing@amazingdo.com` Editor identity performed the backup and patch after the
+read-only `cat-scan@rtb.cat` attempt was denied; no IAM binding changed.
+
+**Do not repeat B2.** Its acceptance does not authorize publication/slot/login
+creation, replacement of `rtbcat_serving_rehearsal`, subscription initial copy,
+writer freeze, DNS or target writer/scheduler activation.
 
 ## July 29 B1 bounded live writable rehearsal — accepted
 
@@ -77,7 +98,7 @@ there; this gate did not change production.
 The guarded paths are `scripts/hetzner/manage_temp_public_ingress.sh`,
 `scripts/hetzner/install_temp_google_oauth_proxy.sh` and
 `scripts/hetzner/rehearse_temp_google_login.sh`. Do not edit production DNS or
-start B2.
+treat the temporary record as a production cutover.
 
 ## July 26 immutable shadow release — accepted
 
@@ -187,14 +208,14 @@ Private acceptance evidence:
 
 Do not attempt an ad hoc delta from `rtbcat_serving_rehearsal`.
 
-Cloud SQL has no logical-decoding flag, publication or retained migration slot.
-A slot created now cannot reproduce changes since the July 22 snapshot. The
-safe plan is:
+Cloud SQL now has `cloudsql.logical_decoding=on`, but it still has no
+publication or retained migration slot. A slot created now cannot reproduce
+changes since the July 22 snapshot. The safe plan is:
 
 1. Preserve the accepted independent Hetzner backup/PITR evidence.
 2. Freeze DDL.
-3. In an approved maintenance window, enable Cloud SQL logical decoding. This
-   restarts the instance.
+3. Preserve the accepted July 29 B2 logical-decoding/restart evidence; do not
+   repeat the restart.
 4. Preserve the accepted July 22 evidence and dump.
 5. Under separate destructive approval, replace the old rehearsal database
    with an empty schema-matched logical subscriber.
@@ -291,7 +312,6 @@ gates.
    and set explicit slot/disk alarm and abort
    thresholds.
 9. Request separate approvals for:
-   - Cloud SQL logical-decoding restart;
    - source publication/replication role/slot creation;
    - stopping the shadow and replacing the July 22 rehearsal DB;
    - writer freeze and final `.catscan` delta;
@@ -310,7 +330,7 @@ backup chain; do not describe Cloud SQL as a current backup.
 ## Do not do these
 
 - Do not change DNS or enable a target scheduler during preparation.
-- Do not restart Cloud SQL merely to “get ready” without an approved window.
+- Do not repeat the accepted Cloud SQL restart.
 - Do not drop `rtbcat_serving_rehearsal` without explicit destructive approval.
 - Do not leave an unused logical slot retaining unbounded WAL.
 - Do not run both GCP and Hetzner application writers.

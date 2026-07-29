@@ -1,5 +1,41 @@
 # Handover
 
+## B2 Cloud SQL logical decoding accepted — July 29, 2026, 11:23 UTC
+
+The owner explicitly approved immediate B2 execution, overriding the earlier
+August 1 watch hold. Preflight found a live Gmail import, so no maintenance
+started until its real worker completed and released the production lock.
+
+Accepted evidence:
+
+- on-demand Cloud SQL backup `1785323946722` completed successfully from
+  11:19:06 through 11:22:09 UTC;
+- update operation `708af4fa-da73-4f34-8fa4-5dd400000031` set exactly
+  `cloudsql.logical_decoding=on` and completed from 11:22:53 through
+  11:23:25 UTC;
+- the zonal PostgreSQL 15 instance returned `RUNNABLE`, PITR remained enabled
+  with seven-day transaction-log retention, and PostgreSQL reported
+  `wal_level=logical`;
+- current capacity is 10 replication slots, 10 WAL senders and 4 logical
+  replication workers; no additional capacity flag was needed for the planned
+  single subscription;
+- six consecutive database-backed production health checks passed on release
+  `sha-10c4594`; the GCP API container remained healthy and Gmail import
+  returned idle;
+- all three Cloud Scheduler jobs remained enabled against `scan.rtb.cat`;
+  production and temporary DNS continued to resolve to their original GCP and
+  Hetzner IPv4 addresses; and
+- zero publications and zero replication slots exist after B2.
+
+The first backup attempt under read-only `cat-scan@rtb.cat` was denied without
+creating anything. The successful backup and patch used the existing
+`billing@amazingdo.com` Editor binding; no IAM grant or active-account default
+was changed.
+
+**Next authority boundary:** B2 does not authorize a replication login,
+publication, slot, target rehearsal-database replacement, subscriber, writer
+freeze, DNS change or target writer/scheduler.
+
 ## Temporary public-path acceptance complete — July 29, 2026
 
 The DNS-only Cloudflare `A` record `scan-hetzner.rtb.cat` now resolves only to
@@ -70,10 +106,9 @@ path was then hardened with verifier retries, its focused 28-test set passed,
 and the controlled retry was accepted. The independent 15-minute deadman was
 cancelled only after verified restoration.
 
-**Next authority boundary:** B2 Cloud SQL logical-decoding flag/restart remains
-not authorized and remains outside the watch week. B1 acceptance does not
-authorize subscriber replacement, source writer freeze, DNS, scheduler
-ownership changes or final writable activation.
+This section predates the separately accepted B2 maintenance recorded above.
+B1 by itself did not authorize B2 or any subscriber replacement, source writer
+freeze, DNS, scheduler ownership change or final writable activation.
 
 ---
 

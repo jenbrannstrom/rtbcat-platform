@@ -2,9 +2,10 @@
 
 Last updated: July 29, 2026
 
-Status: **planned, not authorized for execution**. This runbook does not
-authorize a Cloud SQL restart, replacement of the July 22 rehearsal database,
-a writer freeze, DNS changes or target writes.
+Status: **B2 logical decoding accepted; remaining phases are planned and not
+authorized for execution**. This runbook does not authorize repeating the
+Cloud SQL restart, creating a publication/slot/login, replacing the July 22
+rehearsal database, a writer freeze, DNS changes or target writes.
 
 ## Synchronization decision
 
@@ -53,7 +54,9 @@ Do not start the initial copy until all of these are accepted:
 3. Current source schema and migration state frozen and reproduced on the empty
    subscriber. No DDL may change from schema capture through cutover unless it
    is applied to the subscriber first and separately verified.
-4. An approved Cloud SQL maintenance window for the logical-decoding restart.
+4. Cloud SQL logical-decoding restart accepted July 29 as B2. Preserve backup
+   `1785323946722` and update operation
+   `708af4fa-da73-4f34-8fa4-5dd400000031`; do not repeat it.
 5. Explicit approval to preserve the accepted rehearsal evidence and replace
    the July 22 database. The target Volume cannot hold both full databases.
 6. A separately approved cutover window covering writer freeze, final
@@ -66,9 +69,9 @@ This phase does not move production authority.
 1. Record source engine, flags, storage headroom, backup/PITR health, schema
    hash, active migrations, sequence inventory and login roles.
 2. Freeze DDL. Keep ordinary DML running.
-3. In the approved maintenance window, enable Cloud SQL logical decoding and
-   the measured replication-slot/worker capacity. Prove the restart completed,
-   the app recovered and existing source behavior remains healthy.
+3. Preserve the accepted B2 state: `cloudsql.logical_decoding=on`,
+   `wal_level=logical`, 10 slots, 10 WAL senders and 4 logical workers. The
+   restart completed and production recovery passed; do not repeat it.
 4. Create a dedicated least-privilege replication login and an explicit
    publication containing the accepted 98 tables. Do not use `FOR ALL TABLES`;
    additions must remain deliberate.
