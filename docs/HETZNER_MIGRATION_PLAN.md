@@ -1,12 +1,12 @@
 # GCP to Hetzner migration plan
 
-Last updated: July 26, 2026
+Last updated: July 29, 2026
 
 The migration is intentionally split into independently reviewable parts. A
 part is complete only when its verification evidence exists; completing code
 does not by itself authorize provisioning or production cutover.
 
-## Current execution checkpoint — July 26, 2026
+## Current execution checkpoint — July 29, 2026
 
 Resume from **Parts 5–6 final-sync engineering**, not provisioning, discovery,
 independent backup configuration, another bulk rehearsal or application
@@ -14,7 +14,8 @@ cutover. Parts 0–2 are accepted and the Part 3 immutable target-host shadow is
 running. The database restore, application-data copy, reconciliations, six-hour
 API soak, immutable A→B→A application rollback, encrypted backup/WAL chain and
 clean-host PITR rehearsal are complete. Production authority, DNS and writers
-are unchanged.
+are unchanged. The separately approved B1 bounded live writable rehearsal is
+also accepted; the target returned to read-only shadow mode afterward.
 
 Current target state:
 
@@ -50,6 +51,12 @@ Current target state:
 - retained Cloud SQL managed backups/PITR protected the initial online
   rehearsal. On July 26 the independent target backup/WAL and clean-host
   recovery gate was added and accepted against native GCS in Singapore;
+- on July 29, fresh encrypted differential backups bracketed a bounded B1
+  rehearsal of release `10c45949`. The private target became writable with
+  every scheduler disabled, all three scheduled endpoints refused execution,
+  a rollback-only database write left no residue, and the app/database returned
+  to verified read-only shadow posture. GCP, Cloud SQL, DNS and source
+  scheduler ownership were unchanged;
 - the complete online dump/restore rehearsal ran from
   `2026-07-23T18:49:38Z` through `2026-07-24T02:40:25Z`. The 452,996,676,967-byte
   source dumped in 8,037 seconds and restored/analyzed in 20,042 seconds. The
@@ -141,8 +148,9 @@ USD 261.01 after removing 400 GB. The API reported USD billing and zero VAT.
 6. Preserve the accepted immutable release and target-host smoke evidence.
    The six-hour soak and tree-identical A→B→A immutable rollback drill are
    accepted. Preserve their private evidence and the restored current manifest
-   for SHA `332ec985084085edef714525d118f6c6ad2db8d4`. Do not enable a target
-   writer or scheduler. The installed existing service-account key is an
+   for SHA `10c45949d08f671c69743e9fc557cb9956921487`. Preserve the accepted
+   bounded B1 evidence; do not leave a target writer or scheduler enabled. The
+   installed existing service-account key is an
    explicitly approved migration bridge, not the final renewable identity
    design.
 7. Preserve the accepted independent target backup/WAL and clean-host recovery
@@ -290,12 +298,13 @@ restored the accepted current manifest successfully.
 The July 25 read-only inventory found three enabled Cloud Scheduler HTTP jobs:
 Gmail import, precompute and creative-cache refresh. Their targets use the
 public hostname and therefore follow DNS. The feature flags previously affected
-only secrets-health reporting and did not block those endpoints. Local code now
-enforces each flag and defaults it to disabled; it must be reviewed, published
-and included in the immutable cutover release before activation. The guarded
-writable/all-schedulers-off Compose rendering and check-only activation
-rehearsal pass locally; the changed release is not yet published,
-shadow-deployed or live-rehearsed.
+only secrets-health reporting and did not block those endpoints. Release
+`10c45949` now enforces each flag and defaults it to disabled. Its bounded B1
+writable/all-schedulers-off rehearsal passed on July 29: each scheduled
+endpoint returned 503, a rollback-only database write left no residue and the
+target returned to read-only shadow mode. This does not satisfy the later
+single-owner drill, where each operation must run once on the synchronized
+target while the source trigger is paused.
 
 The GCP API is itself a general writer through authenticated mutations,
 conversion postbacks and background jobs. The database also has the dormant

@@ -1,5 +1,47 @@
 # Handover
 
+## B1 accepted — July 29, 2026, 08:11 UTC
+
+The separately approved B1 boundary is complete. The accepted immutable
+Hetzner release `10c45949` ran briefly in private writable mode against the
+stale rehearsal database with all three schedulers disabled, then returned to
+the accepted loopback-only read-only shadow posture.
+
+Accepted evidence:
+
+- GCP production, Cloud SQL, DNS and all three source scheduler jobs remained
+  authoritative and unchanged;
+- a fresh encrypted target differential backup completed before the rehearsal,
+  and another completed after it; WAL archival still reports zero failures;
+- writable release verification passed for the exact API/dashboard digests,
+  PostgreSQL, retained Google access, scheduler guards and loopback listeners;
+- Gmail, precompute and creative-cache scheduled endpoints each refused
+  execution with HTTP 503;
+- a real target write inserted one probe row inside a transaction, rolled it
+  back and proved no schema or row residue remained;
+- migrations 070 and 071 were applied to the stale rehearsal database during
+  the first startup, as expected for release `10c45949`;
+- the final application mode is `CATSCAN_READ_ONLY_SHADOW=true`, all scheduler
+  flags are false, the database default is read-only, mutation middleware
+  returns 405 and both containers are healthy; and
+- the accepted receipt and failed-safe first-attempt receipt are mode 0600
+  under
+  `docs/internal/rtbcat-migration/b1-live-writable-rehearsal-2026-07-29/`.
+
+The first attempt encountered a transient connection reset in the immediate
+post-Compose verifier. Its failure path restored the database default and
+shadow containers; a settled manual verification passed. The bounded operator
+path was then hardened with verifier retries, its focused 28-test set passed,
+and the controlled retry was accepted. The independent 15-minute deadman was
+cancelled only after verified restoration.
+
+**Next authority boundary:** B2 Cloud SQL logical-decoding flag/restart remains
+not authorized and remains outside the watch week. B1 acceptance does not
+authorize subscriber replacement, source writer freeze, DNS, scheduler
+ownership changes or final writable activation.
+
+---
+
 ## Next engineer resume — July 28, 2026, ~08:35 UTC (urgent workstation reboot)
 
 **Safe to reboot this PC.** Resume here. Do not re-derive production state from
