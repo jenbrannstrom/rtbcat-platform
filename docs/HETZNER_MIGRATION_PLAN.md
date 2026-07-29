@@ -19,13 +19,16 @@ also accepted; the target returned to read-only shadow mode afterward. The
 separately approved B2 Cloud SQL restart is also accepted:
 `cloudsql.logical_decoding=on` and PostgreSQL reports `wal_level=logical`.
 B3a is accepted as well: restricted login `rtbcat_migration_repl` and explicit
-98-table publication `rtbcat_migration_pub` exist, while the slot count remains
-zero until a ready subscriber can consume it immediately. B3b is accepted:
+98-table publication `rtbcat_migration_pub` exist; that phase deliberately
+left the slot count at zero until a ready subscriber could consume it
+immediately. B3b is accepted:
 the July dump and final encrypted differential backup preserve the stale
 rehearsal state, the Hetzner shadow is stopped, only
-`rtbcat_serving_rehearsal` was removed and empty `rtbcat_serving` remains with
-about 785 GB free. Schema restore and subscriber creation require the next
-separate approval.
+`rtbcat_serving_rehearsal` was removed and empty `rtbcat_serving` remained with
+about 785 GB free. B3c was subsequently approved and is in progress: the exact
+normalized schema hash matches, the single slot/subscription is being consumed
+immediately and a persistent 30-second safety monitor is active. This does not
+authorize writer freeze, sequence/private-table transfer, DNS or target writes.
 
 Current target state:
 

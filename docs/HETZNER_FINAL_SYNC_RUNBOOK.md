@@ -2,13 +2,12 @@
 
 Last updated: July 29, 2026
 
-Status: **B3b target replacement accepted; schema restore, subscription and
-later phases are not authorized for execution**. The stale July rehearsal
-database has been removed, the shadow application is stopped and the empty
-`rtbcat_serving` cutover database remains. This runbook does not authorize
-repeating the Cloud SQL restart or source setup, creating an idle slot,
-restoring schema, creating a subscription, a writer freeze, DNS changes or
-target writes.
+Status: **B3c schema restore and monitored logical initial copy are in
+progress; B3c is not yet accepted**. The source schema and target normalized
+schema hash match, subscription/slot `rtbcat_hetzner_migration` is immediately
+consumed and the shadow application remains stopped. This runbook does not
+authorize repeating source setup, a writer freeze, private-table data or
+sequence transfer, DNS changes or target writes.
 
 ## Synchronization decision
 
@@ -93,17 +92,22 @@ This phase does not move production authority.
    `20260726-113211F_20260729-144851D` protects the pre-drop state; and only
    stale database `rtbcat_serving_rehearsal` was removed. Empty cutover
    database `rtbcat_serving` remains on the same Volume.
-6. Restore schema only, including the exact extensions, collation, generated
-   expressions, owners and grants needed at cutover. Validate the expected
-   schemas, 98 tables, 38 sequences and zero invalid indexes before copying
-   data.
-7. Run a long-lived, loopback-only Cloud SQL Auth Proxy on the database host.
-   Create one subscription with `copy_data=true`, allowing it to create and
-   immediately consume the single migration slot. The target app must remain
-   stopped and have no writable database credentials during this copy.
-8. Monitor until all subscription-table states are `ready`. Continue monitoring
-   source retained WAL, source disk/autoresize, subscriber conflicts, target
-   disk, apply delay and proxy/service health.
+6. Completed under B3c July 29: restore schema only, including exact collation,
+   generated expressions, owners and grants. The target has 98 replicated
+   tables, 38 sequences, both generated columns, zero invalid indexes and an
+   exact normalized source/target schema SHA-256 of
+   `4c8ba3e47fd6a92216e4969a5fc65a41ccd7939f52e169a20d67ea33d12da3fb`.
+   `agent_private.buyer_role_grants` exists empty because its data is
+   deliberately outside the publication.
+7. Started under B3c July 29: long-lived Cloud SQL Auth Proxy
+   `rtbcat-cloudsql-logical-proxy.service` listens only on
+   `127.0.0.1:15432`. Subscription and slot `rtbcat_hetzner_migration` were
+   created together with `copy_data=true`; consumption began immediately. The
+   target app remains stopped.
+8. In progress: monitor until all 98 subscription-table states are `ready`.
+   The persistent 30-second monitor records source retained WAL, target disk,
+   subscription state and proxy health. Continue checking source
+   disk/autoresize, subscriber conflicts and apply delay.
 
 Abort and cleanly remove the slot/subscription if retained WAL threatens source
 availability, the target has less than 20% free space, the schema changes
@@ -121,6 +125,8 @@ Before requesting the final window:
 - table counts and the fixed-cutoff 10/10 database suite reconcile;
 - the 7/7 private-finance suite reconciles;
 - both generated columns produce the same values on source and target;
+- the frozen contents of excluded
+  `agent_private.buyer_role_grants` are transferred separately and verified;
 - target backups include this fresh database and a restore is proven;
 - the immutable writable release and a scheduler-disabled activation have been
   rehearsed;

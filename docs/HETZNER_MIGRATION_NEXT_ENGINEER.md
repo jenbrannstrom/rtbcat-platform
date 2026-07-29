@@ -1,6 +1,6 @@
 # Hetzner migration — next engineer checkpoint
 
-Last updated: July 29, 2026 (B3b target replacement accepted)
+Last updated: July 29, 2026 (B3c logical initial copy in progress)
 
 ## Read this first
 
@@ -10,6 +10,12 @@ After accepted B3b, the Hetzner API/dashboard containers and temporary OAuth
 service are stopped. Nginx still terminates the guarded temporary hostname but
 returns HTTP 502 because the shadow is deliberately sealed. The deployed
 artifact still defaults to read-only mode with all scheduler flags false.
+
+Approved B3c is currently copying the 98 published tables into
+`rtbcat_serving`. Do not stop PostgreSQL,
+`rtbcat-cloudsql-logical-proxy.service`, subscription
+`rtbcat_hetzner_migration`, `rtbcat-b3c-monitor.timer` or the temporary
+Cloud SQL Client identity while this copy is active.
 
 **Shadow acceptance does not authorize writable activation.** Do not run
 `scripts/hetzner/activate_writable_release.sh` live without a separate explicit
@@ -28,6 +34,30 @@ Primary operating documents:
 5. `handover.md` — chronological engineering and incident context.
 6. Private exact inventory:
    `docs/internal/rtbcat-migration/GCP-FULL-MIGRATION-INVENTORY-CHECKLIST.md`.
+
+## July 29 B3c schema and logical initial copy — in progress
+
+The exact current schema was captured through a loopback-only Cloud SQL Auth
+Proxy. After excluding only the unpublished private table's data, the
+normalized source/target schema SHA-256 matches exactly:
+`4c8ba3e47fd6a92216e4969a5fc65a41ccd7939f52e169a20d67ea33d12da3fb`.
+The target has 98 replicated tables, 38 sequences, both generated columns,
+exact owners/grants and zero invalid indexes.
+
+Subscription and source slot `rtbcat_hetzner_migration` were created together;
+the slot was consumed immediately. A root-only 30-second monitor logs to
+`/var/log/rtbcat/logical-replication-monitor.jsonl` and treats target free
+space below 20%, retained source WAL above 20 GiB or an inactive proxy as
+critical. At `2026-07-29T15:58:11Z`, 71/98 tables were ready, two were copying,
+target free space was about 770 GB, retained WAL was negligible and no
+PostgreSQL copy/apply error was present.
+
+The unpublished `agent_private.buyer_role_grants` table exists with exact
+schema but zero rows. Its frozen data requires a separate verified transfer
+before cutover. B3c remains in progress until all 98 table states are `ready`,
+lag is stable, schema has not drifted and a current target backup is accepted.
+Private evidence:
+`docs/internal/rtbcat-migration/B3C-LOGICAL-INITIAL-COPY-2026-07-29.md`.
 
 ## July 29 B3b target replacement — accepted
 
