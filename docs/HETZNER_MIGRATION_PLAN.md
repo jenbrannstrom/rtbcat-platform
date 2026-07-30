@@ -297,6 +297,13 @@ restored the accepted current manifest successfully.
   retained and the mount is cleanly unmounted.
 - Restore the full production dump, using the partition migration Path A for
   `rtb_daily` unless rehearsal evidence rejects it.
+  > **Not done as of July 30, 2026.** The migration pivoted from dump/restore to
+  > logical replication (B3a-B3c) the day after the partition kit landed, and
+  > `rtb_daily` was copied as a plain unpartitioned clone with all 16 indexes.
+  > No rehearsal evidence rejected Path A; the deviation was never recorded.
+  > The `rtb_daily` copy now has to be restarted regardless, which is the last
+  > free moment to honour this line. See
+  > `docs/internal/MIGRATION-ENGINEER-BRIEF-2026-07-30.md`.
 - Record dump, transfer, restore and index-build durations.
 - Require zero-difference monthly row/hash/spend/impression/click validation.
 - Exercise heavy API/dashboard paths and compare query plans and latency.

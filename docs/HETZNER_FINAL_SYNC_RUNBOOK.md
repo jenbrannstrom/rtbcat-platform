@@ -1,13 +1,22 @@
 # Hetzner final database synchronization and cutover runbook
 
-Last updated: July 29, 2026
+Last updated: July 30, 2026
 
-Status: **B3c schema restore and monitored logical initial copy are in
-progress; B3c is not yet accepted**. The source schema and target normalized
-schema hash match, subscription/slot `rtbcat_hetzner_migration` is immediately
-consumed and the shadow application remains stopped. This runbook does not
-authorize repeating source setup, a writer freeze, private-table data or
-sequence transfer, DNS changes or target writes.
+Status: **B3c is blocked on `rtb_daily` and is not accepted.** 97/98 tables are
+`ready`; `rtb_daily` alone has been copying for 25 hours at roughly a third
+complete, with about 66 hours remaining as configured. Its tablesync slot pins
+43.7 GB of source WAL — over 2x the monitor's critical threshold — and Cloud
+SQL storage is growing 45.5 GB/day permanently. The source schema and target
+normalized schema hash match, subscription/slot `rtbcat_hetzner_migration` is
+consumed and healthy, and the shadow application remains stopped.
+
+**A decision is open on whether to restart the `rtb_daily` copy without its 16
+indexes, and whether to take the partitioned design the plan originally called
+for. Read `docs/internal/MIGRATION-ENGINEER-BRIEF-2026-07-30.md` before
+proceeding with step 7 or 8 below.**
+
+This runbook does not authorize repeating source setup, a writer freeze,
+private-table data or sequence transfer, DNS changes or target writes.
 
 ## Synchronization decision
 
@@ -108,6 +117,23 @@ This phase does not move production authority.
    The persistent 30-second monitor records source retained WAL, target disk,
    subscription state and proxy health. Continue checking source
    disk/autoresize, subscriber conflicts and apply delay.
+
+   **Corrected July 30, 2026.** Waiting alone will not resolve this on an
+   acceptable timescale. 97/98 are `ready`; `rtb_daily` needs roughly 66 more
+   hours because 16 indexes are maintained per inserted row, and the wait is
+   costing 45.5 GB/day of permanent Cloud SQL storage against a 43.7 GB pinned
+   slot. The monitor is correctly reporting `critical_source_wal`; do not
+   dismiss it as noise. Indexes cannot be dropped in place — the tablesync
+   worker holds one 25-hour transaction that blocks both `DROP INDEX` and
+   `DROP INDEX CONCURRENTLY`. See the July 30 brief before deciding.
+
+   If the copy is restarted, the source-side tablesync slot
+   `pg_30304_sync_28572_…` **can be orphaned rather than dropped**. An orphaned
+   inactive slot retains WAL indefinitely — the exact failure this runbook
+   warns against. Confirm on the source that it is gone and retained bytes fell
+   before calling the restart complete. Never touch
+   `rtbcat_hetzner_migration`; dropping that slot means re-copying all 98
+   tables.
 
 Abort and cleanly remove the slot/subscription if retained WAL threatens source
 availability, the target has less than 20% free space, the schema changes

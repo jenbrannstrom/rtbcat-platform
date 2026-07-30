@@ -281,6 +281,15 @@ That cleanup saves about USD 17/month independently of the migration.
 
 ## Required acceptance evidence
 
+> **Corrected July 30, 2026.** The first item below still reflects the original
+> dump/restore plan, in which `rtb_daily` was to be rebuilt as partitioned via
+> `scripts/partition_migration/` Path A. The executed B3c copied it as a plain
+> unpartitioned clone with all 16 indexes, and no rehearsal evidence rejecting
+> Path A was recorded. Either take the partitioned design when the `rtb_daily`
+> copy is restarted, or explicitly retire this acceptance item with a written
+> reason. Do not leave it silently unmet. See
+> `docs/internal/MIGRATION-ENGINEER-BRIEF-2026-07-30.md`.
+
 - Full restore timing and zero-difference partition validation.
 - Heavy dashboard and API performance checks against the restored target
   (local tunnelled and target-host immutable-image passes complete).

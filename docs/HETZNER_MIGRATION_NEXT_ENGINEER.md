@@ -1,6 +1,13 @@
 # Hetzner migration — next engineer checkpoint
 
-Last updated: July 29, 2026 (B3c logical initial copy in progress)
+Last updated: July 30, 2026 (B3c blocked on `rtb_daily`; decision open)
+
+> **Start here, then read
+> `docs/internal/MIGRATION-ENGINEER-BRIEF-2026-07-30.md`.** That brief holds the
+> verified live state, the measured evidence behind the July 30 findings, the
+> open decision on `rtb_daily`, and the explicitly-flagged unverified
+> assumptions. Several statements in the July 29 checkpoint below were stale or
+> wrong and have been corrected in place, each marked "Corrected July 30, 2026".
 
 ## Read this first
 
@@ -51,6 +58,28 @@ space below 20%, retained source WAL above 20 GiB or an inactive proxy as
 critical. At `2026-07-29T15:58:11Z`, 71/98 tables were ready, two were copying,
 target free space was about 770 GB, retained WAL was negligible and no
 PostgreSQL copy/apply error was present.
+
+**Corrected July 30, 2026 — the above is a snapshot, not current state.**
+Verified at ~17:30Z on July 30:
+
+- **97/98 tables are `ready`. `rtb_daily` alone is still copying**, 25 hours in,
+  at 151,160,435 of ~460M rows. Measured throughput 0.98 MB/s, so roughly
+  66 hours remain and the rate degrades as its 16 indexes grow.
+- **The monitor is reporting `critical_source_wal`.** The `rtb_daily` tablesync
+  slot `pg_30304_sync_28572_…` is inactive-by-design during COPY but pins
+  **43.7 GB** of source WAL — over 2x the 20 GiB critical threshold.
+- **Cloud SQL disk is growing 45.5 GB/day** (468.6 → 514.1 GB over 24 h) with
+  52.8 GB of headroom, so auto-resize fires in about 1.2 days. Cloud SQL disks
+  cannot be shrunk, so that growth is permanent cost.
+  `storageAutoResizeLimit` is `0` (no ceiling), which closes the outage path
+  but removes the cost ceiling — **there is no alert on this**.
+- The copy is **not stuck**: worker pid 184656 is alive and I/O bound on index
+  pages, with zero network waits across 20 samples.
+
+Do **not** attempt to drop indexes to speed this up in place. The worker holds
+one 25-hour transaction, so both `DROP INDEX` and `DROP INDEX CONCURRENTLY`
+block behind it. Speeding it up requires restarting that table's copy from
+zero. That decision, its options and its runbook are in the July 30 brief.
 
 The unpublished `agent_private.buyer_role_grants` table exists with exact
 schema but zero rows. Its frozen data requires a separate verified transfer
@@ -313,22 +342,58 @@ two stored generated columns. It has no RLS tables, partition roots or large
 objects. The permanent target Volume can hold one production database but
 cannot safely hold both the 438.9 GB rehearsal and a second full copy.
 
+**Added July 30, 2026 — B3c deviated from the plan for `rtb_daily`, and this
+was not recorded anywhere.**
+
+`docs/HETZNER_MIGRATION_PLAN.md` says to restore `rtb_daily` "using the
+partition migration Path A … unless rehearsal evidence rejects it", and
+`docs/HETZNER_MIGRATION_READINESS.md` still lists zero-difference **partition**
+validation as required acceptance evidence. The kit exists at
+`scripts/partition_migration/` (commit `5c93f029`, July 28) and its README
+calls the restore onto the new box "the one free rewrite of this table".
+
+B3c instead copied `rtb_daily` as a plain unpartitioned clone with all 16
+indexes. No rehearsal evidence rejecting Path A was recorded. The likeliest
+explanation is that the kit was written for a dump/restore flow and the
+migration pivoted to logical replication the next day without reconciling the
+two — but **nobody wrote that decision down, so confirm with whoever ran B3c
+rather than assuming.**
+
+This matters now because the `rtb_daily` copy has to be restarted either way.
+That restart is the last free moment to take the partitioned design. Carrying
+the current design to Hetzner also carries three known problems the kit
+already measured: six months of history against a configured 30-day raw
+retention that has never been enforced; nine indexes with single- or
+double-digit scan counts over 5.5 months; and an `id` column that is `INTEGER`
+with roughly 16 months of sequence headroom left.
+
+Options, break-even arithmetic and the runbook are in
+`docs/internal/MIGRATION-ENGINEER-BRIEF-2026-07-30.md`. Do not purge history on
+the **source** to shrink the copy — a mass DELETE would generate WAL that the
+pinned slot must retain, making the current problem worse.
+
 ## Writer and scheduler findings
 
 Three enabled Cloud Scheduler jobs trigger Gmail import, precompute refresh and
 creative-cache refresh. Their URLs use the public hostname, so the jobs follow
 DNS.
 
-The scheduler feature flags were previously reporting-only. Local code now
-enforces them at each scheduled endpoint and defaults absent flags to disabled:
+The scheduler feature flags were previously reporting-only. Code now enforces
+them at each scheduled endpoint and defaults absent flags to disabled:
 
 - `services/scheduler_guard.py`
 - `api/routers/gmail.py`
 - `api/routers/precompute.py`
 - `api/routers/creative_cache.py`
 
-This control is local only until reviewed, built into a new immutable image and
-deployed. Do not cut over using the old image as a writable release.
+**Corrected July 30, 2026.** This paragraph previously said the control was
+"local only until reviewed, built into a new immutable image and deployed".
+That was already stale when written and contradicted the accepted-release note
+below. `services/scheduler_guard.py` is present in accepted `10c45949`, and
+`git diff 10c45949..HEAD` shows no `api/`, `services/` or `dashboard/` changes.
+**The accepted shadow image already contains these guards; no rebuild is owed
+before cutover.** Verify with `git cat-file -e 10c45949:services/scheduler_guard.py`
+before acting on any claim to the contrary.
 
 The API is also a general writer through authenticated mutations, conversion
 postbacks and queued/background work. A freeze must block ingress and stop the
