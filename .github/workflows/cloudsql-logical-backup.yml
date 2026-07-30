@@ -38,11 +38,18 @@ jobs:
       - name: Resolve backup configuration
         id: config
         shell: bash
+        # Dispatch inputs reach the script through the environment, never by
+        # interpolation, so a quote-breaking value cannot execute in a job that
+        # goes on to authenticate to GCP and export a production database.
+        env:
+          INPUT_INSTANCE: ${{ github.event.inputs.instance }}
+          INPUT_DATABASE: ${{ github.event.inputs.database }}
+          INPUT_BUCKET: ${{ github.event.inputs.bucket }}
         run: |
           set -euo pipefail
-          INSTANCE="${{ github.event.inputs.instance || '' }}"
-          DATABASE="${{ github.event.inputs.database || '' }}"
-          BUCKET="${{ github.event.inputs.bucket || '' }}"
+          INSTANCE="${INPUT_INSTANCE:-}"
+          DATABASE="${INPUT_DATABASE:-}"
+          BUCKET="${INPUT_BUCKET:-}"
 
           if [ -z "$INSTANCE" ]; then
             INSTANCE="${CLOUDSQL_INSTANCE_DEFAULT:-}"
@@ -77,6 +84,21 @@ jobs:
             echo "${skip_reason}" >&2
             exit 1
           fi
+
+          # Every value below is written to GITHUB_ENV, which is newline
+          # delimited. Constrain them to the characters Cloud SQL and GCS
+          # actually allow so no value can smuggle in a second assignment.
+          for pair in \
+            "CLOUDSQL_INSTANCE:${INSTANCE}" \
+            "CLOUDSQL_DATABASE:${DATABASE}" \
+            "CLOUDSQL_BACKUP_BUCKET:${BUCKET}"; do
+            name="${pair%%:*}"
+            value="${pair#*:}"
+            if ! [[ "$value" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,126}$ ]]; then
+              echo "Rejected ${name}: value is not a plain resource name" >&2
+              exit 1
+            fi
+          done
 
           TS="$(date -u +%Y%m%dT%H%M%SZ)"
           URI="gs://${BUCKET}/${INSTANCE}/${DATABASE}-${TS}.sql.gz"

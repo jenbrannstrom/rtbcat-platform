@@ -79,3 +79,30 @@ def test_publication_list_is_explicit_not_all_tables() -> None:
     assert "CREATE PUBLICATION {} FOR TABLE {}" in source
     assert "replication slot" in source.lower()
     assert isinstance(MODULE._qualified_identifiers([]), sql.Composed)
+
+
+def test_finance_owner_comes_from_the_operator_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The private role name must be supplied at runtime, never hardcoded.
+
+    This repository is public, so the assertion is on the mechanism rather than
+    on the role name itself.
+    """
+    monkeypatch.setenv(MODULE.FINANCE_OWNER_ENV, "role-from-environment")
+
+    assert MODULE._finance_owner() == "role-from-environment"
+
+
+def test_finance_owner_refuses_to_guess_when_unset(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv(MODULE.FINANCE_OWNER_ENV, raising=False)
+
+    with pytest.raises(SystemExit, match=MODULE.FINANCE_OWNER_ENV):
+        MODULE._finance_owner()
+
+    monkeypatch.setenv(MODULE.FINANCE_OWNER_ENV, "   ")
+
+    with pytest.raises(SystemExit, match=MODULE.FINANCE_OWNER_ENV):
+        MODULE._finance_owner()

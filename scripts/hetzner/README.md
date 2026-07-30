@@ -244,9 +244,13 @@ and zero-difference financial/data validation remain Part 4 acceptance work.
 
 ### 7. Prepare the logical-replication source
 
-Run the read-only preflight from an environment with the live source DSN:
+Run the read-only preflight from an environment with the live source DSN.
+`RTBCAT_FINANCE_OWNER_ROLE` must name the `financial_viability` schema owner
+role; that name is private and is deliberately not stored in this public
+repository, so export it from the root-only operator environment first:
 
 ```bash
+export RTBCAT_FINANCE_OWNER_ROLE=…   # exact name in private evidence
 scripts/hetzner/setup_source_logical_replication.py
 ```
 

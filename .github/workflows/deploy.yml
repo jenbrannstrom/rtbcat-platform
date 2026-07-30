@@ -90,10 +90,15 @@ jobs:
           echo "name=${{ env.GCP_VM_PRODUCTION }}" >> "$GITHUB_OUTPUT"
 
       - name: Show deployment intent
+        # `reason` is free-form text, so it is echoed from the environment
+        # rather than interpolated into the script body.
+        env:
+          DEPLOY_REASON: ${{ github.event.inputs.reason }}
+          VM_NAME: ${{ steps.vm.outputs.name }}
         run: |
           echo "Manual deploy approved."
-          echo "Target: ${{ github.event.inputs.target }} (${{ steps.vm.outputs.name }})"
-          echo "Reason: ${{ github.event.inputs.reason }}"
+          echo "Target: ${{ github.event.inputs.target }} (${VM_NAME})"
+          echo "Reason: ${DEPLOY_REASON}"
 
       - name: Checkout code
         uses: actions/checkout@v4
@@ -110,12 +115,16 @@ jobs:
 
       - name: Wait for tagged images
         shell: bash
+        # Dispatch inputs arrive through the environment, never rendered into
+        # the script body, so a quote-breaking value cannot execute here.
+        env:
+          IMAGE_WAIT_SECONDS: ${{ github.event.inputs.image_wait_seconds }}
         run: |
           set -euo pipefail
 
           SHORT_SHA="${GITHUB_SHA::7}"
           IMAGE_TAG="sha-${SHORT_SHA}"
-          MAX_WAIT_SECONDS="${{ github.event.inputs.image_wait_seconds }}"
+          MAX_WAIT_SECONDS="${IMAGE_WAIT_SECONDS}"
           if ! [[ "$MAX_WAIT_SECONDS" =~ ^[0-9]+$ ]] || [ "$MAX_WAIT_SECONDS" -lt 30 ]; then
             MAX_WAIT_SECONDS=300
           fi
@@ -208,7 +217,11 @@ jobs:
                 exit 1
               fi
               AR_AUTH=\$(echo -n \"oauth2accesstoken:\$AR_TOKEN\" | base64 -w0)
-              sudo mkdir -p /tmp/ar-docker-config
+              # This file holds a live registry token, so create the directory
+              # and the file with restrictive modes before writing into them.
+              # Default root umask would otherwise leave them world-readable.
+              sudo install -d -m 700 /tmp/ar-docker-config
+              sudo install -m 600 /dev/null /tmp/ar-docker-config/config.json
               echo \"{\\\"auths\\\":{\\\"https://asia-southeast1-docker.pkg.dev\\\":{\\\"auth\\\":\\\"\$AR_AUTH\\\"}}}\" \
                 | sudo tee /tmp/ar-docker-config/config.json >/dev/null
               export DOCKER_CONFIG=/tmp/ar-docker-config
@@ -258,6 +271,11 @@ jobs:
               # Start containers with new images
               sudo -E docker compose -f docker-compose.gcp.yml up -d --force-recreate
 
+              # The registry token is only needed for pull and recreate. Remove
+              # it here so it does not outlive the deployment on the VM.
+              sudo rm -rf /tmp/ar-docker-config
+              unset DOCKER_CONFIG
+
               # Clean up old docker images to prevent disk filling up
               sudo docker image prune -f
               sudo docker container prune -f
@@ -266,9 +284,13 @@ jobs:
             "
 
       - name: Verify deployment
+        # Passed through the environment so a quote-breaking dispatch value
+        # cannot execute in a job that still holds production credentials.
+        env:
+          HEALTH_WAIT_SECONDS: ${{ github.event.inputs.health_wait_seconds }}
         run: |
           EXPECTED_SHORT_SHA="${GITHUB_SHA::7}"
-          MAX_WAIT_SECONDS="${{ github.event.inputs.health_wait_seconds }}"
+          MAX_WAIT_SECONDS="${HEALTH_WAIT_SECONDS}"
           if ! [[ "$MAX_WAIT_SECONDS" =~ ^[0-9]+$ ]] || [ "$MAX_WAIT_SECONDS" -lt 10 ]; then
             MAX_WAIT_SECONDS=120
           fi

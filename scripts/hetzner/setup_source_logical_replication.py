@@ -22,10 +22,25 @@ from psycopg.rows import dict_row
 
 EXPECTED_TABLE_COUNT = 98
 EXPECTED_SCHEMAS = ("financial_viability", "public")
-FINANCE_OWNER = "fv_app"
+FINANCE_OWNER_ENV = "RTBCAT_FINANCE_OWNER_ROLE"
 ROLE_NAME = "rtbcat_migration_repl"
 PUBLICATION_NAME = "rtbcat_migration_pub"
 CONFIRMATION = "CREATE_SOURCE_REPLICATION"
+
+
+def _finance_owner() -> str:
+    """Resolve the financial_viability schema owner role at runtime.
+
+    The role name identifies a private finance controller, so it stays out of
+    this public repository and is supplied from the root-only operator
+    environment instead.
+    """
+    owner = os.environ.get(FINANCE_OWNER_ENV, "").strip()
+    if not owner:
+        raise SystemExit(
+            f"{FINANCE_OWNER_ENV} must name the financial_viability owner role."
+        )
+    return owner
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -145,7 +160,7 @@ def _fetch_preflight(conn: psycopg.Connection) -> dict[str, Any]:
         failures.append("expected exactly one excluded agent_private table")
     expected_owners = {
         f"public:{current['current_user']}": 84,
-        f"financial_viability:{FINANCE_OWNER}": 14,
+        f"financial_viability:{_finance_owner()}": 14,
     }
     if owner_counts != expected_owners:
         failures.append(
@@ -170,6 +185,7 @@ def _apply(
     current_user = str(preflight["current"]["current_user"])
     database_name = str(preflight["current"]["database_name"])
     table_list = _qualified_identifiers(preflight["tables"])
+    finance_owner = _finance_owner()
 
     conn.execute("SET LOCAL lock_timeout = '5s'")
     conn.execute("SET LOCAL statement_timeout = '30s'")
@@ -189,7 +205,7 @@ def _apply(
     # inside this transaction and is revoked before commit.
     conn.execute(
         sql.SQL("GRANT {} TO {}").format(
-            sql.Identifier(FINANCE_OWNER),
+            sql.Identifier(finance_owner),
             sql.Identifier(current_user),
         )
     )
@@ -217,7 +233,7 @@ def _apply(
     )
     conn.execute(
         sql.SQL("REVOKE {} FROM {}").format(
-            sql.Identifier(FINANCE_OWNER),
+            sql.Identifier(finance_owner),
             sql.Identifier(current_user),
         )
     )
@@ -246,7 +262,7 @@ def _verify(conn: psycopg.Connection) -> dict[str, Any]:
         FROM pg_roles role
         WHERE role.rolname = %s
         """,
-        (PUBLICATION_NAME, FINANCE_OWNER, ROLE_NAME),
+        (PUBLICATION_NAME, _finance_owner(), ROLE_NAME),
     ).fetchone()
     if row is None:
         raise RuntimeError("replication role was not created")
