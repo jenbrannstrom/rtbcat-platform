@@ -78,6 +78,7 @@ def _qualified_identifiers(tables: Sequence[dict[str, Any]]) -> sql.Composed:
 
 
 def _fetch_preflight(conn: psycopg.Connection) -> dict[str, Any]:
+    finance_owner = _finance_owner()
     current = conn.execute(
         """
         SELECT
@@ -92,9 +93,10 @@ def _fetch_preflight(conn: psycopg.Connection) -> dict[str, Any]:
                 SELECT count(*)
                 FROM pg_publication
                 WHERE pubname = %s
-            ) AS publication_exists
+            ) AS publication_exists,
+            pg_has_role(current_user, %s, 'MEMBER') AS finance_membership_exists
         """,
-        (ROLE_NAME, PUBLICATION_NAME),
+        (ROLE_NAME, PUBLICATION_NAME, finance_owner),
     ).fetchone()
     assert current is not None
 
@@ -160,7 +162,7 @@ def _fetch_preflight(conn: psycopg.Connection) -> dict[str, Any]:
         failures.append("expected exactly one excluded agent_private table")
     expected_owners = {
         f"public:{current['current_user']}": 84,
-        f"financial_viability:{_finance_owner()}": 14,
+        f"financial_viability:{finance_owner}": 14,
     }
     if owner_counts != expected_owners:
         failures.append(
@@ -186,6 +188,9 @@ def _apply(
     database_name = str(preflight["current"]["database_name"])
     table_list = _qualified_identifiers(preflight["tables"])
     finance_owner = _finance_owner()
+    finance_membership_preexisting = bool(
+        preflight["current"]["finance_membership_exists"]
+    )
 
     conn.execute("SET LOCAL lock_timeout = '5s'")
     conn.execute("SET LOCAL statement_timeout = '30s'")
@@ -201,14 +206,15 @@ def _apply(
         )
     )
 
-    # The 14 finance tables have a separate owner. Membership exists only
-    # inside this transaction and is revoked before commit.
-    conn.execute(
-        sql.SQL("GRANT {} TO {}").format(
-            sql.Identifier(finance_owner),
-            sql.Identifier(current_user),
+    # The 14 finance tables have a separate owner. Borrow membership only when
+    # this invocation needs to create it; never revoke access that predated us.
+    if not finance_membership_preexisting:
+        conn.execute(
+            sql.SQL("GRANT {} TO {}").format(
+                sql.Identifier(finance_owner),
+                sql.Identifier(current_user),
+            )
         )
-    )
     conn.execute(
         sql.SQL("GRANT USAGE ON SCHEMA {}, {} TO {}").format(
             sql.Identifier("public"),
@@ -231,15 +237,20 @@ def _apply(
             table_list,
         )
     )
-    conn.execute(
-        sql.SQL("REVOKE {} FROM {}").format(
-            sql.Identifier(finance_owner),
-            sql.Identifier(current_user),
+    if not finance_membership_preexisting:
+        conn.execute(
+            sql.SQL("REVOKE {} FROM {}").format(
+                sql.Identifier(finance_owner),
+                sql.Identifier(current_user),
+            )
         )
-    )
 
 
-def _verify(conn: psycopg.Connection) -> dict[str, Any]:
+def _verify(
+    conn: psycopg.Connection,
+    *,
+    finance_membership_expected: bool,
+) -> dict[str, Any]:
     row = conn.execute(
         """
         SELECT
@@ -276,7 +287,7 @@ def _verify(conn: psycopg.Connection) -> dict[str, Any]:
         "rolbypassrls": False,
         "publication_tables": EXPECTED_TABLE_COUNT,
         "replication_slots": 0,
-        "finance_membership_remains": False,
+        "finance_membership_remains": finance_membership_expected,
     }
     for key, value in expected.items():
         if result[key] != value:
@@ -341,7 +352,12 @@ def main() -> int:
         conn.commit()
 
     with psycopg.connect(dsn, row_factory=dict_row) as conn:
-        verified = _verify(conn)
+        verified = _verify(
+            conn,
+            finance_membership_expected=bool(
+                preflight["current"]["finance_membership_exists"]
+            ),
+        )
         conn.rollback()
 
     print(

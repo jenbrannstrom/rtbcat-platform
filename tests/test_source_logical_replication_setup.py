@@ -106,3 +106,60 @@ def test_finance_owner_refuses_to_guess_when_unset(
 
     with pytest.raises(SystemExit, match=MODULE.FINANCE_OWNER_ENV):
         MODULE._finance_owner()
+
+
+class _RecordingConnection:
+    def __init__(self) -> None:
+        self.statements: list[str] = []
+
+    def execute(self, statement: object) -> None:
+        if isinstance(statement, str):
+            self.statements.append(statement)
+        else:
+            self.statements.append(statement.as_string(None))
+
+
+def _apply_statements(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    finance_membership_exists: bool,
+) -> list[str]:
+    monkeypatch.setenv(MODULE.FINANCE_OWNER_ENV, "role-from-environment")
+    connection = _RecordingConnection()
+    MODULE._apply(
+        connection,
+        password="a" * 32,
+        preflight={
+            "current": {
+                "current_user": "operator",
+                "database_name": "source_database",
+                "finance_membership_exists": finance_membership_exists,
+            },
+            "tables": [],
+        },
+    )
+    return connection.statements
+
+
+def test_apply_preserves_preexisting_finance_membership(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    statements = _apply_statements(
+        monkeypatch,
+        finance_membership_exists=True,
+    )
+
+    assert 'GRANT "role-from-environment" TO "operator"' not in statements
+    assert 'REVOKE "role-from-environment" FROM "operator"' not in statements
+
+
+def test_apply_revokes_only_finance_membership_it_created(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    statements = _apply_statements(
+        monkeypatch,
+        finance_membership_exists=False,
+    )
+
+    assert 'GRANT "role-from-environment" TO "operator"' in statements
+    assert 'REVOKE "role-from-environment" FROM "operator"' in statements

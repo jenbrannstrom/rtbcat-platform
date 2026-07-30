@@ -222,6 +222,15 @@ jobs:
               # Default root umask would otherwise leave them world-readable.
               sudo install -d -m 700 /tmp/ar-docker-config
               sudo install -m 600 /dev/null /tmp/ar-docker-config/config.json
+              cleanup_ar_credentials() {
+                sudo rm -rf /tmp/ar-docker-config
+                cleanup_status=\$?
+                unset DOCKER_CONFIG
+                return \$cleanup_status
+              }
+              # Failure paths after this point must not leave a live registry
+              # token behind on the production VM.
+              trap cleanup_ar_credentials EXIT
               echo \"{\\\"auths\\\":{\\\"https://asia-southeast1-docker.pkg.dev\\\":{\\\"auth\\\":\\\"\$AR_AUTH\\\"}}}\" \
                 | sudo tee /tmp/ar-docker-config/config.json >/dev/null
               export DOCKER_CONFIG=/tmp/ar-docker-config
@@ -273,8 +282,12 @@ jobs:
 
               # The registry token is only needed for pull and recreate. Remove
               # it here so it does not outlive the deployment on the VM.
-              sudo rm -rf /tmp/ar-docker-config
-              unset DOCKER_CONFIG
+              if cleanup_ar_credentials; then
+                trap - EXIT
+              else
+                echo 'FAIL: Could not remove Artifact Registry credentials'
+                exit 1
+              fi
 
               # Clean up old docker images to prevent disk filling up
               sudo docker image prune -f

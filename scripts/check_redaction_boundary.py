@@ -16,10 +16,12 @@ expression.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import os
 import re
 import subprocess
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 DEFAULT_DENYLIST = Path("docs/internal/redaction-denylist.txt")
@@ -29,6 +31,13 @@ DENYLIST_ENV = "RTBCAT_REDACTION_DENYLIST"
 SKIP_PATHS = {
     "scripts/check_redaction_boundary.py",
 }
+
+
+@dataclass(frozen=True)
+class DenyPattern:
+    fingerprint: str
+    expression: re.Pattern[str]
+    literal: bytes | None
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -63,17 +72,30 @@ def _resolve_denylist(explicit: Path | None) -> Path:
     return DEFAULT_DENYLIST
 
 
-def _load_patterns(path: Path) -> list[tuple[str, re.Pattern[str]]]:
-    patterns: list[tuple[str, re.Pattern[str]]] = []
+def _load_patterns(path: Path) -> list[DenyPattern]:
+    patterns: list[DenyPattern] = []
     for raw in path.read_text(encoding="utf-8").splitlines():
         line = raw.strip()
         if not line or line.startswith("#"):
             continue
+        fingerprint = hashlib.sha256(line.encode("utf-8")).hexdigest()[:12]
         if line.startswith("re:"):
             expression = line[3:].strip()
-            patterns.append((expression, re.compile(expression, re.IGNORECASE)))
+            patterns.append(
+                DenyPattern(
+                    fingerprint=fingerprint,
+                    expression=re.compile(expression, re.IGNORECASE),
+                    literal=None,
+                )
+            )
         else:
-            patterns.append((line, re.compile(re.escape(line), re.IGNORECASE)))
+            patterns.append(
+                DenyPattern(
+                    fingerprint=fingerprint,
+                    expression=re.compile(re.escape(line), re.IGNORECASE),
+                    literal=line.encode("utf-8"),
+                )
+            )
     return patterns
 
 
@@ -86,21 +108,34 @@ def _tracked_files(paths: list[str] | None) -> list[str]:
 
 
 def _scan(
-    files: list[str], patterns: list[tuple[str, re.Pattern[str]]]
+    files: list[str], patterns: list[DenyPattern]
 ) -> list[tuple[str, int, str]]:
     hits: list[tuple[str, int, str]] = []
     for name in files:
         if name in SKIP_PATHS:
             continue
         try:
-            content = Path(name).read_text(encoding="utf-8")
-        except (OSError, UnicodeDecodeError):
-            # Binary or unreadable files cannot carry a reviewable disclosure.
+            content = Path(name).read_bytes()
+        except OSError:
             continue
-        for number, line in enumerate(content.splitlines(), start=1):
-            for label, pattern in patterns:
-                if pattern.search(line):
-                    hits.append((name, number, label))
+        for number, raw_line in enumerate(content.split(b"\n"), start=1):
+            folded_line = raw_line.lower()
+            decoded_line: str | None = None
+            for pattern in patterns:
+                matched = False
+                if pattern.literal is not None:
+                    # Fixed entries are checked as raw bytes so disclosures in
+                    # images, PDFs, archives, or metadata are not skipped.
+                    matched = pattern.literal.lower() in folded_line
+                if not matched:
+                    # Regex entries, and non-ASCII case folding for fixed
+                    # entries, run over a loss-tolerant extraction. Printable
+                    # strings in binary files remain visible around bad bytes.
+                    if decoded_line is None:
+                        decoded_line = raw_line.decode("utf-8", errors="replace")
+                    matched = bool(pattern.expression.search(decoded_line))
+                if matched:
+                    hits.append((name, number, pattern.fingerprint))
     return hits
 
 
@@ -129,9 +164,11 @@ def main() -> int:
             f"FAIL: {len(hits)} redaction-boundary violation(s) in tracked files:",
             file=sys.stderr,
         )
-        for name, number, label in hits:
-            digest = label if len(label) <= 8 else f"{label[:4]}…{label[-2:]}"
-            print(f"  {name}:{number} matched denylist entry [{digest}]", file=sys.stderr)
+        for name, number, fingerprint in hits:
+            print(
+                f"  {name}:{number} matched denylist entry [{fingerprint}]",
+                file=sys.stderr,
+            )
         print(
             "\nRemove the identifier or move the detail into docs/internal/.",
             file=sys.stderr,
