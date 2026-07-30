@@ -1,10 +1,22 @@
 # Hetzner final database synchronization and cutover runbook
 
-Last updated: July 25, 2026
+Last updated: July 30, 2026
 
-Status: **planned, not authorized for execution**. This runbook does not
-authorize a Cloud SQL restart, replacement of the July 22 rehearsal database,
-a writer freeze, DNS changes or target writes.
+Status: **B3c is blocked on `rtb_daily` and is not accepted.** 97/98 tables are
+`ready`; `rtb_daily` alone has been copying for 25 hours at roughly a third
+complete, with about 66 hours remaining as configured. Its tablesync slot pins
+43.7 GB of source WAL — over 2x the monitor's critical threshold — and Cloud
+SQL storage is growing 45.5 GB/day permanently. The source schema and target
+normalized schema hash match, subscription/slot `rtbcat_hetzner_migration` is
+consumed and healthy, and the shadow application remains stopped.
+
+**A decision is open on whether to restart the `rtb_daily` copy without its 16
+indexes, and whether to take the partitioned design the plan originally called
+for. Read `docs/internal/MIGRATION-ENGINEER-BRIEF-2026-07-30.md` before
+proceeding with step 7 or 8 below.**
+
+This runbook does not authorize repeating source setup, a writer freeze,
+private-table data or sequence transfer, DNS changes or target writes.
 
 ## Synchronization decision
 
@@ -45,17 +57,28 @@ Do not start the initial copy until all of these are accepted:
 1. Independent encrypted target WAL backup, PITR and clean-host restore proof
    (accepted July 26; preserve the private pgBackRest execution evidence).
 2. A reviewed immutable application release containing the enforced scheduler
-   endpoint guards, plus a rehearsed production activation path. Local
-   writable/all-schedulers-off rendering and refusal guards pass, but the
-   changed immutable release is not yet published, shadow-deployed or
-   live-rehearsed.
+   endpoint guards, plus a rehearsed production activation path (accepted B1
+   July 29). Release `10c45949` passed a bounded private writable rehearsal:
+   all scheduler endpoints refused, a rollback-only database write left no
+   residue, and the app/database returned to read-only shadow posture. Preserve
+   its private receipts and pre/post differential backups.
 3. Current source schema and migration state frozen and reproduced on the empty
    subscriber. No DDL may change from schema capture through cutover unless it
    is applied to the subscriber first and separately verified.
-4. An approved Cloud SQL maintenance window for the logical-decoding restart.
-5. Explicit approval to preserve the accepted rehearsal evidence and replace
-   the July 22 database. The target Volume cannot hold both full databases.
-6. A separately approved cutover window covering writer freeze, final
+4. Cloud SQL logical-decoding restart accepted July 29 as B2. Preserve backup
+   `1785323946722` and update operation
+   `708af4fa-da73-4f34-8fa4-5dd400000031`; do not repeat it.
+5. Source login/publication accepted July 29 as B3a. Preserve guarded setup
+   commit `553c6127`, the explicit 98-table publication checksum
+   `c2af91c3598c914e5c2493532e81adb8` and zero-slot state. Do not repeat source
+   setup or create a slot until the subscriber can consume immediately.
+6. Target replacement accepted as B3b on July 29. The July dump passed its
+   complete checksum verification, a final encrypted differential backup
+   `20260726-113211F_20260729-144851D` completed, the shadow application was
+   stopped and the 438,948,781,415-byte rehearsal database was removed. The
+   empty `rtbcat_serving` database remains and the target Volume has about
+   785 GB free. Preserve the private B3b receipt.
+7. A separately approved cutover window covering writer freeze, final
    reconciliation, `.catscan` delta, DNS and writer activation.
 
 ## Phase A — create the continuously catching-up database
@@ -65,25 +88,52 @@ This phase does not move production authority.
 1. Record source engine, flags, storage headroom, backup/PITR health, schema
    hash, active migrations, sequence inventory and login roles.
 2. Freeze DDL. Keep ordinary DML running.
-3. In the approved maintenance window, enable Cloud SQL logical decoding and
-   the measured replication-slot/worker capacity. Prove the restart completed,
-   the app recovered and existing source behavior remains healthy.
-4. Create a dedicated least-privilege replication login and an explicit
-   publication containing the accepted 98 tables. Do not use `FOR ALL TABLES`;
-   additions must remain deliberate.
-5. Stop the Hetzner shadow app. Preserve the July 22 validation records and
-   checksummed dump, then—in a separately approved destructive action—replace
-   the rehearsal database with an empty cutover database on the same Volume.
-6. Restore schema only, including the exact extensions, collation, generated
-   expressions, owners and grants needed at cutover. Validate the expected
-   schemas, 98 tables, 38 sequences and zero invalid indexes before copying
-   data.
-7. Run a long-lived, loopback-only Cloud SQL Auth Proxy on the database host.
-   Create one subscription with `copy_data=true`. The target app must remain
-   stopped and have no writable database credentials during this copy.
-8. Monitor until all subscription-table states are `ready`. Continue monitoring
-   source retained WAL, source disk/autoresize, subscriber conflicts, target
-   disk, apply delay and proxy/service health.
+3. Preserve the accepted B2 state: `cloudsql.logical_decoding=on`,
+   `wal_level=logical`, 10 slots, 10 WAL senders and 4 logical workers. The
+   restart completed and production recovery passed; do not repeat it.
+4. Preserve the accepted B3a login `rtbcat_migration_repl` and publication
+   `rtbcat_migration_pub`. It contains the accepted 98 tables explicitly and
+   excludes `agent_private`; do not repeat setup or broaden it to
+   `FOR ALL TABLES`.
+5. Completed as B3b July 29: the Hetzner API/dashboard and temporary OAuth
+   service are stopped; the July validation records and checksum-verified dump
+   remain on protected storage; final differential backup
+   `20260726-113211F_20260729-144851D` protects the pre-drop state; and only
+   stale database `rtbcat_serving_rehearsal` was removed. Empty cutover
+   database `rtbcat_serving` remains on the same Volume.
+6. Completed under B3c July 29: restore schema only, including exact collation,
+   generated expressions, owners and grants. The target has 98 replicated
+   tables, 38 sequences, both generated columns, zero invalid indexes and an
+   exact normalized source/target schema SHA-256 of
+   `4c8ba3e47fd6a92216e4969a5fc65a41ccd7939f52e169a20d67ea33d12da3fb`.
+   `agent_private.buyer_role_grants` exists empty because its data is
+   deliberately outside the publication.
+7. Started under B3c July 29: long-lived Cloud SQL Auth Proxy
+   `rtbcat-cloudsql-logical-proxy.service` listens only on
+   `127.0.0.1:15432`. Subscription and slot `rtbcat_hetzner_migration` were
+   created together with `copy_data=true`; consumption began immediately. The
+   target app remains stopped.
+8. In progress: monitor until all 98 subscription-table states are `ready`.
+   The persistent 30-second monitor records source retained WAL, target disk,
+   subscription state and proxy health. Continue checking source
+   disk/autoresize, subscriber conflicts and apply delay.
+
+   **Corrected July 30, 2026.** Waiting alone will not resolve this on an
+   acceptable timescale. 97/98 are `ready`; `rtb_daily` needs roughly 66 more
+   hours because 16 indexes are maintained per inserted row, and the wait is
+   costing 45.5 GB/day of permanent Cloud SQL storage against a 43.7 GB pinned
+   slot. The monitor is correctly reporting `critical_source_wal`; do not
+   dismiss it as noise. Indexes cannot be dropped in place — the tablesync
+   worker holds one 25-hour transaction that blocks both `DROP INDEX` and
+   `DROP INDEX CONCURRENTLY`. See the July 30 brief before deciding.
+
+   If the copy is restarted, the source-side tablesync slot
+   `pg_30304_sync_28572_…` **can be orphaned rather than dropped**. An orphaned
+   inactive slot retains WAL indefinitely — the exact failure this runbook
+   warns against. Confirm on the source that it is gone and retained bytes fell
+   before calling the restart complete. Never touch
+   `rtbcat_hetzner_migration`; dropping that slot means re-copying all 98
+   tables.
 
 Abort and cleanly remove the slot/subscription if retained WAL threatens source
 availability, the target has less than 20% free space, the schema changes
@@ -101,9 +151,16 @@ Before requesting the final window:
 - table counts and the fixed-cutoff 10/10 database suite reconcile;
 - the 7/7 private-finance suite reconciles;
 - both generated columns produce the same values on source and target;
+- the frozen contents of excluded
+  `agent_private.buyer_role_grants` are transferred separately and verified;
 - target backups include this fresh database and a restore is proven;
 - the immutable writable release and a scheduler-disabled activation have been
   rehearsed;
+- the temporary Hetzner-only hostname has passed public TLS, reverse-proxy and
+  representative read-only checks while restricted to approved operators, with
+  every target scheduler still disabled; the temporary callback was additively
+  registered and a real interactive Google sign-in plus `/api/auth/me`
+  succeeded;
 - DNS TTL, TLS, OAuth callbacks, API clients and rollback ownership are signed
   off; and
 - a named operator and verifier are assigned to every approval gate.
@@ -185,19 +242,22 @@ No target write is allowed if any convergence or validation check differs.
 
 These are separately approved mutations:
 
-1. Start the immutable Hetzner release writable with all three scheduler flags
+1. Seal the temporary hostname before opening the production cutover window.
+   Preserve its TLS/public-path acceptance evidence, but do not treat the
+   temporary record as production routing.
+2. Start the immutable Hetzner release writable with all three scheduler flags
    still false by using `scripts/hetzner/activate_writable_release.sh` and the
    accepted final-sync evidence. The activation command does not change DNS;
    retain its mode-0600 receipt and validate health privately.
-2. Switch DNS and verify TLS, OAuth, dashboard, API health and representative
+3. Switch DNS and verify TLS, OAuth, dashboard, API health and representative
    reads from public paths.
-3. Keep GCP API/writers stopped. Enable the three scheduler endpoint flags on
+4. Keep GCP API/writers stopped. Enable the three scheduler endpoint flags on
    exactly one Hetzner API deployment, then resume the existing three Cloud
    Scheduler jobs as the sole phase-one trigger set. Do not install a parallel
    Hetzner timer set for the same work.
-4. Run one controlled import/refresh cycle and verify PostgreSQL, BigQuery/GCS
+5. Run one controlled import/refresh cycle and verify PostgreSQL, BigQuery/GCS
    idempotency, finance-facing aggregates and delivery monitoring.
-5. Keep Cloud SQL frozen and intact as the rollback snapshot.
+6. Keep Cloud SQL frozen and intact as the rollback snapshot.
 
 ## Rollback boundary
 

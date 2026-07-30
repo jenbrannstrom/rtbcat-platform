@@ -1,5 +1,153 @@
 # Handover
 
+## B3a source replication objects accepted — July 29, 2026
+
+The owner directed the next migration step after B2. Guarded source tooling was
+committed and pushed as `553c6127`, then its exact SHA-256-matched copy ran
+against Cloud SQL. The deployment-critical suite passed 111 tests.
+
+Accepted source state:
+
+- login `rtbcat_migration_repl` has `LOGIN` and `REPLICATION`, but is not a
+  superuser, `cloudsqlsuperuser` member, role/database creator or RLS bypasser;
+- the login has database connect, usage on `public` and
+  `financial_viability`, and SELECT on exactly 98 accepted tables;
+- publication `rtbcat_migration_pub` explicitly contains those 98 tables,
+  is not `FOR ALL TABLES`, publishes insert/update/delete/truncate, and has
+  ordered table-name checksum `c2af91c3598c914e5c2493532e81adb8`;
+- the one `agent_private` table is excluded;
+- the temporary finance-owner membership existed only inside the creation
+  transaction and was revoked before commit;
+- the credential is escrowed root-only on the Hetzner application host; it was
+  streamed for creation and login verification without being printed; and
+- Cloud SQL still has zero replication slots. Production, DNS, all three Cloud
+  Scheduler jobs and both GCP/Hetzner application postures remain unchanged.
+
+An active `rtb_daily` autovacuum advanced WAL by about 640 MB in a 30-second
+sample. Cloud Monitoring showed approximately 469.4 GB used of 514.3 GB before
+auto-growth, while `pg_ls_waldir()` later reported about 1.49 GB of current WAL.
+An unattached slot could therefore retain WAL dangerously quickly. The slot
+must be created by the subscriber only when it is ready to consume immediately.
+
+**Next authority boundary:** preserve the July 22 evidence, stop the Hetzner
+shadow, replace the stale rehearsal database, restore the exact empty schema
+and start the monitored subscriber. This is destructive and remains separately
+approval-gated. Do not create an idle slot, freeze source writers, change DNS
+or enable target writers/schedulers.
+
+## B2 Cloud SQL logical decoding accepted — July 29, 2026, 11:23 UTC
+
+The owner explicitly approved immediate B2 execution, overriding the earlier
+August 1 watch hold. Preflight found a live Gmail import, so no maintenance
+started until its real worker completed and released the production lock.
+
+Accepted evidence:
+
+- on-demand Cloud SQL backup `1785323946722` completed successfully from
+  11:19:06 through 11:22:09 UTC;
+- update operation `708af4fa-da73-4f34-8fa4-5dd400000031` set exactly
+  `cloudsql.logical_decoding=on` and completed from 11:22:53 through
+  11:23:25 UTC;
+- the zonal PostgreSQL 15 instance returned `RUNNABLE`, PITR remained enabled
+  with seven-day transaction-log retention, and PostgreSQL reported
+  `wal_level=logical`;
+- current capacity is 10 replication slots, 10 WAL senders and 4 logical
+  replication workers; no additional capacity flag was needed for the planned
+  single subscription;
+- six consecutive database-backed production health checks passed on release
+  `sha-10c4594`; the GCP API container remained healthy and Gmail import
+  returned idle;
+- all three Cloud Scheduler jobs remained enabled against `scan.rtb.cat`;
+  production and temporary DNS continued to resolve to their original GCP and
+  Hetzner IPv4 addresses; and
+- zero publications and zero replication slots existed immediately after B2.
+
+The first backup attempt under read-only `cat-scan@rtb.cat` was denied without
+creating anything. The successful backup and patch used the existing
+`billing@amazingdo.com` Editor binding; no IAM grant or active-account default
+was changed.
+
+This section predates the separately accepted B3a source-role/publication
+checkpoint above. B2 by itself did not authorize those objects or any target
+rehearsal-database replacement, subscriber, writer freeze, DNS change or target
+writer/scheduler.
+
+## Temporary public-path acceptance complete — July 29, 2026
+
+The DNS-only Cloudflare `A` record `scan-hetzner.rtb.cat` now resolves only to
+the stable Hetzner app IPv4. Nginx 1.24 serves a valid Let's Encrypt certificate
+and restricts HTTPS to loopback plus the operator `/32`; an independent request
+from the Hetzner database host returned 403. Production `scan.rtb.cat` still
+resolves to GCP.
+
+The temporary path returns healthy release `10c45949` and routes OAuth through
+a hardened OAuth2 Proxy 7.6.0 listener on `127.0.0.1:4180`. The initial
+secret-store client was stale and deleted; it was replaced through an
+encrypted, non-persistent stream from the live GCP OAuth configuration.
+`https://scan-hetzner.rtb.cat/oauth2/callback` was additively registered on the
+existing Web OAuth client without removing the production callback. A real
+browser login as the existing RTBcat account succeeded at 10:34 UTC, and
+subsequent `/api/auth/me` requests returned 200.
+
+The first browser attempt exposed that the API trusted only loopback even
+though host-published Docker traffic arrives from gateway `172.18.0.1`.
+Temporary Compose now discovers and trusts that exact gateway in addition to
+loopback; it does not trust a broad Docker/private CIDR. Password login is
+hidden only on this read-only rehearsal because creating a password session
+writes session/audit rows. It remains unchanged on production and returns when
+the Hetzner database is activated writable. The production GCP Google flow has
+the same loopback-only trust setting and the operator reports it never worked;
+production was not changed during this gate.
+
+The API/dashboard remain on loopback, `CATSCAN_READ_ONLY_SHADOW=true`, the
+database remains `rtbcat_serving_rehearsal`, and all three scheduler flags are
+false. All three scheduled POST endpoints returned 405. The repo guards are
+`scripts/hetzner/manage_temp_public_ingress.sh`,
+`scripts/hetzner/install_temp_google_oauth_proxy.sh` and
+`scripts/hetzner/rehearse_temp_google_login.sh`. GCP, Cloud SQL, production
+writers and source schedulers are unchanged.
+
+## B1 accepted — July 29, 2026, 08:11 UTC
+
+The separately approved B1 boundary is complete. The accepted immutable
+Hetzner release `10c45949` ran briefly in private writable mode against the
+stale rehearsal database with all three schedulers disabled, then returned to
+the accepted loopback-only read-only shadow posture.
+
+Accepted evidence:
+
+- GCP production, Cloud SQL, DNS and all three source scheduler jobs remained
+  authoritative and unchanged;
+- a fresh encrypted target differential backup completed before the rehearsal,
+  and another completed after it; WAL archival still reports zero failures;
+- writable release verification passed for the exact API/dashboard digests,
+  PostgreSQL, retained Google access, scheduler guards and loopback listeners;
+- Gmail, precompute and creative-cache scheduled endpoints each refused
+  execution with HTTP 503;
+- a real target write inserted one probe row inside a transaction, rolled it
+  back and proved no schema or row residue remained;
+- migrations 070 and 071 were applied to the stale rehearsal database during
+  the first startup, as expected for release `10c45949`;
+- the final application mode is `CATSCAN_READ_ONLY_SHADOW=true`, all scheduler
+  flags are false, the database default is read-only, mutation middleware
+  returns 405 and both containers are healthy; and
+- the accepted receipt and failed-safe first-attempt receipt are mode 0600
+  under
+  `docs/internal/rtbcat-migration/b1-live-writable-rehearsal-2026-07-29/`.
+
+The first attempt encountered a transient connection reset in the immediate
+post-Compose verifier. Its failure path restored the database default and
+shadow containers; a settled manual verification passed. The bounded operator
+path was then hardened with verifier retries, its focused 28-test set passed,
+and the controlled retry was accepted. The independent 15-minute deadman was
+cancelled only after verified restoration.
+
+This section predates the separately accepted B2 maintenance recorded above.
+B1 by itself did not authorize B2 or any subscriber replacement, source writer
+freeze, DNS, scheduler ownership change or final writable activation.
+
+---
+
 ## Next engineer resume — July 28, 2026, ~08:35 UTC (urgent workstation reboot)
 
 **Safe to reboot this PC.** Resume here. Do not re-derive production state from

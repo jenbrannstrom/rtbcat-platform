@@ -109,5 +109,6 @@ def test_publish_workflow_runs_activation_and_scheduler_guards() -> None:
         "tests/test_scheduler_guard.py",
         "tests/test_precompute_scheduler_guard.py",
         "tests/test_creative_cache_router.py",
+        "tests/test_live_writable_rehearsal_guards.py",
     ):
         assert test_path in workflow

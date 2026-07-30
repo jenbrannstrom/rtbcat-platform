@@ -134,6 +134,27 @@ The deployment is accepted only when:
 - all scheduler ownership flags remain false; and
 - retained Google services are reachable from the target identity.
 
+## Bounded live writable rehearsal (B1)
+
+This target-only rehearsal is distinct from final activation. It is restricted
+to `rtbcat_serving_rehearsal`, keeps the release loopback-only, keeps every
+scheduler false, arms a 15-minute read-only restoration deadman, verifies that
+all scheduled endpoints refuse execution, performs a rollback-only database
+write probe and restores both application and database read-only posture:
+
+```bash
+sudo scripts/hetzner/rehearse_live_writable_release.sh \
+  --release-file /var/lib/rtbcat/releases/current.env \
+  --json-out /secure/evidence/b1-writable-rehearsal.json \
+  --confirm REHEARSE_LIVE_WRITABLE_SCHEDULERS_OFF_NO_DNS
+```
+
+Bracket B1 with target differential backups. Writable startup can apply
+pending migrations and maintenance changes to the stale rehearsal database;
+record those separately from the rollback-only probe. B1 never authorizes DNS,
+GCP, source-writer, Cloud SQL or scheduler changes and always returns the
+target to shadow mode.
+
 ## Initial writable activation (approval-gated)
 
 The same checksum-matched Compose artifact defaults to shadow mode. A separate
@@ -160,6 +181,91 @@ containers.
 
 Use an SSH tunnel for shadow review, for example local port 33000 to target
 `127.0.0.1:3000`. Public DNS and ports 80/443 remain unused in this part.
+
+## Temporary public-path acceptance
+
+A non-production hostname can validate public TLS, reverse-proxy routing,
+cookies, authentication callbacks and representative API behavior before the
+production hostname moves. This gate does not change `scan.rtb.cat`, database
+mode, scheduler ownership or GCP authority.
+
+First stage Nginx and Certbot in sealed mode:
+
+```bash
+sudo scripts/hetzner/manage_temp_public_ingress.sh stage \
+  --hostname scan-hetzner.rtb.cat \
+  --confirm STAGE_TEMP_INGRESS_SEALED_NO_DNS
+```
+
+Sealed mode serves only the ACME challenge webroot and HTTP 404 for the
+temporary hostname; unknown hosts are dropped and no request can reach the
+application. Create a DNS-only Cloudflare `A` record for the temporary
+hostname only after sealed behavior is verified externally. Never edit the
+production record as part of this gate.
+
+After the temporary record resolves directly and exclusively to the stable
+Hetzner application IPv4, install the temporary OAuth2 Proxy from root-only
+copies of the current production OAuth client pair. Never place either input
+in git, a command argument or terminal output:
+
+```bash
+sudo scripts/hetzner/install_temp_google_oauth_proxy.sh \
+  --hostname scan-hetzner.rtb.cat \
+  --allowed-email-domain rtb.cat \
+  --allowed-email-domain amazingdo.com \
+  --confirm INSTALL_TEMP_GOOGLE_OAUTH_PROXY_NO_DNS
+```
+
+Add `https://scan-hetzner.rtb.cat/oauth2/callback` to the existing Web OAuth
+client's authorized redirect URIs without removing the production callback.
+Install `deploy/hetzner/temp-google-oauth.override.yml` as
+`/etc/rtbcat/temp-google-oauth.override.yml`, then enable Google login on the
+read-only rehearsal deployment:
+
+```bash
+sudo scripts/hetzner/rehearse_temp_google_login.sh \
+  --confirm ENABLE_TEMP_GOOGLE_LOGIN_READ_ONLY_SCHEDULERS_OFF
+```
+
+The rehearsal arms a 15-minute deadman and refuses any database other than
+`rtbcat_serving_rehearsal`, writable mode, scheduler enablement, listener
+exposure or release drift. It discovers the API container's exact Docker
+gateway and trusts OAuth identity only from that address plus loopback. Password
+login is hidden during this read-only gate because creating its database-backed
+session and audit record is a write; the accepted base/writable deployment
+retains password login.
+
+Activate the operator-restricted proxy with Google routing:
+
+```bash
+sudo scripts/hetzner/manage_temp_public_ingress.sh activate \
+  --hostname scan-hetzner.rtb.cat \
+  --operator-cidr OPERATOR_PUBLIC_IP/32 \
+  --expected-ipv4 HETZNER_APP_IPV4 \
+  --email ACME_CONTACT_EMAIL \
+  --google-oauth \
+  --confirm ACTIVATE_TEMP_READ_ONLY_INGRESS_SCHEDULERS_OFF
+```
+
+Activation refuses unless the API/dashboard are healthy, ports 3000/8000
+remain loopback-only, `CATSCAN_READ_ONLY_SHADOW=true`, every target scheduler
+flag is false and DNS resolves to the exact expected IPv4. HTTPS is then
+restricted to loopback and the approved operator CIDR. `/api/` is routed to
+the loopback API with its prefix removed, while other paths route to the
+loopback dashboard. `/oauth2/` routes only to the loopback OAuth2 Proxy.
+
+Return the temporary hostname to sealed ACME-plus-404 behavior without
+deleting its certificate:
+
+```bash
+sudo scripts/hetzner/manage_temp_public_ingress.sh seal \
+  --hostname scan-hetzner.rtb.cat \
+  --confirm SEAL_TEMP_INGRESS
+```
+
+The temporary hostname must remain read-only until the separately approved
+final synchronization and writer-freeze gates are complete. It is not a
+canary writer and must never own a scheduler.
 
 ## 4. Roll back the application release
 
