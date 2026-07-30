@@ -289,6 +289,12 @@ That cleanup saves about USD 17/month independently of the migration.
 > copy is restarted, or explicitly retire this acceptance item with a written
 > reason. Do not leave it silently unmet. See
 > `docs/internal/MIGRATION-ENGINEER-BRIEF-2026-07-30.md`.
+>
+> **Resolved July 30, 2026 (evening):** the partitioned design was taken when
+> the copy was restarted. The first item below is live again: zero-difference
+> per-month validation against the source is the pending acceptance evidence
+> for `rtb_daily`, together with a re-recorded schema baseline (the July 29
+> hash intentionally no longer covers this one table).
 
 - Full restore timing and zero-difference partition validation.
 - Heavy dashboard and API performance checks against the restored target

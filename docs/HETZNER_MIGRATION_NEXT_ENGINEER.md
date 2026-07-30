@@ -1,6 +1,7 @@
 # Hetzner migration — next engineer checkpoint
 
-Last updated: July 30, 2026 (B3c blocked on `rtb_daily`; decision open)
+Last updated: July 30, 2026, evening (`rtb_daily` restarted onto the
+partitioned schema; copy in progress)
 
 > **Start here, then read
 > `docs/internal/MIGRATION-ENGINEER-BRIEF-2026-07-30.md`.** That brief holds the
@@ -80,6 +81,28 @@ Do **not** attempt to drop indexes to speed this up in place. The worker holds
 one 25-hour transaction, so both `DROP INDEX` and `DROP INDEX CONCURRENTLY`
 block behind it. Speeding it up requires restarting that table's copy from
 zero. That decision, its options and its runbook are in the July 30 brief.
+
+**Updated July 30, 2026 (evening) — the decision is resolved and executed.**
+With owner approval, the `rtb_daily` copy was restarted at ~20:23Z onto the
+partition kit's schema (the Path A design, applied under logical replication):
+monthly partitions on `metric_date`, `BIGINT` `id`, primary key
+`(metric_date, id)`, dedup unique `(metric_date, row_hash)`, with the five
+secondary indexes deferred until after the copy. A fresh differential backup
+gated the change; the dependent `agent_read` views and the
+`seat_report_completeness_daily` matview were captured and recreated (the
+matview needs a `REFRESH` once the copy completes). The orphaned tablesync
+slot was dropped on the source afterwards — the monitor is back to `ok`, the
+retained-WAL disk growth has stopped, and a Cloud Monitoring disk alert now
+exists on the instance. Early measured copy throughput is ~25 MB/s versus
+~0.5 MB/s before the restart.
+
+Consequences: the schema hash `4c8ba3e4…` quoted above is intentionally void
+for `rtb_daily` only — its acceptance evidence must be re-recorded against the
+partitioned schema (zero-difference per-month validation vs the source) — and
+the cutover sequence handoff must set `rtb_daily_id_seq` past source
+`max(id)`, because the target sequence was recreated fresh. The deployed
+image needs no change: the importer probes `pg_partitioned_table` at runtime
+and switches its `ON CONFLICT` target accordingly.
 
 The unpublished `agent_private.buyer_role_grants` table exists with exact
 schema but zero rows. Its frozen data requires a separate verified transfer
@@ -371,6 +394,9 @@ Options, break-even arithmetic and the runbook are in
 `docs/internal/MIGRATION-ENGINEER-BRIEF-2026-07-30.md`. Do not purge history on
 the **source** to shrink the copy — a mass DELETE would generate WAL that the
 pinned slot must retain, making the current problem worse.
+
+**Resolved July 30, 2026 (evening):** the restart took the partitioned
+design. See the updated B3c section above.
 
 ## Writer and scheduler findings
 

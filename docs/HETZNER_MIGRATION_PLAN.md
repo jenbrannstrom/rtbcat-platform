@@ -304,6 +304,9 @@ restored the accepted current manifest successfully.
   > The `rtb_daily` copy now has to be restarted regardless, which is the last
   > free moment to honour this line. See
   > `docs/internal/MIGRATION-ENGINEER-BRIEF-2026-07-30.md`.
+  >
+  > **Resolved July 30, 2026 (evening):** the restarted B3c copy targets the
+  > kit's partitioned schema, honouring this line under logical replication.
 - Record dump, transfer, restore and index-build durations.
 - Require zero-difference monthly row/hash/spend/impression/click validation.
 - Exercise heavy API/dashboard paths and compare query plans and latency.
