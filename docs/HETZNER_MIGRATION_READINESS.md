@@ -1,6 +1,6 @@
 # Hetzner migration readiness
 
-Last updated: July 26, 2026
+Last updated: July 29, 2026
 
 ## Decision
 
@@ -33,8 +33,11 @@ The reviewable, part-by-part execution plan is tracked in
 [`HETZNER_MIGRATION_PLAN.md`](HETZNER_MIGRATION_PLAN.md). Its July 25 execution
 checkpoint is the authoritative resume order for the next engineer. Part 1 has
 a local Terraform implementation under `terraform/hetzner/` and is now
-provisioned in the isolated RTBcat Hetzner project. The read-only rehearsal copy
-exists, but production authority, DNS and writer state have not changed.
+provisioned in the isolated RTBcat Hetzner project. The accepted read-only
+rehearsal evidence remains protected, but B3b stopped the shadow and removed
+the stale rehearsal database to make room for the fresh logical subscriber.
+Empty `rtbcat_serving` remains. Production authority, DNS and writer state have
+not changed.
 The concise resume checkpoint is
 [`HETZNER_MIGRATION_NEXT_ENGINEER.md`](HETZNER_MIGRATION_NEXT_ENGINEER.md).
 
@@ -108,6 +111,49 @@ revision, PostgreSQL TLS, Secret Manager, BigQuery, GCS, scheduler guards and
 loopback-only listener checks. DNS, production writers and production
 schedulers remain unchanged.
 
+On July 29, the separately approved B1 boundary briefly ran the accepted
+release in private writable mode against the stale rehearsal database with all
+three schedulers disabled. Each scheduled endpoint refused with HTTP 503; a
+real database probe write rolled back with no residue. The application and
+database then returned to verified read-only shadow posture. Fresh encrypted
+differential backups bracketed the rehearsal, and GCP, Cloud SQL, DNS and
+source scheduler ownership were unchanged.
+
+The temporary public path is active at `scan-hetzner.rtb.cat`. Its DNS-only
+Cloudflare record resolves only to the Hetzner app IPv4; Nginx serves a valid
+Let's Encrypt certificate and restricts HTTPS to loopback plus the operator
+`/32`. A second Hetzner host received 403. Health, provider discovery and all
+three read-only scheduler refusals passed while the API/dashboard/OAuth
+listeners remained loopback-only, shadow mode remained true and every target
+scheduler remained false. Google OAuth routing uses the current live production
+client, and its temporary callback was additively registered without removing
+the production callback. A real browser Google login completed and
+`/api/auth/me` returned 200. The API trusts only loopback plus its exact Docker
+gateway for injected OAuth identity. Password login is intentionally hidden
+while the rehearsal database remains read-only because password sessions write
+database state. The production hostname is unchanged.
+
+On July 29, approved B2 completed after the active Gmail import became idle.
+On-demand backup `1785323946722` succeeded, and the single-flag Cloud SQL
+update set `cloudsql.logical_decoding=on`. The instance returned `RUNNABLE`,
+PostgreSQL reports `wal_level=logical`, six consecutive database-backed health
+checks passed, and scheduler ownership plus both DNS records were unchanged.
+No publication, replication slot or replication login was created.
+
+Later on July 29, approved B3a used guarded source setup commit `553c6127` to
+create restricted login `rtbcat_migration_repl` and explicit publication
+`rtbcat_migration_pub`. The login can connect and SELECT exactly the accepted
+98 tables but has no superuser, `cloudsqlsuperuser`, role/database-creation or
+RLS-bypass authority. The publication excludes `agent_private`, is not
+`FOR ALL TABLES` and has ordered table-name checksum
+`c2af91c3598c914e5c2493532e81adb8`. The transaction-scoped finance-owner grant
+was revoked before commit.
+
+No slot was created. A production autovacuum advanced WAL by about 640 MB over
+30 seconds, and Cloud Monitoring showed about 45 GB free before automatic disk
+growth. The subscriber must therefore create and immediately consume the slot;
+do not retain WAL while the old target database is still present.
+
 On July 25, `scripts/catscan_api_read_only_soak.py` began the paired
 application soak. The one-cycle baseline completed all 15 Hetzner GETs with
 zero missing read-only shadow headers. GCP returned HTTP 500 on the 90-day RTB
@@ -124,8 +170,10 @@ behavior but was not a controlled same-build provider benchmark.
 The harness and evidence format are documented in
 [`CATSCAN_API_READ_ONLY_SOAK.md`](CATSCAN_API_READ_ONLY_SOAK.md).
 
-The July 25 final-sync audit found that Cloud SQL has no logical-decoding flag,
-publication or retained migration slot. The July 22 rehearsal database
+The July 25 final-sync audit found that Cloud SQL then had no logical-decoding
+flag, publication or retained migration slot. B2 and B3a have since enabled
+logical decoding and created the source login/publication, but there is still
+no retained slot. The July 22 rehearsal database
 therefore cannot be retroactively caught up: it must be preserved as evidence
 and replaced by a fresh schema-matched logical subscriber, which can take an
 online initial copy and then continuously catch up. All 98 target tables have
@@ -217,20 +265,36 @@ That cleanup saves about USD 17/month independently of the migration.
 - The live analytics lane still writes to object storage and reads/writes the
   warehouse. Target read access is proven; ownership and one-time cutover of
   every writer/scheduler still need an explicit manifest.
-- Cloud SQL logical decoding is off and enabling it requires a separately
-  approved restart. A fresh logical subscriber, WAL/slot monitoring and
-  source-to-target catch-up rehearsal are not yet complete.
-- The current immutable target deployment remains shadow-only. Guarded
-  scheduler-disabled writable activation is implemented and its check-only
-  Compose/evidence rehearsal passes, but the changed release is not yet
-  reviewed, published, deployed as a shadow or live-rehearsed. Single-owner
-  scheduler enable remains a later approval gate.
+- Cloud SQL logical decoding is on after accepted B2 and PostgreSQL reports
+  `wal_level=logical`. B3a added the restricted login and explicit 98-table
+  publication. A fresh logical subscriber, active slot monitoring and
+  source-to-target catch-up rehearsal are not yet complete; no slot exists yet.
+- The current immutable target deployment has returned to shadow-only after
+  the accepted bounded B1 live writable rehearsal. Final synchronized
+  activation still requires source freeze, logical catch-up, exact sequence
+  state, reconciliation and backup evidence. Single-owner scheduler enable
+  remains a later approval gate.
 - The private-finance schema owner is traced to the separate ADT finance
   controller. Its active runtime uses local SQLite plus read-only RTBcat HTTP,
   not Cloud SQL, but the dormant owner login must still be recreated on target
   and blocked on source during freeze.
 
 ## Required acceptance evidence
+
+> **Corrected July 30, 2026.** The first item below still reflects the original
+> dump/restore plan, in which `rtb_daily` was to be rebuilt as partitioned via
+> `scripts/partition_migration/` Path A. The executed B3c copied it as a plain
+> unpartitioned clone with all 16 indexes, and no rehearsal evidence rejecting
+> Path A was recorded. Either take the partitioned design when the `rtb_daily`
+> copy is restarted, or explicitly retire this acceptance item with a written
+> reason. Do not leave it silently unmet. See
+> `docs/internal/MIGRATION-ENGINEER-BRIEF-2026-07-30.md`.
+>
+> **Resolved July 30, 2026 (evening):** the partitioned design was taken when
+> the copy was restarted. The first item below is live again: zero-difference
+> per-month validation against the source is the pending acceptance evidence
+> for `rtb_daily`, together with a re-recorded schema baseline (the July 29
+> hash intentionally no longer covers this one table).
 
 - Full restore timing and zero-difference partition validation.
 - Heavy dashboard and API performance checks against the restored target

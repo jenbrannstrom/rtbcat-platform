@@ -90,6 +90,28 @@ jobs:
       - name: Resolve smoke configuration
         id: config
         shell: bash
+        # This job holds bearer, session-cookie and agent tokens for production.
+        # Dispatch inputs therefore arrive through the environment instead of
+        # being interpolated into the script body.
+        env:
+          INPUT_API_BASE_URL: ${{ github.event.inputs.api_base_url }}
+          INPUT_BUYER_ID: ${{ github.event.inputs.buyer_id }}
+          INPUT_AGENT_BUYER_ID: ${{ github.event.inputs.agent_buyer_id }}
+          INPUT_CANARY_PROFILE: ${{ github.event.inputs.canary_profile }}
+          INPUT_TIMEOUT_SECONDS: ${{ github.event.inputs.timeout_seconds }}
+          INPUT_RUN_AGENT_API: ${{ github.event.inputs.run_agent_api }}
+          INPUT_RUN_OPTIMIZER_WORKFLOW: ${{ github.event.inputs.run_optimizer_workflow }}
+          INPUT_REQUIRE_AGENT_SOURCE_ROWS: ${{ github.event.inputs.require_agent_source_rows }}
+          INPUT_REQUIRE_AGENT_POSITIVE_SPEND: ${{ github.event.inputs.require_agent_positive_spend }}
+          INPUT_AGENT_START_DATE: ${{ github.event.inputs.agent_start_date }}
+          INPUT_AGENT_END_DATE: ${{ github.event.inputs.agent_end_date }}
+          VAR_CANARY_PROFILE: ${{ vars.CATSCAN_LIVE_SMOKE_CANARY_PROFILE }}
+          VAR_TIMEOUT_SECONDS: ${{ vars.CATSCAN_LIVE_SMOKE_TIMEOUT_SECONDS }}
+          VAR_RUN_AGENT_API: ${{ vars.CATSCAN_LIVE_SMOKE_RUN_AGENT_API }}
+          VAR_RUN_OPTIMIZER_WORKFLOW: ${{ vars.CATSCAN_LIVE_SMOKE_RUN_OPTIMIZER_WORKFLOW }}
+          VAR_REQUIRE_AGENT_SOURCE_ROWS: ${{ vars.CATSCAN_LIVE_SMOKE_REQUIRE_AGENT_SOURCE_ROWS }}
+          VAR_REQUIRE_AGENT_POSITIVE_SPEND: ${{ vars.CATSCAN_LIVE_SMOKE_REQUIRE_AGENT_POSITIVE_SPEND }}
+          VAR_ALLOWED_API_HOSTS: ${{ vars.CATSCAN_LIVE_SMOKE_ALLOWED_API_HOSTS }}
         run: |
           set -euo pipefail
 
@@ -104,17 +126,26 @@ jobs:
             esac
           }
 
-          api_base_url="${{ github.event.inputs.api_base_url || '' }}"
-          buyer_id="${{ github.event.inputs.buyer_id || '' }}"
-          agent_buyer_id="${{ github.event.inputs.agent_buyer_id || '' }}"
-          canary_profile="${{ github.event.inputs.canary_profile || vars.CATSCAN_LIVE_SMOKE_CANARY_PROFILE || 'balanced' }}"
-          timeout_seconds="${{ github.event.inputs.timeout_seconds || vars.CATSCAN_LIVE_SMOKE_TIMEOUT_SECONDS || '120' }}"
-          run_agent_api="$(normalize_bool "${{ github.event.inputs.run_agent_api || vars.CATSCAN_LIVE_SMOKE_RUN_AGENT_API || 'true' }}")"
-          run_optimizer_workflow="$(normalize_bool "${{ github.event.inputs.run_optimizer_workflow || vars.CATSCAN_LIVE_SMOKE_RUN_OPTIMIZER_WORKFLOW || 'false' }}")"
-          require_agent_source_rows="$(normalize_bool "${{ github.event.inputs.require_agent_source_rows || vars.CATSCAN_LIVE_SMOKE_REQUIRE_AGENT_SOURCE_ROWS || 'true' }}")"
-          require_agent_positive_spend="$(normalize_bool "${{ github.event.inputs.require_agent_positive_spend || vars.CATSCAN_LIVE_SMOKE_REQUIRE_AGENT_POSITIVE_SPEND || 'true' }}")"
-          agent_start_date="${{ github.event.inputs.agent_start_date || '' }}"
-          agent_end_date="${{ github.event.inputs.agent_end_date || '' }}"
+          reject_env_controls() {
+            local name="$1"
+            local value="$2"
+            if [[ "${value}" =~ [[:cntrl:]] ]]; then
+              echo "Rejected ${name}: control characters are not allowed" >&2
+              exit 2
+            fi
+          }
+
+          api_base_url="${INPUT_API_BASE_URL:-}"
+          buyer_id="${INPUT_BUYER_ID:-}"
+          agent_buyer_id="${INPUT_AGENT_BUYER_ID:-}"
+          canary_profile="${INPUT_CANARY_PROFILE:-${VAR_CANARY_PROFILE:-balanced}}"
+          timeout_seconds="${INPUT_TIMEOUT_SECONDS:-${VAR_TIMEOUT_SECONDS:-120}}"
+          run_agent_api="$(normalize_bool "${INPUT_RUN_AGENT_API:-${VAR_RUN_AGENT_API:-true}}")"
+          run_optimizer_workflow="$(normalize_bool "${INPUT_RUN_OPTIMIZER_WORKFLOW:-${VAR_RUN_OPTIMIZER_WORKFLOW:-false}}")"
+          require_agent_source_rows="$(normalize_bool "${INPUT_REQUIRE_AGENT_SOURCE_ROWS:-${VAR_REQUIRE_AGENT_SOURCE_ROWS:-true}}")"
+          require_agent_positive_spend="$(normalize_bool "${INPUT_REQUIRE_AGENT_POSITIVE_SPEND:-${VAR_REQUIRE_AGENT_POSITIVE_SPEND:-true}}")"
+          agent_start_date="${INPUT_AGENT_START_DATE:-}"
+          agent_end_date="${INPUT_AGENT_END_DATE:-}"
 
           if [[ -z "${api_base_url}" ]]; then
             api_base_url="${CATSCAN_API_BASE_URL_DEFAULT:-}"
@@ -124,6 +155,78 @@ jobs:
           fi
           if [[ -z "${agent_buyer_id}" ]]; then
             agent_buyer_id="${CATSCAN_AGENT_BUYER_ID_DEFAULT:-${buyer_id}}"
+          fi
+
+          # Values below are exported through line-oriented GitHub environment
+          # files. Reject controls from both dispatch inputs and repository
+          # variables before validation so no value can inject an assignment.
+          reject_env_controls "api_base_url" "${api_base_url}"
+          reject_env_controls "buyer_id" "${buyer_id}"
+          reject_env_controls "agent_buyer_id" "${agent_buyer_id}"
+          reject_env_controls "canary_profile" "${canary_profile}"
+          reject_env_controls "timeout_seconds" "${timeout_seconds}"
+          reject_env_controls "agent_start_date" "${agent_start_date}"
+          reject_env_controls "agent_end_date" "${agent_end_date}"
+          reject_env_controls \
+            "max_home_endpoint_efficiency_latency_ms" \
+            "${CATSCAN_MAX_HOME_ENDPOINT_EFFICIENCY_LATENCY_MS_DEFAULT}"
+          reject_env_controls \
+            "bidstream_waiver_json" \
+            "${CATSCAN_RUNTIME_HEALTH_BIDSTREAM_WAIVER_JSON:-}"
+          reject_env_controls \
+            "conversion_readiness_waiver_json" \
+            "${CATSCAN_RUNTIME_HEALTH_CONVERSION_READINESS_WAIVER_JSON:-}"
+
+          # A dispatcher must not be able to aim this job's production tokens at
+          # a host of their choosing. Allow the configured default host, plus any
+          # host in the CATSCAN_LIVE_SMOKE_ALLOWED_API_HOSTS repository variable.
+          if [[ -n "${api_base_url}" ]]; then
+            if ! [[ "${api_base_url}" =~ ^https://[A-Za-z0-9.-]+(:[0-9]+)?(/.*)?$ ]]; then
+              echo "Rejected api_base_url: must be an https URL with a plain host" >&2
+              exit 2
+            fi
+            target_host="${api_base_url#https://}"
+            target_host="${target_host%%/*}"
+            target_host="${target_host%%:*}"
+            default_host="${CATSCAN_API_BASE_URL_DEFAULT#https://}"
+            default_host="${default_host%%/*}"
+            default_host="${default_host%%:*}"
+            host_allowed=0
+            for allowed in ${default_host} ${VAR_ALLOWED_API_HOSTS//,/ }; do
+              if [[ -n "${allowed}" && "${target_host}" == "${allowed}" ]]; then
+                host_allowed=1
+                break
+              fi
+            done
+            if [[ "${host_allowed}" -ne 1 ]]; then
+              echo "Rejected api_base_url host '${target_host}': not an allowed smoke target" >&2
+              exit 2
+            fi
+          fi
+
+          for pair in \
+            "buyer_id:${buyer_id}" \
+            "agent_buyer_id:${agent_buyer_id}"; do
+            if [[ -n "${pair#*:}" ]] && ! [[ "${pair#*:}" =~ ^[0-9]{1,20}$ ]]; then
+              echo "Rejected ${pair%%:*}: must be numeric" >&2
+              exit 2
+            fi
+          done
+          for pair in \
+            "agent_start_date:${agent_start_date}" \
+            "agent_end_date:${agent_end_date}"; do
+            if [[ -n "${pair#*:}" ]] && ! [[ "${pair#*:}" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
+              echo "Rejected ${pair%%:*}: must be YYYY-MM-DD" >&2
+              exit 2
+            fi
+          done
+          if ! [[ "${timeout_seconds}" =~ ^[0-9]{1,5}$ ]]; then
+            echo "Rejected timeout_seconds: must be numeric" >&2
+            exit 2
+          fi
+          if ! [[ "${canary_profile}" =~ ^(safe|balanced|aggressive)$ ]]; then
+            echo "Rejected canary_profile: unsupported profile" >&2
+            exit 2
           fi
 
           missing=()

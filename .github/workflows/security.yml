@@ -34,6 +34,42 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  redaction-boundary:
+    name: Redaction Boundary (public repo)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # The denylist holds private identifiers, so it is supplied as a secret
+      # rather than tracked. Without the secret the boundary is unenforced, so
+      # a missing secret is a hard failure instead of a silent pass.
+      - name: Materialize denylist
+        env:
+          REDACTION_DENYLIST: ${{ secrets.REDACTION_DENYLIST }}
+        run: |
+          if [ -z "$REDACTION_DENYLIST" ]; then
+            echo "::error::REDACTION_DENYLIST secret is not set; boundary cannot be enforced"
+            exit 1
+          fi
+          umask 077
+          printf '%s\n' "$REDACTION_DENYLIST" > "$RUNNER_TEMP/redaction-denylist.txt"
+
+      - name: Check tracked files
+        run: |
+          python scripts/check_redaction_boundary.py \
+            --denylist "$RUNNER_TEMP/redaction-denylist.txt" \
+            --require-denylist
+
+      - name: Remove denylist
+        if: always()
+        run: rm -f "$RUNNER_TEMP/redaction-denylist.txt"
+
   dependency-scan:
     name: Dependency Scan
     runs-on: ubuntu-latest

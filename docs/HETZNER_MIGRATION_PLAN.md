@@ -1,12 +1,12 @@
 # GCP to Hetzner migration plan
 
-Last updated: July 26, 2026
+Last updated: July 29, 2026
 
 The migration is intentionally split into independently reviewable parts. A
 part is complete only when its verification evidence exists; completing code
 does not by itself authorize provisioning or production cutover.
 
-## Current execution checkpoint — July 26, 2026
+## Current execution checkpoint — July 29, 2026
 
 Resume from **Parts 5–6 final-sync engineering**, not provisioning, discovery,
 independent backup configuration, another bulk rehearsal or application
@@ -14,7 +14,21 @@ cutover. Parts 0–2 are accepted and the Part 3 immutable target-host shadow is
 running. The database restore, application-data copy, reconciliations, six-hour
 API soak, immutable A→B→A application rollback, encrypted backup/WAL chain and
 clean-host PITR rehearsal are complete. Production authority, DNS and writers
-are unchanged.
+are unchanged. The separately approved B1 bounded live writable rehearsal is
+also accepted; the target returned to read-only shadow mode afterward. The
+separately approved B2 Cloud SQL restart is also accepted:
+`cloudsql.logical_decoding=on` and PostgreSQL reports `wal_level=logical`.
+B3a is accepted as well: restricted login `rtbcat_migration_repl` and explicit
+98-table publication `rtbcat_migration_pub` exist; that phase deliberately
+left the slot count at zero until a ready subscriber could consume it
+immediately. B3b is accepted:
+the July dump and final encrypted differential backup preserve the stale
+rehearsal state, the Hetzner shadow is stopped, only
+`rtbcat_serving_rehearsal` was removed and empty `rtbcat_serving` remained with
+about 785 GB free. B3c was subsequently approved and is in progress: the exact
+normalized schema hash matches, the single slot/subscription is being consumed
+immediately and a persistent 30-second safety monitor is active. This does not
+authorize writer freeze, sequence/private-table transfer, DNS or target writes.
 
 Current target state:
 
@@ -50,6 +64,12 @@ Current target state:
 - retained Cloud SQL managed backups/PITR protected the initial online
   rehearsal. On July 26 the independent target backup/WAL and clean-host
   recovery gate was added and accepted against native GCS in Singapore;
+- on July 29, fresh encrypted differential backups bracketed a bounded B1
+  rehearsal of release `10c45949`. The private target became writable with
+  every scheduler disabled, all three scheduled endpoints refused execution,
+  a rollback-only database write left no residue, and the app/database returned
+  to verified read-only shadow posture. GCP, Cloud SQL, DNS and source
+  scheduler ownership were unchanged;
 - the complete online dump/restore rehearsal ran from
   `2026-07-23T18:49:38Z` through `2026-07-24T02:40:25Z`. The 452,996,676,967-byte
   source dumped in 8,037 seconds and restored/analyzed in 20,042 seconds. The
@@ -141,8 +161,9 @@ USD 261.01 after removing 400 GB. The API reported USD billing and zero VAT.
 6. Preserve the accepted immutable release and target-host smoke evidence.
    The six-hour soak and tree-identical A→B→A immutable rollback drill are
    accepted. Preserve their private evidence and the restored current manifest
-   for SHA `332ec985084085edef714525d118f6c6ad2db8d4`. Do not enable a target
-   writer or scheduler. The installed existing service-account key is an
+   for SHA `10c45949d08f671c69743e9fc557cb9956921487`. Preserve the accepted
+   bounded B1 evidence; do not leave a target writer or scheduler enabled. The
+   installed existing service-account key is an
    explicitly approved migration bridge, not the final renewable identity
    design.
 7. Preserve the accepted independent target backup/WAL and clean-host recovery
@@ -157,8 +178,10 @@ USD 261.01 after removing 400 GB. The API reported USD billing and zero VAT.
 10. Follow `docs/HETZNER_FINAL_SYNC_RUNBOOK.md`. The July 22 database cannot be
     incrementally caught up because no logical slot retained its missing WAL;
     prepare a fresh logical-replication initial copy and continuous catch-up.
-    Do not restart Cloud SQL, replace the rehearsal DB, freeze writers, change
-    DNS or enable target writes without their separate approvals.
+    Preserve accepted B2/B3a and do not repeat the Cloud SQL restart or source
+    role/publication setup. Do not create an idle slot, replace the rehearsal
+    DB, freeze writers, change DNS or enable target writes without their
+    separate approvals.
 
 Do not replace the full rehearsal with a sample. The roughly 420 GiB database
 moves server-to-server from Cloud SQL to the Hetzner database host; the laptop
@@ -274,6 +297,16 @@ restored the accepted current manifest successfully.
   retained and the mount is cleanly unmounted.
 - Restore the full production dump, using the partition migration Path A for
   `rtb_daily` unless rehearsal evidence rejects it.
+  > **Not done as of July 30, 2026.** The migration pivoted from dump/restore to
+  > logical replication (B3a-B3c) the day after the partition kit landed, and
+  > `rtb_daily` was copied as a plain unpartitioned clone with all 16 indexes.
+  > No rehearsal evidence rejected Path A; the deviation was never recorded.
+  > The `rtb_daily` copy now has to be restarted regardless, which is the last
+  > free moment to honour this line. See
+  > `docs/internal/MIGRATION-ENGINEER-BRIEF-2026-07-30.md`.
+  >
+  > **Resolved July 30, 2026 (evening):** the restarted B3c copy targets the
+  > kit's partitioned schema, honouring this line under logical replication.
 - Record dump, transfer, restore and index-build durations.
 - Require zero-difference monthly row/hash/spend/impression/click validation.
 - Exercise heavy API/dashboard paths and compare query plans and latency.
@@ -290,12 +323,13 @@ restored the accepted current manifest successfully.
 The July 25 read-only inventory found three enabled Cloud Scheduler HTTP jobs:
 Gmail import, precompute and creative-cache refresh. Their targets use the
 public hostname and therefore follow DNS. The feature flags previously affected
-only secrets-health reporting and did not block those endpoints. Local code now
-enforces each flag and defaults it to disabled; it must be reviewed, published
-and included in the immutable cutover release before activation. The guarded
-writable/all-schedulers-off Compose rendering and check-only activation
-rehearsal pass locally; the changed release is not yet published,
-shadow-deployed or live-rehearsed.
+only secrets-health reporting and did not block those endpoints. Release
+`10c45949` now enforces each flag and defaults it to disabled. Its bounded B1
+writable/all-schedulers-off rehearsal passed on July 29: each scheduled
+endpoint returned 503, a rollback-only database write left no residue and the
+target returned to read-only shadow mode. This does not satisfy the later
+single-owner drill, where each operation must run once on the synchronized
+target while the source trigger is paused.
 
 The GCP API is itself a general writer through authenticated mutations,
 conversion postbacks and background jobs. The database also has the dormant
@@ -311,8 +345,14 @@ are in
 
 - Lower DNS TTL in advance and preflight TLS, OAuth redirect behavior, agent
   consumers, egress allowlists and health checks.
-- Enable Cloud SQL logical decoding in a separately approved restart window.
-  Replace the July 22 target with a fresh schema-matched logical subscriber,
+- Validate the public path first on a DNS-only temporary Hetzner hostname. Keep
+  it operator-restricted, read-only and scheduler-disabled; seal it again
+  before the production cutover window. The temporary record does not replace
+  the final production-hostname switch. Public TLS, routing, provider parity
+  and read-only scheduler refusal passed on July 29; the temporary callback was
+  additively registered and real browser Google sign-in passed.
+- Preserve the accepted B2 logical-decoding state. Under separate approvals,
+  replace the July 22 target with a fresh schema-matched logical subscriber,
   allow the initial copy to finish and continuously catch up while GCP remains
   authoritative.
 - Freeze writers, confirm quiescence, wait for the subscriber to pass the
