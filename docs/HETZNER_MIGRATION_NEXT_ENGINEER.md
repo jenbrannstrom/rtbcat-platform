@@ -1,14 +1,12 @@
 # Hetzner migration — next engineer checkpoint
 
-Last updated: July 30, 2026, evening (`rtb_daily` restarted onto the
-partitioned schema; copy in progress)
+Last updated: July 31, 2026 (`rtb_daily` B3c acceptance complete)
 
 > **Start here, then read
 > `docs/internal/MIGRATION-ENGINEER-BRIEF-2026-07-30.md`.** That brief holds the
-> verified live state, the measured evidence behind the July 30 findings, the
-> open decision on `rtb_daily`, and the explicitly-flagged unverified
-> assumptions. Several statements in the July 29 checkpoint below were stale or
-> wrong and have been corrected in place, each marked "Corrected July 30, 2026".
+> July 30 investigation and the accepted July 31 resolution. Several statements
+> in the historical July 29 checkpoint below were stale or wrong and have been
+> corrected in place.
 
 ## Read this first
 
@@ -19,11 +17,11 @@ service are stopped. Nginx still terminates the guarded temporary hostname but
 returns HTTP 502 because the shadow is deliberately sealed. The deployed
 artifact still defaults to read-only mode with all scheduler flags false.
 
-Approved B3c is currently copying the 98 published tables into
-`rtbcat_serving`. Do not stop PostgreSQL,
+Approved B3c now has all 98 published tables `ready` in `rtbcat_serving`.
+Do not stop PostgreSQL,
 `rtbcat-cloudsql-logical-proxy.service`, subscription
-`rtbcat_hetzner_migration`, `rtbcat-b3c-monitor.timer` or the temporary
-Cloud SQL Client identity while this copy is active.
+`rtbcat_hetzner_migration`, `rtbcat-b3c-monitor.timer` or the temporary Cloud
+SQL Client identity while continuous catch-up is still required.
 
 **Shadow acceptance does not authorize writable activation.** Do not run
 `scripts/hetzner/activate_writable_release.sh` live without a separate explicit
@@ -43,7 +41,36 @@ Primary operating documents:
 6. Private exact inventory:
    `docs/internal/rtbcat-migration/GCP-FULL-MIGRATION-INVENTORY-CHECKLIST.md`.
 
-## July 29 B3c schema and logical initial copy — in progress
+## July 29–31 B3c schema and logical initial copy — accepted
+
+**Current accepted state, July 31:** all 98 subscription tables are `ready`,
+the main source slot is active at near-zero lag and `rtb_daily` is partitioned
+by month with 7/7 valid parent indexes. The populated dependent matview has
+3/3 valid indexes, the four dependent views are restored and statistics are
+fresh. January–July daily source/target aggregates match exactly across row
+count, distinct row hash, spend, impressions, clicks, bid requests and the
+generated buyer value. July passed a second identical source snapshot to prove
+the live source did not move during comparison.
+
+The first partitioned retry was not accepted because review found that target
+`buyer_id` was ordinary/nullable instead of stored-generated from
+`buyer_account_id`. PostgreSQL 15 logical replication does not transmit that
+generated output. With explicit approval, only target `rtb_daily` was
+recreated and recopied with the corrected contract; the other 97 target tables,
+source publication, source table and production writers were preserved.
+
+Root-only structural and parity evidence is stored under
+`20260731T142820Z-rtb-daily-acceptance` and
+`20260731T142927Z-rtb-daily-validation` on the protected migration Volume.
+The new canonical/normalized schema hashes are `58142d973…aaebed` and
+`d69f220f…ab107b`. The 21 parity files and checksum manifest are mode 0600 and
+verify successfully. Fresh post-recopy differential
+`20260726-113211F_20260731-173611D` completed successfully and its following
+repository/archive check passed. The root-only backup receipt is under
+`20260731T181104Z-rtb-daily-backup-acceptance`.
+
+The remainder of this section preserves the execution history that led to the
+accepted state.
 
 The exact current schema was captured through a loopback-only Cloud SQL Auth
 Proxy. After excluding only the unpublished private table's data, the
@@ -106,8 +133,7 @@ and switches its `ON CONFLICT` target accordingly.
 
 The unpublished `agent_private.buyer_role_grants` table exists with exact
 schema but zero rows. Its frozen data requires a separate verified transfer
-before cutover. B3c remains in progress until all 98 table states are `ready`,
-lag is stable, schema has not drifted and a current target backup is accepted.
+before cutover. B3c copy, validation and fresh backup are accepted.
 Private evidence:
 `docs/internal/rtbcat-migration/B3C-LOGICAL-INITIAL-COPY-2026-07-29.md`.
 
@@ -352,8 +378,9 @@ snapshot. The safe plan is:
 5. Preserve the accepted July 22 evidence and dump.
 6. Preserve accepted B3b: the old rehearsal database is gone and empty
    `rtbcat_serving` remains. Do not recreate the stale rehearsal database.
-7. Let the initial copy and continuous logical catch-up finish while GCP
-   remains authoritative.
+7. Preserve the accepted 98/98 initial copy, corrected `rtb_daily` generated
+   column, partition evidence and January–July parity evidence. Keep continuous
+   logical catch-up running while GCP remains authoritative.
 8. In the approved cutover window, freeze every source writer, wait past the
    captured source LSN, synchronize all sequence state, run the final
    non-credential `.catscan` delta and reconcile.

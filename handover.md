@@ -1,5 +1,52 @@
 # Handover
 
+## B3c `rtb_daily` acceptance — July 31, 2026
+
+B3c is accepted through copy, post-copy construction, source-to-target
+validation and fresh backup. Production authority has **not** moved: Cloud SQL,
+GCP ingress, DNS and the source schedulers remain authoritative, while the
+Hetzner application and schedulers remain stopped.
+
+The July 30 partitioned restart completed its bulk copy, but the first
+post-copy review found that target `buyer_id` was a nullable ordinary column
+rather than the source's stored generated column. PostgreSQL 15 logical
+replication does not supply the generated value, so accepting that copy would
+have left it null. With explicit owner approval, only target `rtb_daily` was
+recreated and recopied using the corrected generated-column contract. The
+source table, publication, main slot, other 97 target tables and production
+writers were not reset.
+
+Accepted state:
+
+- PR #117 was reviewed and merged as `ffaafad9812201588611a0c9d5814ef2f3911c43`.
+  The schema-kit correction and regression coverage are on PR #118.
+- The corrected retry copied 566,204,007 rows and reached 98/98 subscription
+  tables `ready` at `2026-07-31T11:28:31Z`.
+- Post-copy construction finished at `14:27:23Z`: 12 monthly partitions, all
+  7 parent indexes valid, the four dependent views restored, populated
+  `seat_report_completeness_daily` with all 3 indexes valid, and fresh
+  statistics. `buyer_id` is stored-generated from `buyer_account_id`.
+- Structural evidence is root-only under
+  `/mnt/HC_Volume_106446141/logical-sync/20260731T142820Z-rtb-daily-acceptance`.
+  Its canonical and normalized schema SHA-256 values are
+  `58142d973f809b5774a4260885b63d267e6809c0b553f1eddde79cde59aaebed`
+  and `d69f220f006d6461faaafac880b70676c6488119b83f4f626eba0cb4ffab107b`.
+- January through July matched source exactly per day for row count, distinct
+  row hash, spend, impressions, clicks, bid requests and generated buyer
+  value. July also passed identical source-before/source-after snapshots.
+  The 21 aggregate files and checksum manifest are root-only mode 0600 under
+  `/mnt/HC_Volume_106446141/logical-sync/20260731T142927Z-rtb-daily-validation`.
+- The main source slot is active at near-zero retained/confirmed lag and the
+  safety monitor is healthy. Fresh differential
+  `20260726-113211F_20260731-173611D` completed successfully at `18:10:14Z`;
+  the repository/archive check passed at `18:11:04Z`. Its root-only checksummed
+  receipt is under
+  `/mnt/HC_Volume_106446141/logical-sync/20260731T181104Z-rtb-daily-backup-acceptance`.
+
+This acceptance does not authorize sequence transfer, the excluded private
+grant-table transfer, a source writer freeze, target application activation,
+DNS changes or scheduler ownership changes. Those remain final-window gates.
+
 ## B3a source replication objects accepted — July 29, 2026
 
 The owner directed the next migration step after B2. Guarded source tooling was
