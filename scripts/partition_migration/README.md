@@ -26,6 +26,12 @@ partition (no vacuum storm, no bloat), the migration copies in month-sized
 chunks instead of one 327 GB monolith, and the rebuild is the free moment to
 make `id` BIGINT before the sequence exhausts the INTEGER column.
 
+The replacement preserves `buyer_id` as
+`GENERATED ALWAYS AS (buyer_account_id) STORED`. PostgreSQL 15 logical
+replication does not publish generated-column values, so a subscriber must
+retain that generated expression rather than replacing it with a regular
+column.
+
 ## Index changes (evidence: pg_stat_user_indexes, 2026-01-23 → 2026-07-09)
 
 Kept (5 + PK + dedup unique):
@@ -51,8 +57,8 @@ the rehearsal is for.
 ## Files
 
 - `001_partitioned_schema.sql` — partitioned table (as `rtb_daily_p` by
-  default; `-v parent=rtb_daily` on a bare target), `ensure_month_partitions()`
-  helper, partitions for 2026 + headroom.
+  default; `-v parent=rtb_daily -v owner_role=<application-role>` on a bare
+  target), `ensure_month_partitions()` helper, partitions for 2026 + headroom.
 - `002_load_and_time.sh` — month-by-month copy with timings. Re-runnable.
 - `003_validate.sql` — per-month row/hash/spend/impressions/clicks
   reconciliation. Zero rows = clean.
@@ -66,7 +72,11 @@ the rehearsal is for.
 
 1. Restore the production dump onto the target **excluding `rtb_daily`
    data** (`pg_restore -L` to edit the list, keep everything else).
-2. `psql -v parent=rtb_daily -f 001_partitioned_schema.sql`
+2. `psql -v parent=rtb_daily -v owner_role=<application-role>
+   -f 001_partitioned_schema.sql`. This preserves the source-compatible owner
+   on the parent, generated partitions and sequence, plus the sequence's
+   `OWNED BY rtb_daily.id` dependency, even when an administrator applies the
+   schema.
 3. `pg_restore --data-only --table=rtb_daily` into the partitioned parent —
    COPY routes rows to partitions. Time it. (Alternative while the old
    instance is still reachable: point `002_load_and_time.sh` at a foreign

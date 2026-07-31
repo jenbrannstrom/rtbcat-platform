@@ -1,19 +1,19 @@
 # Hetzner final database synchronization and cutover runbook
 
-Last updated: July 30, 2026
+Last updated: July 31, 2026
 
-Status: **B3c is blocked on `rtb_daily` and is not accepted.** 97/98 tables are
-`ready`; `rtb_daily` alone has been copying for 25 hours at roughly a third
-complete, with about 66 hours remaining as configured. Its tablesync slot pins
-43.7 GB of source WAL — over 2x the monitor's critical threshold — and Cloud
-SQL storage is growing 45.5 GB/day permanently. The source schema and target
-normalized schema hash match, subscription/slot `rtbcat_hetzner_migration` is
-consumed and healthy, and the shadow application remains stopped.
+Status: **B3c copy and validation are accepted.** All 98 subscription tables
+are `ready`, logical lag is near zero and the safety monitor is healthy.
+Partitioned `rtb_daily` has 7/7 valid parent indexes, its stored generated
+`buyer_id` contract is correct, the dependent matview is populated with 3/3
+valid indexes and January–July daily source/target aggregates match exactly.
+July also passed identical source-before/source-after snapshots. Fresh
+differential `20260726-113211F_20260731-173611D` completed successfully and
+the following repository/archive check passed.
 
-**A decision is open on whether to restart the `rtb_daily` copy without its 16
-indexes, and whether to take the partitioned design the plan originally called
-for. Read `docs/internal/MIGRATION-ENGINEER-BRIEF-2026-07-30.md` before
-proceeding with step 7 or 8 below.**
+The July 30 97/98 blocked-copy state below is historical. The first partitioned
+retry was rejected because its target `buyer_id` was ordinary/nullable rather
+than stored-generated; an explicitly approved target-only recopy corrected it.
 
 This runbook does not authorize repeating source setup, a writer freeze,
 private-table data or sequence transfer, DNS changes or target writes.
@@ -101,11 +101,12 @@ This phase does not move production authority.
    `20260726-113211F_20260729-144851D` protects the pre-drop state; and only
    stale database `rtbcat_serving_rehearsal` was removed. Empty cutover
    database `rtbcat_serving` remains on the same Volume.
-6. Completed under B3c July 29: restore schema only, including exact collation,
+6. Completed under B3c July 29–31: restore schema, including exact collation,
    generated expressions, owners and grants. The target has 98 replicated
-   tables, 38 sequences, both generated columns, zero invalid indexes and an
-   exact normalized source/target schema SHA-256 of
-   `4c8ba3e47fd6a92216e4969a5fc65a41ccd7939f52e169a20d67ea33d12da3fb`.
+   tables, 38 sequences, both generated columns and zero invalid indexes.
+   The accepted `rtb_daily` partition baseline has canonical/normalized
+   SHA-256 `58142d973…aaebed` / `d69f220f…ab107b`; the older
+   `4c8ba3e4…` normalized hash is intentionally superseded for this table.
    `agent_private.buyer_role_grants` exists empty because its data is
    deliberately outside the publication.
 7. Started under B3c July 29: long-lived Cloud SQL Auth Proxy
@@ -113,10 +114,9 @@ This phase does not move production authority.
    `127.0.0.1:15432`. Subscription and slot `rtbcat_hetzner_migration` were
    created together with `copy_data=true`; consumption began immediately. The
    target app remains stopped.
-8. In progress: monitor until all 98 subscription-table states are `ready`.
-   The persistent 30-second monitor records source retained WAL, target disk,
-   subscription state and proxy health. Continue checking source
-   disk/autoresize, subscriber conflicts and apply delay.
+8. Completed July 31: all 98 subscription-table states are `ready`. The
+   persistent 30-second monitor continues to record source retained WAL,
+   target disk, subscription state and proxy health.
 
    **Corrected July 30, 2026.** Waiting alone will not resolve this on an
    acceptable timescale. 97/98 are `ready`; `rtb_daily` needs roughly 66 more
@@ -135,6 +135,14 @@ This phase does not move production authority.
    `rtbcat_hetzner_migration`; dropping that slot means re-copying all 98
    tables.
 
+   **Resolved July 31, 2026.** The approved partitioned retry completed, but
+   its first post-copy review found a schema-kit defect: `buyer_id` had become
+   ordinary/nullable, and PostgreSQL 15 logical replication does not supply a
+   generated value. The target table alone was recreated and recopied with
+   `buyer_id GENERATED ALWAYS AS (buyer_account_id) STORED`. Post-copy
+   construction and January–July parity then passed; the source table,
+   publication, main slot and other 97 target tables were not reset.
+
 Abort and cleanly remove the slot/subscription if retained WAL threatens source
 availability, the target has less than 20% free space, the schema changes
 unexpectedly, a table-copy worker repeatedly fails or the replication
@@ -146,14 +154,17 @@ slot consuming disk.
 
 Before requesting the final window:
 
-- every one of the 98 subscription tables is `ready`;
-- repeated samples show stable near-zero logical lag with no apply errors;
+- every one of the 98 subscription tables is `ready` (accepted July 31);
+- repeated samples show stable near-zero logical lag with no apply errors
+  (accepted July 31);
 - table counts and the fixed-cutoff 10/10 database suite reconcile;
 - the 7/7 private-finance suite reconciles;
-- both generated columns produce the same values on source and target;
+- both generated columns produce the same values on source and target
+  (`rtb_daily` accepted in the January–July parity pass);
 - the frozen contents of excluded
   `agent_private.buyer_role_grants` are transferred separately and verified;
-- target backups include this fresh database and a restore is proven;
+- target backups include this fresh database (accepted July 31) and the
+  backup chain's clean-host restore proof is accepted;
 - the immutable writable release and a scheduler-disabled activation have been
   rehearsed;
 - the temporary Hetzner-only hostname has passed public TLS, reverse-proxy and

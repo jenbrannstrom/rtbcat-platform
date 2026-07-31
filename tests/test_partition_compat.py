@@ -7,6 +7,8 @@ UNIQUE (metric_date, row_hash) on the partitioned one.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from importers.unified_importer import rtb_daily_conflict_target
 
 
@@ -45,3 +47,23 @@ def test_tuple_row_factory_supported():
     assert rtb_daily_conflict_target(
         _FakeCursor(is_partitioned=False, dict_rows=False)
     ) == "(row_hash)"
+
+
+def test_fresh_partition_schema_preserves_application_ownership():
+    schema = (
+        Path(__file__).parents[1]
+        / "scripts"
+        / "partition_migration"
+        / "001_partitioned_schema.sql"
+    ).read_text()
+
+    assert r"\if :{?owner_role}" in schema
+    assert 'ALTER TABLE :parent OWNER TO :"owner_role";' in schema
+    assert "'ALTER TABLE %s OWNER TO %I'" in schema
+    assert "SELECT :'parent' = 'rtb_daily' AS fresh_target" in schema
+    assert 'ALTER SEQUENCE rtb_daily_id_seq OWNER TO :"owner_role";' in schema
+    assert "ALTER SEQUENCE rtb_daily_id_seq OWNED BY :parent.id;" in schema
+    assert (
+        "buyer_id                text GENERATED ALWAYS AS "
+        "(buyer_account_id) STORED"
+    ) in schema
