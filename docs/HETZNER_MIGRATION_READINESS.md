@@ -1,6 +1,6 @@
 # Hetzner migration readiness
 
-Last updated: July 29, 2026
+Last updated: July 31, 2026
 
 ## Decision
 
@@ -10,7 +10,10 @@ finance-schema comparisons are also accepted. Local read-only application
 compatibility and heavy-request validation against that target are accepted;
 the immutable target-host deployment and first same-network application smoke
 are accepted. The encrypted target WAL/backup chain and clean-host PITR restore
-are also accepted. RTBcat is not ready for production cutover.
+are also accepted. B3c now has 98/98 logical tables ready, near-zero lag and an
+accepted corrected partitioned `rtb_daily` source/target parity pass through
+July. Fresh differential `20260726-113211F_20260731-173611D` and its repository
+check passed. RTBcat is not ready for production cutover.
 
 The private master inventory is stored locally at
 `docs/internal/rtbcat-migration/GCP-FULL-MIGRATION-INVENTORY-CHECKLIST.md`.
@@ -267,8 +270,8 @@ That cleanup saves about USD 17/month independently of the migration.
   every writer/scheduler still need an explicit manifest.
 - Cloud SQL logical decoding is on after accepted B2 and PostgreSQL reports
   `wal_level=logical`. B3a added the restricted login and explicit 98-table
-  publication. A fresh logical subscriber, active slot monitoring and
-  source-to-target catch-up rehearsal are not yet complete; no slot exists yet.
+  publication. B3c's subscriber copied all 98 tables and continuous catch-up
+  is active at near-zero lag under persistent slot monitoring.
 - The current immutable target deployment has returned to shadow-only after
   the accepted bounded B1 live writable rehearsal. Final synchronized
   activation still requires source freeze, logical catch-up, exact sequence
@@ -292,11 +295,18 @@ That cleanup saves about USD 17/month independently of the migration.
 >
 > **Resolved July 30, 2026 (evening):** the partitioned design was taken when
 > the copy was restarted. The first item below is live again: zero-difference
-> per-month validation against the source is the pending acceptance evidence
+> per-month validation against the source was the pending acceptance evidence
 > for `rtb_daily`, together with a re-recorded schema baseline (the July 29
 > hash intentionally no longer covers this one table).
+>
+> **Accepted July 31, 2026:** the first partitioned retry was rejected because
+> target `buyer_id` was ordinary/nullable instead of stored-generated. After an
+> approved target-only corrected recopy, structural checks and January–July
+> per-day row/hash/metric/generated-value parity passed exactly. July's
+> source-before/source-after snapshots also match.
 
-- Full restore timing and zero-difference partition validation.
+- Full restore timing and zero-difference partition validation (complete;
+  corrected logical-replication acceptance recorded July 31).
 - Heavy dashboard and API performance checks against the restored target
   (local tunnelled and target-host immutable-image passes complete).
 - Point-in-time recovery and clean-host restore from the target backup chain

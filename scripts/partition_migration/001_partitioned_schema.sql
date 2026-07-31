@@ -21,6 +21,10 @@
 \else
 \set parent rtb_daily_p
 \endif
+\if :{?owner_role}
+\else
+SELECT current_user AS owner_role \gset
+\endif
 
 -- The live sequence already exists in prod and in any full restore; this
 -- covers a bare rehearsal database. (Sequences are always 64-bit.)
@@ -75,7 +79,7 @@ CREATE TABLE :parent (
     measurable_impressions  integer DEFAULT 0,
     source_report           text,
     bid_requests            bigint DEFAULT 0,
-    buyer_id                text,
+    buyer_id                text GENERATED ALWAYS AS (buyer_account_id) STORED,
     PRIMARY KEY (metric_date, id),
     UNIQUE (metric_date, row_hash)
 ) PARTITION BY RANGE (metric_date);
@@ -126,3 +130,28 @@ $$;
 -- Cover existing data (oldest row is 2026-01-07) plus headroom; the
 -- retention job (partition_retention.py) keeps creating ahead after cutover.
 SELECT ensure_month_partitions(:'parent', DATE '2026-01-01', 12);
+
+-- A fresh restore is commonly applied by a PostgreSQL administrator even
+-- though the serving objects belong to the application role. Keep the parent
+-- and every generated partition under that explicit owner. Index ownership
+-- follows table ownership automatically.
+ALTER TABLE :parent OWNER TO :"owner_role";
+SELECT format(
+           'ALTER TABLE %s OWNER TO %I',
+           inhrelid::regclass,
+           :'owner_role'
+       )
+FROM pg_inherits
+WHERE inhparent = :'parent'::regclass
+ORDER BY inhrelid::regclass::text
+\gexec
+
+-- On the fresh-target path the replacement already has the live name, so
+-- restore the sequence owner/dependency that CREATE TABLE alone cannot infer.
+-- The in-place rtb_daily_p path deliberately leaves the existing live table's
+-- sequence dependency untouched until 004_cutover.sql.
+SELECT :'parent' = 'rtb_daily' AS fresh_target \gset
+\if :fresh_target
+ALTER SEQUENCE rtb_daily_id_seq OWNER TO :"owner_role";
+ALTER SEQUENCE rtb_daily_id_seq OWNED BY :parent.id;
+\endif
