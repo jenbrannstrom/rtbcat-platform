@@ -1,12 +1,12 @@
 # GCP to Hetzner migration plan
 
-Last updated: July 29, 2026
+Last updated: July 31, 2026
 
 The migration is intentionally split into independently reviewable parts. A
 part is complete only when its verification evidence exists; completing code
 does not by itself authorize provisioning or production cutover.
 
-## Current execution checkpoint — July 29, 2026
+## Current execution checkpoint — July 31, 2026
 
 Resume from **Parts 5–6 final-sync engineering**, not provisioning, discovery,
 independent backup configuration, another bulk rehearsal or application
@@ -25,10 +25,13 @@ immediately. B3b is accepted:
 the July dump and final encrypted differential backup preserve the stale
 rehearsal state, the Hetzner shadow is stopped, only
 `rtbcat_serving_rehearsal` was removed and empty `rtbcat_serving` remained with
-about 785 GB free. B3c was subsequently approved and is in progress: the exact
-normalized schema hash matches, the single slot/subscription is being consumed
-immediately and a persistent 30-second safety monitor is active. This does not
-authorize writer freeze, sequence/private-table transfer, DNS or target writes.
+about 785 GB free. B3c is accepted through copy and validation: all 98 tables
+are `ready`, the single slot/subscription is at near-zero lag, partitioned
+`rtb_daily` passed its corrected stored-generated-column contract and all
+January–July daily aggregates match the source. Fresh differential
+`20260726-113211F_20260731-173611D` and its repository check passed. This does
+not authorize writer freeze, sequence/private-table transfer, DNS or target
+writes.
 
 Current target state:
 
@@ -175,13 +178,12 @@ USD 261.01 after removing 400 GB. The API reported USD billing and zero VAT.
    not be treated as project isolation.
 9. Keep the deployed Part 3 shadow loopback-only with every target scheduler
    disabled. Its successful acceptance does not authorize DNS or writers.
-10. Follow `docs/HETZNER_FINAL_SYNC_RUNBOOK.md`. The July 22 database cannot be
-    incrementally caught up because no logical slot retained its missing WAL;
-    prepare a fresh logical-replication initial copy and continuous catch-up.
-    Preserve accepted B2/B3a and do not repeat the Cloud SQL restart or source
-    role/publication setup. Do not create an idle slot, replace the rehearsal
-    DB, freeze writers, change DNS or enable target writes without their
-    separate approvals.
+10. Follow `docs/HETZNER_FINAL_SYNC_RUNBOOK.md`. Preserve the accepted B2/B3a
+    source setup and B3c 98/98 copy/validation evidence; keep continuous
+    catch-up running. Do not repeat the Cloud SQL restart, recreate the source
+    role/publication, replace the database, freeze writers, transfer sequences
+    or private data, change DNS or enable target writes without their separate
+    approvals.
 
 Do not replace the full rehearsal with a sample. The roughly 420 GiB database
 moves server-to-server from Cloud SQL to the Hetzner database host; the laptop
@@ -307,6 +309,13 @@ restored the accepted current manifest successfully.
   >
   > **Resolved July 30, 2026 (evening):** the restarted B3c copy targets the
   > kit's partitioned schema, honouring this line under logical replication.
+  >
+  > **Accepted July 31, 2026:** after rejecting and redoing a target-only copy
+  > whose `buyer_id` generated-column contract was wrong, the corrected table
+  > reached 98/98 ready. Its 12 partitions, 7/7 parent indexes, dependent views
+  > and populated matview passed structural checks. January–July daily
+  > row/hash/spend/impression/click/bid-request/buyer-value aggregates match
+  > the source exactly, with a second identical July source snapshot.
 - Record dump, transfer, restore and index-build durations.
 - Require zero-difference monthly row/hash/spend/impression/click validation.
 - Exercise heavy API/dashboard paths and compare query plans and latency.
