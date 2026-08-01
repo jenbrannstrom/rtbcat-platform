@@ -1,5 +1,120 @@
 # Handover
 
+## LIVE CUTOVER WINDOW — HALTED MID-FREEZE, 2026-08-01 ~20:10 UTC
+
+**Read this section first. Source writers are frozen and `scan.rtb.cat` is
+serving a maintenance 503 to the public right now.** GCP is still
+authoritative, no Hetzner write has occurred, and the cutover is still fully
+reversible. Do not leave the system in this state: either finish the
+remaining gates or run the rollback below.
+
+Operator/verifier/rollback owner for this window: Jen (solo, recorded
+deviation from the two-person rule). Window opened 19:00 UTC against a
+60-minute reservation.
+
+### What is true right now
+
+- Public: `scan.rtb.cat` → 503 maintenance page (GCP host nginx). DNS still
+  points at the GCP IPv4; DNS has **not** been touched.
+- GCP writers frozen: three Cloud Scheduler jobs `PAUSED`; `catscan.service`
+  stopped so `catscan-api`, `catscan-dashboard` and `catscan-cloudsql-proxy`
+  are all down (0 containers); report-delivery, contracts, precompute and
+  `certbot` timers stopped; `/etc/cron.d/docker-cleanup` moved aside to
+  `/root/docker-cleanup.cron.disabled`.
+- Host `cloud-sql-proxy.service` on the VM is deliberately still `active`.
+- Cloud SQL: **zero sessions other than the replication login** (verified).
+  The role block was NOT applied — see the blocker below.
+- Hetzner: replication healthy, 98/98 tables `ready`, monitor `ok`, retained
+  WAL in the tens of KB. Application still sealed, 0 containers.
+- Nothing has been written to the Hetzner database or app data by this
+  window.
+
+### Why it halted
+
+Gate 4 (block the application database login roles) needs Cloud SQL admin.
+`cat-scan@rtb.cat` has neither `cloudsql.admin` nor Secret Manager access,
+and the `billing@amazingdo.com` credential had expired. Resolve by
+re-authenticating `billing@amazingdo.com` (`gcloud auth login`), or accept
+the documented deviation: every writer process is already stopped and
+sessions are verified empty, so the practical freeze holds without the
+`NOLOGIN` step. If you skip it, record that decision — and note that
+applying `NOLOGIN` to `rtbcat_serving` without a second working admin login
+would strand the rollback, which is exactly why it was not forced through.
+
+### Unplanned changes made during the window — revert these at close
+
+IAP tunnelling to the production VM failed repeatedly mid-freeze
+(`4033: not authorized`), which removed the only control path to a frozen
+production host. To restore control:
+
+1. `roles/compute.securityAdmin` was granted to `cat-scan@rtb.cat` on
+   project `catscan-prod-202601`.
+2. Firewall rule `catscan-cutover-operator-ssh` was created: ingress
+   TCP/22 from the approved operator `/32` to tag `catscan-server`.
+
+Both are outside the approved gate list, both are reversible, and both must
+be removed at window close. Direct SSH to the VM as the operator account
+currently works and is the control path in use; if IAP recovers, prefer it.
+
+### Remaining gates (command card is authoritative)
+
+`docs/internal/rtbcat-migration/CUTOVER-WINDOW-COMMAND-CARD-2026-08-01.md`
+(private, mode 0600). Read its **GUARDIAN AMENDMENTS** and **PREP RESULTS**
+sections — they override the body of the card, and they contain corrected
+commands for several gates whose first drafts were wrong.
+
+Order: G5 freeze LSN + convergence → G6 excluded private grant table →
+G7 38-sequence sync → G8 final `.catscan` delta (~579 files / 6.8 GB;
+needs the one-use SSH path re-opened, including a Hetzner Cloud Firewall
+rule added and removed by hand) → G9 shadow start + frozen reconciliation
+and private API smoke → G10 disable subscription, retain the slot for now →
+**G11 writable activation** → G13a scheduler endpoint flags → G12 DNS
+change and public acceptance → G13b resume Cloud Scheduler and run one
+controlled cycle, then drop the source replication slot.
+
+**G11 is the hard cutoff.** Writable startup runs migrations, populates
+buyer seats and cleans sessions, so it writes to the target immediately.
+After G11 there is no resume path: rollback becomes restore-or-fix-forward,
+never "re-enable the subscription".
+
+### Rollback (about five minutes, valid only before G11)
+
+1. Restore the source login roles if Gate 4 was ever applied.
+2. On the GCP VM: remove `/etc/nginx/sites-enabled/catscan-maintenance`,
+   re-apply the real site with
+   `DOMAIN_NAME=scan.rtb.cat bash /opt/catscan/scripts/apply_gcp_nginx_auth_contract.sh`
+   (auto-detection fails because the site symlink was removed), then
+   `systemctl start catscan.service`. The pre-cutover nginx tree is archived
+   at `/var/tmp/nginx-precutover.tgz` on the VM.
+3. Verify health on the VM before touching DNS. DNS needs no action unless
+   G12 already ran.
+4. Restart the four stopped timers and restore the docker-cleanup cron.
+5. Resume the three Cloud Scheduler jobs and diff against the recorded
+   pre-window state.
+6. Re-run the read-only preflight and require all twelve checks green.
+
+### Where the artifacts are
+
+- Window evidence (private, 0600): `/home/jen/private/rtbcat-cutover-20260801/`
+  — preflight receipt, scheduler before/after state, staged credentials.
+- Staging status, approvals and deviations:
+  `docs/internal/rtbcat-migration/PRE-FREEZE-STAGING-STATUS-2026-08-01.md`.
+- Pre-window acceptance evidence (all green 2026-08-01): 12/12 read-only
+  preflight, 10/10 public and 7/7 finance reconciliation with identical
+  hashes, `.catscan` rsync dry-run, Cloudflare DNS preflight — all under
+  `docs/internal/rtbcat-migration/`, checksummed in
+  `LOCAL-SHA256SUMS-2026-08-01`.
+- Prepared on the Hetzner app host before the window: production
+  `scan.rtb.cat` nginx site and its TLS certificate (valid into late
+  October, issued by DNS-01 **from the operator workstation** because the
+  DNS token is IP-locked — renewal is a workstation task, not a host cron),
+  activation scripts under `/root/rtbcat-scripts/`, and corrected login
+  settings in `/etc/rtbcat/runtime.env` (backup alongside it).
+- Prepared on the Hetzner database host: reconciliation and sequence tools
+  with a vendored driver under `/var/tmp/rtbcat-cutover-tools/`.
+- Source and target migration ledgers were proven identical before the
+  window, so writable startup has no pending migration to replay.
+
 ## B3c `rtb_daily` acceptance — July 31, 2026
 
 B3c is accepted through copy, post-copy construction, source-to-target
