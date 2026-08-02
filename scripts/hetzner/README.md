@@ -1,5 +1,16 @@
 # Hetzner migration operations — Part 2
 
+> **The migration completed on 2026-08-01; Hetzner is production.** Sections 1
+> through 10 below describe provisioning, rehearsal and cutover, and are a
+> record of work already done — read them to understand how a host was built,
+> not as steps to run.
+>
+> **This is not the deploy procedure.** Releasing application code is a
+> separate, ongoing process: `build-and-push-ghcr.yml` followed by
+> `deploy_app_release.sh --mode production`, with `rollback_app_release.sh` as
+> the reverse. See `CLAUDE.md` for the summary and the deploy runbook in
+> private operator docs for the full steps.
+
 These scripts implement the database-host, private-access and recovery portion
 of the migration. They are designed to run on the target Hetzner hosts after a
 reviewed `terraform apply`; none should run on the operator laptop except
@@ -301,4 +312,39 @@ a helper failure, not concurrent-write protection. This behavior passed a
 PostgreSQL 15.17 disposable rehearsal, including a failure after 37 partial
 sequence changes, exact recovery, a 38-state apply and a zero-change idempotent
 reapply. See
-`docs/HETZNER_FINAL_SYNC_RUNBOOK.md` for ordering and approval boundaries.
+the final-sync runbook in private operator docs for ordering and approval
+boundaries.
+
+### 9. Run the final-cutover read-only preflight
+
+Before requesting a writer freeze, run
+`preflight_final_cutover.sh` from the operator workstation with the exact
+private identifiers supplied through environment variables. It checks GCP
+health, Cloud SQL, the three Cloud Scheduler jobs, import-idle state, both DNS
+records, the 98/98 subscriber and generated-column contract, retained WAL,
+target backup repository, and the sealed target application.
+
+The command performs only reads through `gcloud`, SSH, HTTPS and DNS. It does
+not pause jobs, stop containers, change PostgreSQL, modify DNS or activate the
+target. A successful mode-0600 receipt means the system is ready to *request*
+the separately approved writer-freeze gate; it is not cutover authorization.
+
+See `--help` for the required private environment variables:
+
+```bash
+scripts/hetzner/preflight_final_cutover.sh --help
+```
+
+### 10. Preflight and update the exact production DNS record
+
+`update_production_dns.sh` uses Cloudflare's v4 API with a scoped bearer token.
+Its default mode is a read-only lookup that requires exactly one DNS-only
+`scan.rtb.cat` A record at the expected source IP. Apply mode requires the
+exact `UPDATE_SCAN_RTB_CAT_A_RECORD` confirmation, writes mode-0600 recovery
+evidence before the API mutation, PATCHes only the address, TTL and proxy
+state, then performs a read-after-write verification.
+
+The same guarded command is the pre-write rollback path by reversing the
+expected-current and new IP values. It never creates or deletes records. Keep
+the zone ID and a least-privilege DNS token in private operator state; never
+place either credential in this repository or a command receipt.
