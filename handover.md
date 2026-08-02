@@ -54,7 +54,7 @@ scheduler endpoint secrets needed by the production API. Those narrowly
 scoped grants are part of the accepted production configuration; do not
 remove them while these scheduler endpoints are in service.
 
-### Cleanup completed and one manual action outstanding
+### Cleanup fully completed
 
 - The one-use file-copy SSH key was destroyed, the host `authorized_keys`
   file was restored exactly, the temporary host firewall rule was removed,
@@ -67,10 +67,9 @@ remove them while these scheduler endpoints are in service.
   unit are stopped/disabled or cleared. The earlier temporary GCP control-path
   IAM and firewall changes were already removed during the first-window
   rollback.
-- **Manual closeout still required:** remove only the temporary inbound
-  TCP/22 rule added to the Hetzner Cloud Firewall for Gate 8. Keep the normal
-  operator SSH rule. This provider-console action cannot be proven from the
-  host and is the only remaining cutover cleanup item.
+- The operator confirmed removal of the temporary inbound TCP/22 Hetzner
+  Cloud Firewall rule used for Gate 8. The normal operator SSH rule was kept.
+  All migration-specific network access is therefore closed.
 
 ### Operating and recovery rules from here
 
