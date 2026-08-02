@@ -7,11 +7,10 @@ import json
 import uuid
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Optional
-from urllib import error as urllib_error
-from urllib import request as urllib_request
 
 from storage.postgres_database import pg_execute, pg_query, pg_query_one
 from services.optimizer_models_service import OptimizerModelsService
+from services.url_safety import request_public_http_url
 
 
 def _to_iso_ts(value: Any) -> Optional[str]:
@@ -459,22 +458,19 @@ class OptimizerScoringService:
         headers: dict[str, str],
     ) -> dict[str, Any]:
         def _request() -> dict[str, Any]:
-            req = urllib_request.Request(
-                endpoint_url,
-                data=json.dumps(payload).encode("utf-8"),
-                headers=headers,
-                method="POST",
-            )
             try:
-                with urllib_request.urlopen(req, timeout=20) as resp:
-                    status = int(getattr(resp, "status", 200))
-                    raw = resp.read().decode("utf-8", errors="replace")
-            except urllib_error.HTTPError as exc:
-                raw = exc.read().decode("utf-8", errors="replace") if hasattr(exc, "read") else str(exc)
-                raise ValueError(f"External model returned HTTP {exc.code}: {raw[:300]}") from exc
+                response = request_public_http_url(
+                    endpoint_url,
+                    method="POST",
+                    data=json.dumps(payload).encode("utf-8"),
+                    headers=headers,
+                    timeout=20,
+                )
             except Exception as exc:
                 raise ValueError(f"External model request failed: {exc}") from exc
 
+            status = response.status
+            raw = response.body.decode("utf-8", errors="replace")
             if status >= 400:
                 raise ValueError(f"External model returned HTTP {status}: {raw[:300]}")
             try:

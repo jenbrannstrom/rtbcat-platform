@@ -8,13 +8,12 @@ import logging
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Optional
-from urllib import error as urllib_error
-from urllib import request as urllib_request
 
 from services.optimizer_model_crypto import (
     decrypt_optimizer_model_auth_header,
     encrypt_optimizer_model_auth_header,
 )
+from services.url_safety import request_public_http_url
 from storage.postgres_database import pg_query, pg_query_one
 
 
@@ -429,22 +428,19 @@ class OptimizerModelsService:
         timeout_seconds: int,
     ) -> dict[str, Any]:
         def _request() -> dict[str, Any]:
-            req = urllib_request.Request(
-                endpoint_url,
-                data=json.dumps(payload).encode("utf-8"),
-                headers=headers,
-                method="POST",
-            )
             try:
-                with urllib_request.urlopen(req, timeout=timeout_seconds) as resp:
-                    status = int(getattr(resp, "status", 200))
-                    raw = resp.read().decode("utf-8", errors="replace")
-            except urllib_error.HTTPError as exc:
-                raw = exc.read().decode("utf-8", errors="replace") if hasattr(exc, "read") else str(exc)
-                return {"status": int(exc.code), "raw": raw, "json": _try_json(raw)}
+                response = request_public_http_url(
+                    endpoint_url,
+                    method="POST",
+                    data=json.dumps(payload).encode("utf-8"),
+                    headers=headers,
+                    timeout=timeout_seconds,
+                )
             except Exception as exc:
                 raise ValueError(f"Endpoint validation request failed: {exc}") from exc
 
+            status = response.status
+            raw = response.body.decode("utf-8", errors="replace")
             return {"status": status, "raw": raw, "json": _try_json(raw)}
 
         return await asyncio.to_thread(_request)
