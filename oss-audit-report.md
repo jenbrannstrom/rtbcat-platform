@@ -1,5 +1,12 @@
 # OSS Audit Report — 2026-03-12
 
+> **HISTORICAL — a 2026-03-12 snapshot. Not the current security status.**
+> The "No Leaked Secrets (Clean)" headline below describes this repository as
+> it stood in March 2026. It is **not** an all-clear for the system today and
+> should not be cited as one. Security status is reviewed on an ongoing basis
+> and tracked privately; see `SECURITY.md` for how to report an issue.
+
+
 ## Security Audit: No Leaked Secrets (Clean)
 
 No hardcoded credentials, API keys, or sensitive files were found in the repo. The `.gitignore` is comprehensive, Docker containers run as non-root, CORS is properly scoped, and auth is well-implemented.
