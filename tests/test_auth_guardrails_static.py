@@ -120,16 +120,18 @@ def test_runtime_env_refresh_can_read_optional_agent_secret_with_accessor_only()
     assert "2>/dev/null || true" in source
 
 
-def test_gcp_deploy_paths_apply_repo_owned_nginx_contract() -> None:
+def test_gcp_startup_applies_repo_owned_nginx_contract() -> None:
+    """The GCP VM's own startup path still owns its nginx contract.
+
+    The deploy workflow that also applied it was retired with the Hetzner
+    cutover; terraform/gcp is kept because it still manages the frozen source
+    environment.
+    """
     startup_source = (REPO_ROOT / "terraform" / "gcp" / "startup.sh").read_text(
-        encoding="utf-8"
-    )
-    deploy_source = (REPO_ROOT / ".github" / "workflows" / "deploy.yml").read_text(
         encoding="utf-8"
     )
 
     assert "scripts/apply_gcp_nginx_auth_contract.sh" in startup_source
-    assert "scripts/apply_gcp_nginx_auth_contract.sh" in deploy_source
 
 
 def test_caddy_leaves_auth_to_the_app() -> None:

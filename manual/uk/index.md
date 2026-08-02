@@ -101,9 +101,6 @@ Cat-Scan усуває ці прогалини:
 - [Розділ 11: Огляд архітектури](11-architecture.md)
   Топологія системи: бекенд на FastAPI, фронтенд на Next.js 14, Postgres (Cloud SQL), BigQuery. Чому існують обидві бази даних (вартість, затримка, попередня агрегація, управління з'єднаннями). Схема контейнерів: api, dashboard, oauth2-proxy, cloudsql-proxy, nginx. Ланцюг довіри автентифікації: OAuth2 Proxy встановлює `X-Email`, nginx передає його, API довіряє йому.
 
-- [Розділ 12: Розгортання](12-deployment.md)
-  Конвеєр CI/CD: GitHub Actions `build-and-push.yml` збирає образи при пуші; `deploy.yml` запускається лише вручну (з підтвердженням `DEPLOY`). Теги образів Artifact Registry (`sha-XXXXXXX`). Послідовність розгортання: git pull на VM, docker compose pull, пересоздання, очищення. Перевірка після розгортання: перевірка стану, перевірка контрактів. Чому автоматичне розгортання вимкнене (інцидент січня 2026). Як перевірити розгортання: `curl /api/health | jq .git_sha`.
-
 - [Розділ 13: Моніторинг стану та діагностика](13-health-monitoring.md)
   Ендпоінти стану: `/api/health` (перевірка живучості), `/system/data-health` (повнота даних). Сторінка статусу системи (`/settings/system`): Python, Node, FFmpeg, база даних, диск, мініатюри. Скрипти перевірки стану під час виконання: `diagnose_v1_buyer_report_coverage.sh`, `run_v1_runtime_health_strict_dispatch.sh`. Канаркова автентифікація: `CATSCAN_CANARY_EMAIL`, `CATSCAN_BEARER_TOKEN`. Робочі процеси CI: `v1-runtime-health-strict.yml` та що означають PASS/FAIL/BLOCKED.
 

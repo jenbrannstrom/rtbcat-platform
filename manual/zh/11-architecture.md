@@ -95,6 +95,5 @@ Service 包含业务逻辑；Repository 执行 SQL。
 
 ## 相关内容
 
-- [部署](12-deployment.md)：系统如何部署
 - [数据库操作](14-database.md)：Postgres 细节
 - [集成](17-integrations.md)：外部服务连接

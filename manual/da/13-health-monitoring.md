@@ -110,6 +110,5 @@ med `https://your-deployment.example.com/api`.
 
 ## Relateret
 
-- [Udrulning](12-deployment.md): verificering af udrulning
 - [Fejlfinding](15-troubleshooting.md): når sundhedstjek fejler
 - For mediekøbere: [Dataimport](09-data-import.md) forklarer datafriskheds­gitteret i købervenlige termer.

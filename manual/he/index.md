@@ -162,14 +162,6 @@ Cat-Scan סוגר את הפערים האלה:
   cloudsql-proxy, nginx. שרשרת אמון האימות: OAuth2 Proxy קובע `X-Email`,
   nginx מעביר אותו, ה-API סומך עליו.
 
-- [פרק 12: פריסה](12-deployment.md)
-  צינור CI/CD: GitHub Actions `build-and-push.yml` בונה תמונות בעת דחיפה;
-  `deploy.yml` מופעל ידנית בלבד (עם אישור `DEPLOY`). תגיות תמונות ב-Artifact
-  Registry (`sha-XXXXXXX`). רצף הפריסה: git pull על ה-VM, docker compose pull,
-  יצירה מחדש, ניקוי. אימות לאחר פריסה: בדיקת תקינות, בדיקת חוזה. למה פריסה
-  אוטומטית מושבתת (תקרית ינואר 2026). כיצד לאמת פריסה:
-  `curl /api/health | jq .git_sha`.
-
 - [פרק 13: ניטור תקינות ואבחון](13-health-monitoring.md)
   נקודות קצה לתקינות: `/api/health` (בדיקת חיים), `/system/data-health`
   (שלמות נתונים). דף סטטוס המערכת (`/settings/system`): Python, Node, FFmpeg,

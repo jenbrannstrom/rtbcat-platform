@@ -95,6 +95,5 @@ håndterer HTTP; services indeholder forretningslogik; repositories udfører SQL
 
 ## Relateret
 
-- [Udrulning](12-deployment.md): hvordan systemet udrulles
 - [Databaseoperationer](14-database.md): Postgres-specifikke detaljer
 - [Integrationer](17-integrations.md): forbindelser til eksterne tjenester

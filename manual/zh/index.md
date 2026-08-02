@@ -139,13 +139,6 @@ Cat-Scan 弥补了这些差距：
   容器布局：api、dashboard、oauth2-proxy、cloudsql-proxy、nginx。
   认证信任链：OAuth2 Proxy 设置 `X-Email`，nginx 传递，API 信任。
 
-- [第 12 章：部署](12-deployment.md)
-  CI/CD 流水线：GitHub Actions `build-and-push.yml` 在推送时构建镜像；
-  `deploy.yml` 仅手动触发（需输入 `DEPLOY` 确认）。Artifact Registry
-  镜像标签（`sha-XXXXXXX`）。部署流程：VM 上 git pull、docker compose
-  pull、重建、清理。部署后验证：健康检查、合约检查。为什么禁用了自动部署
-  （2026 年 1 月事故）。如何验证部署：`curl /api/health | jq .git_sha`。
-
 - [第 13 章：健康监控与诊断](13-health-monitoring.md)
   健康端点：`/api/health`（存活检查）、`/system/data-health`（数据完整性）。
   系统状态页面（`/settings/system`）：Python、Node、FFmpeg、数据库、磁盘、
