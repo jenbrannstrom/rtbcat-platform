@@ -1,12 +1,25 @@
 #!/usr/bin/env bash
-# Pull and start one exact digest-pinned release on the Hetzner shadow app host.
-# This script never updates DNS and refuses to enable schedulers.
+# Pull and start one exact digest-pinned release on the Hetzner app host.
+# This script never updates DNS.
+#
+# Two postures, selected with --mode. The posture is asserted against the
+# existing runtime env *and* rendered into the new container, so a deploy can
+# never silently move the host between read-only and writable:
+#
+#   shadow      (default) read-only, schedulers off. Pre-cutover posture.
+#   production            writable, schedulers on. Post-cutover steady state.
+#
+# The mode is not a convenience flag. Before the 2026-08-01 cutover the shadow
+# assertions were the guard against a second writer running against the GCP
+# source. After cutover the same guard has to assert the opposite posture,
+# otherwise the only deploy path refuses to run and the host has no rollback.
 
 set -euo pipefail
 
 RELEASE_FILE=""
 COMPOSE_FILE=""
 CONFIRM=""
+MODE="shadow"
 DOCKER_CONFIG_DIR="/etc/rtbcat/docker"
 MARKER_FILE="/etc/rtbcat/app-host.env"
 RUNTIME_MARKER="/etc/rtbcat/app-runtime-installed.env"
@@ -26,10 +39,18 @@ usage() {
 Usage: sudo scripts/hetzner/deploy_app_release.sh \
   --release-file <hetzner-release.env> \
   [--compose-file <hetzner-compose.yml>] \
-  --confirm deploy-shadow-no-dns
+  [--mode shadow|production] \
+  --confirm <mode-specific confirmation>
 
-By default, hetzner-compose.yml is read beside the release file or from the
-archived release. This does not alter DNS or the GCP source.
+  --mode shadow      (default) read-only, schedulers off
+                     --confirm deploy-shadow-no-dns
+  --mode production            writable, schedulers on
+                     --confirm deploy-production-live
+
+The confirmation string differs per mode so a production deploy cannot be
+issued by reusing a shadow command line. By default, hetzner-compose.yml is
+read beside the release file or from the archived release. This does not alter
+DNS.
 EOF
 }
 
@@ -37,18 +58,38 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --release-file) RELEASE_FILE="${2:?missing release file}"; shift 2 ;;
     --compose-file) COMPOSE_FILE="${2:?missing Compose file}"; shift 2 ;;
+    --mode) MODE="${2:?missing mode}"; shift 2 ;;
     --confirm) CONFIRM="${2:?missing confirmation}"; shift 2 ;;
     --help|-h) usage; exit 0 ;;
     *) echo "Unknown argument: $1" >&2; usage >&2; exit 2 ;;
   esac
 done
 
+case "$MODE" in
+  shadow)
+    EXPECTED_CONFIRM="deploy-shadow-no-dns"
+    EXPECTED_SHADOW="true"
+    EXPECTED_SCHEDULERS="false"
+    VERIFY_MODE="shadow"
+    ;;
+  production)
+    EXPECTED_CONFIRM="deploy-production-live"
+    EXPECTED_SHADOW="false"
+    EXPECTED_SCHEDULERS="true"
+    VERIFY_MODE="production"
+    ;;
+  *)
+    echo "Mode must be shadow or production." >&2
+    exit 2
+    ;;
+esac
+
 if [[ ${EUID} -ne 0 ]]; then
   echo "Run this script as root on the Hetzner app host." >&2
   exit 1
 fi
-if [[ "$CONFIRM" != "deploy-shadow-no-dns" ]]; then
-  echo "Exact shadow-deploy confirmation is required." >&2
+if [[ "$CONFIRM" != "$EXPECTED_CONFIRM" ]]; then
+  echo "Mode ${MODE} requires --confirm ${EXPECTED_CONFIRM}." >&2
   exit 1
 fi
 for required_path in \
@@ -84,17 +125,20 @@ if [[ "$(stat -c '%u:%a' "$RUNTIME_ENV_FILE")" != "0:600" ]]; then
   echo "Runtime env must be root-owned mode 0600." >&2
   exit 1
 fi
+# The runtime env must already be in the posture being deployed. This refuses
+# to *change* posture: shadow->production is activate_writable_release.sh's job,
+# and a mode typo here fails closed rather than flipping a live host.
 for scheduler_flag in \
   CATSCAN_ENABLE_GMAIL_IMPORT_SCHEDULER \
   CATSCAN_ENABLE_PRECOMPUTE_SCHEDULER \
   CATSCAN_ENABLE_CREATIVE_CACHE_SCHEDULER; do
-  if ! grep -qx "${scheduler_flag}=false" "$RUNTIME_ENV_FILE"; then
-    echo "Refusing dual scheduler ownership: ${scheduler_flag} is not false." >&2
+  if ! grep -qx "${scheduler_flag}=${EXPECTED_SCHEDULERS}" "$RUNTIME_ENV_FILE"; then
+    echo "Runtime env ${scheduler_flag} is not ${EXPECTED_SCHEDULERS}; refusing ${MODE} deploy." >&2
     exit 1
   fi
 done
-if ! grep -qx 'CATSCAN_READ_ONLY_SHADOW=true' "$RUNTIME_ENV_FILE"; then
-  echo "Shadow runtime env must contain CATSCAN_READ_ONLY_SHADOW=true." >&2
+if ! grep -qx "CATSCAN_READ_ONLY_SHADOW=${EXPECTED_SHADOW}" "$RUNTIME_ENV_FILE"; then
+  echo "Runtime env must contain CATSCAN_READ_ONLY_SHADOW=${EXPECTED_SHADOW} for ${MODE} mode." >&2
   exit 1
 fi
 
@@ -202,12 +246,14 @@ export RTBCAT_POSTGRES_CA_FILE="$POSTGRES_CA_FILE"
 export RTBCAT_GOOGLE_CREDENTIALS_FILE="$GOOGLE_CREDENTIALS_FILE"
 export RTBCAT_DATA_DIR="$DATA_DIR"
 export RTBCAT_DATABASE_PRIVATE_IP RTBCAT_DATABASE_NAME RTBCAT_DATABASE_OWNER
-# Never inherit activation controls from the operator shell. This entry point is
-# shadow-only and explicitly renders the safe mode.
-export RTBCAT_DEPLOY_READ_ONLY_SHADOW=true
-export RTBCAT_DEPLOY_GMAIL_SCHEDULER=false
-export RTBCAT_DEPLOY_PRECOMPUTE_SCHEDULER=false
-export RTBCAT_DEPLOY_CREATIVE_CACHE_SCHEDULER=false
+# Never inherit activation controls from the operator shell: render them from
+# the selected mode, which was already asserted against the runtime env above.
+# compose.yml defaults these to the shadow values, so leaving them unset here
+# would silently redeploy a live host as read-only.
+export RTBCAT_DEPLOY_READ_ONLY_SHADOW="$EXPECTED_SHADOW"
+export RTBCAT_DEPLOY_GMAIL_SCHEDULER="$EXPECTED_SCHEDULERS"
+export RTBCAT_DEPLOY_PRECOMPUTE_SCHEDULER="$EXPECTED_SCHEDULERS"
+export RTBCAT_DEPLOY_CREATIVE_CACHE_SCHEDULER="$EXPECTED_SCHEDULERS"
 
 rendered_images="$(docker compose --project-name rtbcat-hetzner -f "$COMPOSE_FILE" config --images)"
 if ! grep -Fxq "$API_IMAGE" <<<"$rendered_images" || \
@@ -233,7 +279,7 @@ if ! docker exec rtbcat-api \
   exit 1
 fi
 
-if ! "$VERIFY_SCRIPT" --release-file "$approved_release" --with-google; then
+if ! "$VERIFY_SCRIPT" --release-file "$approved_release" --mode "$VERIFY_MODE" --with-google; then
   echo "New release failed acceptance." >&2
   if [[ -n "$previous_release" ]]; then
     echo "Rollback candidate: ${previous_release}" >&2
@@ -244,4 +290,4 @@ fi
 install -o root -g root -m 0644 /dev/null \
   "$RELEASE_DIR/accepted-${RELEASE_GIT_SHA}.marker"
 ln -sfn "$(basename "$approved_release")" "$RELEASE_DIR/current.env"
-echo "Activated immutable shadow release ${RELEASE_GIT_SHA}. DNS and GCP were unchanged."
+echo "Activated immutable ${MODE} release ${RELEASE_GIT_SHA}. DNS was unchanged."
