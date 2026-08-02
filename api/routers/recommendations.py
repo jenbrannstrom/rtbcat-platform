@@ -1,29 +1,41 @@
 """Recommendations Router - Optimization recommendation endpoints.
 
-Handles generation, listing, and resolution of actionable optimization recommendations.
+The recommendation surface is temporarily contained because its legacy metric
+queries aggregate data across buyers.  Keep every endpoint fail-closed until
+the complete call graph and serving data are buyer-scoped.
 """
 
-import logging
-from typing import Optional
+from typing import NoReturn, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
-from api.dependencies import get_current_user, get_store, require_seat_admin_or_sudo
+from api.dependencies import get_current_user, require_seat_admin_or_sudo
 from services.auth_service import User
-from services.recommendations_service import RecommendationsService
-
-logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["Recommendations"])
+
+RECOMMENDATIONS_UNAVAILABLE_DETAIL = (
+    "Recommendations are temporarily unavailable while tenant isolation is upgraded."
+)
+
+
+def _raise_recommendations_unavailable() -> NoReturn:
+    """Fail closed until recommendation inputs and persistence are buyer-safe."""
+    raise HTTPException(
+        status_code=503,
+        detail=RECOMMENDATIONS_UNAVAILABLE_DETAIL,
+    )
 
 
 # =============================================================================
 # Pydantic Models
 # =============================================================================
 
+
 class EvidenceResponse(BaseModel):
     """Evidence supporting a recommendation."""
+
     metric_name: str
     metric_value: float
     threshold: float
@@ -35,6 +47,7 @@ class EvidenceResponse(BaseModel):
 
 class ImpactResponse(BaseModel):
     """Quantified impact of an issue."""
+
     wasted_qps: float
     wasted_queries_daily: int
     wasted_spend_usd: float
@@ -44,6 +57,7 @@ class ImpactResponse(BaseModel):
 
 class ActionResponse(BaseModel):
     """Recommended action to take."""
+
     action_type: str
     target_type: str
     target_id: str
@@ -54,6 +68,7 @@ class ActionResponse(BaseModel):
 
 class RecommendationResponse(BaseModel):
     """A complete optimization recommendation."""
+
     id: str
     type: str
     severity: str
@@ -72,6 +87,7 @@ class RecommendationResponse(BaseModel):
 
 class RecommendationSummaryResponse(BaseModel):
     """Summary of recommendations by severity."""
+
     analysis_period_days: int
     total_queries: int
     total_impressions: int
@@ -88,49 +104,28 @@ class RecommendationSummaryResponse(BaseModel):
 # Endpoints
 # =============================================================================
 
+
 @router.get("/recommendations", response_model=list[RecommendationResponse])
 async def get_recommendations(
     days: int = Query(7, ge=1, le=90, description="Days of data to analyze"),
-    min_severity: str = Query("low", description="Minimum severity: low, medium, high, critical"),
+    min_severity: str = Query(
+        "low", description="Minimum severity: low, medium, high, critical"
+    ),
     _user: User = Depends(get_current_user),
-    store=Depends(get_store),
 ) -> list[RecommendationResponse]:
-    """
-    Get actionable optimization recommendations.
-
-    Phase 25: Core Analytics Engine
-    Returns recommendations sorted by impact (highest wasted QPS first).
-    """
-    try:
-        service = RecommendationsService(store)
-        return await service.generate(days=days, min_severity=min_severity)
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Failed to generate recommendations: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    """Fail closed while buyer-scoped recommendation generation is rebuilt."""
+    _ = (days, min_severity)
+    _raise_recommendations_unavailable()
 
 
 @router.get("/recommendations/summary", response_model=RecommendationSummaryResponse)
 async def get_recommendations_summary(
     days: int = Query(7, ge=1, le=90, description="Days of data to analyze"),
     _user: User = Depends(get_current_user),
-    store=Depends(get_store),
 ) -> RecommendationSummaryResponse:
-    """
-    Get high-level waste summary with recommendation counts.
-
-    Phase 25: Core Analytics Engine
-    Returns summary metrics including total waste and recommendation breakdown.
-    """
-    try:
-        service = RecommendationsService(store)
-        return await service.summary(days=days)
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Failed to get recommendations summary: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    """Fail closed while buyer-scoped recommendation summaries are rebuilt."""
+    _ = days
+    _raise_recommendations_unavailable()
 
 
 @router.post("/recommendations/{recommendation_id}/resolve")
@@ -138,48 +133,20 @@ async def resolve_recommendation(
     recommendation_id: str,
     notes: Optional[str] = Query(None, description="Resolution notes"),
     _user: User = Depends(require_seat_admin_or_sudo),
-    store=Depends(get_store),
 ) -> dict[str, str]:
-    """
-    Mark a recommendation as resolved.
-
-    Phase 25: Core Analytics Engine
-    Updates the recommendation status and records resolution notes.
-    """
-    try:
-        service = RecommendationsService(store)
-        success = await service.resolve(recommendation_id, notes)
-
-        if not success:
-            raise HTTPException(status_code=404, detail="Recommendation not found")
-
-        return {"status": "resolved", "id": recommendation_id}
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Failed to resolve recommendation: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    """Fail closed while recommendation ownership is made buyer-specific."""
+    _ = (recommendation_id, notes)
+    _raise_recommendations_unavailable()
 
 
-@router.get("/recommendations/by-type/{rec_type}", response_model=list[RecommendationResponse])
+@router.get(
+    "/recommendations/by-type/{rec_type}", response_model=list[RecommendationResponse]
+)
 async def get_recommendations_by_type(
     rec_type: str,
     days: int = Query(7, ge=1, le=90, description="Days of data to analyze"),
     _user: User = Depends(get_current_user),
-    store=Depends(get_store),
 ) -> list[RecommendationResponse]:
-    """
-    Get recommendations filtered by type.
-
-    Phase 25: Core Analytics Engine
-    Types: size_mismatch, config_inefficiency, publisher_block, app_block,
-           geo_exclusion, creative_pause, creative_review, fraud_alert
-    """
-    try:
-        service = RecommendationsService(store)
-        return await service.by_type(rec_type, days)
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Failed to get recommendations by type: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    """Fail closed while buyer-scoped recommendation generation is rebuilt."""
+    _ = (rec_type, days)
+    _raise_recommendations_unavailable()
