@@ -166,14 +166,6 @@ Cat-Scan يسد هذه الثغرات:
   oauth2-proxy، cloudsql-proxy، nginx. سلسلة ثقة المصادقة: OAuth2 Proxy يضبط
   `X-Email`، nginx يمرره، API يثق به.
 
-- [الفصل 12: النشر](12-deployment.md)
-  خط أنابيب CI/CD: GitHub Actions `build-and-push.yml` يبني الصور عند الدفع؛
-  `deploy.yml` يعمل بتفعيل يدوي فقط (مع تأكيد `DEPLOY`). علامات صور Artifact
-  Registry (`sha-XXXXXXX`). تسلسل النشر: git pull على الخادم، docker compose
-  pull، إعادة إنشاء، تنظيف. التحقق بعد النشر: فحص صحي، فحص العقد. لماذا
-  النشر التلقائي معطّل (حادثة يناير 2026). كيف تتحقق من نشر:
-  `curl /api/health | jq .git_sha`.
-
 - [الفصل 13: مراقبة الصحة والتشخيص](13-health-monitoring.md)
   نقاط الفحص الصحي: `/api/health` (فحص الحياة)، `/system/data-health` (اكتمال
   البيانات). صفحة حالة النظام (`/settings/system`): Python، Node، FFmpeg، قاعدة

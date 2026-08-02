@@ -113,7 +113,6 @@ with `https://your-deployment.example.com/api`.
 
 ## Related
 
-- [Deployment](12-deployment.md): deploy verification
 - [Troubleshooting](15-troubleshooting.md): when health checks fail
 - For media buyers: [Data Import](09-data-import.md) explains the data
   freshness grid in buyer-friendly terms.

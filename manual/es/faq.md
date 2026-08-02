@@ -82,15 +82,6 @@ curl -sS https://your-deployment.example.com/api/health | jq -r '.git_sha,.versi
 Esto devuelve el SHA del commit de git y la etiqueta de imagen. Compárelo con su registro
 de commits.
 
-### [DevOps] ¿Cómo despliego una corrección?
-
-1. Haga push a `main`
-2. Espere a que `build-and-push.yml` tenga éxito
-3. Ejecute `deploy.yml` mediante `gh workflow run` con `confirm=DEPLOY`
-4. Verifique con `/api/health`
-
-Vea [Despliegue](12-deployment.md) para el procedimiento completo.
-
 ### [DevOps] Los usuarios están atrapados en un bucle de inicio de sesión. ¿Qué hago?
 
 Verifique Cloud SQL Proxy: `sudo docker ps | grep cloudsql`. Si está caído,

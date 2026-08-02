@@ -83,15 +83,6 @@ curl -sS https://your-deployment.example.com/api/health | jq -r '.git_sha,.versi
 
 Dette returnerer git SHA og image-tag. Sammenlign med din commit-log.
 
-### [DevOps] Hvordan deployer jeg en rettelse?
-
-1. Push til `main`
-2. Vent på at `build-and-push.yml` lykkes
-3. Udløs `deploy.yml` via `gh workflow run` med `confirm=DEPLOY`
-4. Verificér med `/api/health`
-
-Se [Deployment](12-deployment.md) for den fulde procedure.
-
 ### [DevOps] Brugere sidder fast i en login-loop. Hvad gør jeg?
 
 Tjek Cloud SQL Proxy: `sudo docker ps | grep cloudsql`. Hvis den er nede,

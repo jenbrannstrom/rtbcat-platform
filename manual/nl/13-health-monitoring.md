@@ -110,6 +110,5 @@ met `https://your-deployment.example.com/api`.
 
 ## Gerelateerd
 
-- [Deployment](12-deployment.md): deploymentverificatie
 - [Probleemoplossing](15-troubleshooting.md): wanneer gezondheidscontroles falen
 - Voor mediakopers: [Data-import](09-data-import.md) beschrijft het dataversheidsraster in kopervriendelijke termen.

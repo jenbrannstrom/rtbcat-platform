@@ -110,6 +110,5 @@ z `https://your-deployment.example.com/api`.
 
 ## Powiązane
 
-- [Wdrożenie](12-deployment.md): weryfikacja wdrożenia
 - [Rozwiązywanie problemów](15-troubleshooting.md): gdy kontrole stanu kończą się niepowodzeniem
 - Dla media buyerów: [Import danych](09-data-import.md) opisuje siatkę świeżości danych w sposób przystępny dla kupujących.

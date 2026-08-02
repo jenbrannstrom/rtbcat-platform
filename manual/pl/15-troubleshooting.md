@@ -134,4 +134,3 @@ conn.execute(f"SET LOCAL statement_timeout = {timeout_ms}")
 
 - [Monitoring stanu systemu](13-health-monitoring.md): narzędzia monitorujące
 - [Operacje bazodanowe](14-database.md): szczegóły zapytań i indeksów
-- [Wdrożenie](12-deployment.md): wdrażanie poprawek

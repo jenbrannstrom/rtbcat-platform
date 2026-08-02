@@ -95,6 +95,5 @@ manejan HTTP; los servicios contienen la lógica de negocio; los repositorios ej
 
 ## Relacionado
 
-- [Despliegue](12-deployment.md): cómo se despliega el sistema
 - [Operaciones de base de datos](14-database.md): detalles específicos de Postgres
 - [Integraciones](17-integrations.md): conexiones con servicios externos

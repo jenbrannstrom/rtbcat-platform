@@ -95,6 +95,5 @@ verwerken HTTP; services bevatten bedrijfslogica; repositories voeren SQL uit.
 
 ## Gerelateerd
 
-- [Deployment](12-deployment.md): hoe het systeem wordt uitgerold
 - [Databasebeheer](14-database.md): Postgres-specifieke details
 - [Integraties](17-integrations.md): verbindingen met externe services

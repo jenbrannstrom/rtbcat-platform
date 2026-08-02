@@ -116,7 +116,6 @@ Depuis l'hôte de la VM, utilisez `CATSCAN_CANARY_EMAIL` avec
 
 ## Ressources connexes
 
-- [Déploiement](12-deployment.md) : vérification du déploiement
 - [Dépannage](15-troubleshooting.md) : quand les vérifications de santé échouent
 - Pour les acheteurs média : [Import de données](09-data-import.md) explique
   la grille de fraîcheur des données en termes adaptés aux acheteurs.

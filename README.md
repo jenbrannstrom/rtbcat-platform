@@ -271,7 +271,6 @@ API 接口数量较多，无法在简短的 README 表格中完整列出。当�
 | [预定位管理](manual/zh/06-pretargeting.md) | 预定位配置管理 |
 | [优化器](manual/zh/07-optimizer.md) | 优化器逻辑与使用 |
 | [数据导入](manual/zh/09-data-import.md) | CSV 报表导入流程 |
-| [部署](manual/zh/12-deployment.md) | 部署与运维 |
 | [常见问题](manual/zh/faq.md) | FAQ |
 | [术语表](manual/zh/glossary.md) | 术语中英对照 |
 |---|---|

@@ -95,6 +95,5 @@ Browser → nginx → OAuth2 Proxy → sets X-Email header → nginx → API
 
 ## مواضيع ذات صلة
 
-- [النشر](12-deployment.md): كيف يُنشر النظام
 - [عمليات قاعدة البيانات](14-database.md): تفاصيل Postgres
 - [التكاملات](17-integrations.md): اتصالات الخدمات الخارجية

@@ -110,6 +110,5 @@ gh workflow run v1-runtime-health-strict.yml \
 
 ## קישורים
 
-- [פריסה](12-deployment.md): אימות פריסה
 - [פתרון תקלות](15-troubleshooting.md): כאשר בדיקות תקינות נכשלות
 - לקוני מדיה: [ייבוא נתונים](09-data-import.md) מסביר את רשת רעננות הנתונים במונחים ידידותיים לקונה.
