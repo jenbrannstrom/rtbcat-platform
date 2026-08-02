@@ -102,6 +102,7 @@ def test_gmail_import_disables_per_file_legacy_scan(tmp_path, monkeypatch) -> No
 
     assert result.success is True
     assert captured["sync_legacy_performance"] is False
+    assert captured["buyer_scope"].is_unrestricted is True
 
 
 def test_gmail_pipeline_defers_bigquery_aggregation(tmp_path, monkeypatch) -> None:

@@ -22,9 +22,13 @@ from importers.flexible_mapper import map_columns, detect_best_report_type
 from importers.domain_rollup import rollup_domains
 from importers.unified_importer import (
     derive_inventory_type,
+    ImportBuyerScope,
     is_web_lane_enabled,
     unified_import,
 )
+
+
+UNRESTRICTED_BUYER_SCOPE = ImportBuyerScope.unrestricted()
 
 
 # ---------------------------------------------------------------------------
@@ -94,6 +98,7 @@ def test_filename_routing_forces_domain_table():
         mock_pem.from_env.return_value = None
         result = unified_import(
             csv_path,
+            buyer_scope=UNRESTRICTED_BUYER_SCOPE,
             source_filename="catscan-domains-9999999999-yesterday-UTC.csv",
         )
 
@@ -198,6 +203,7 @@ def test_natural_pk_upsert_idempotency():
         mock_pem.from_env.return_value = None
         result = unified_import(
             csv_path,
+            buyer_scope=UNRESTRICTED_BUYER_SCOPE,
             source_filename="catscan-domains-9999999999-yesterday-UTC.csv",
         )
 
@@ -319,6 +325,7 @@ async def test_buyer_allowlist_skip():
         mock_pem.from_env.return_value = None
         result = unified_import(
             csv_path,
+            buyer_scope=UNRESTRICTED_BUYER_SCOPE,
             source_filename="catscan-domains-blocked-buyer-yesterday-UTC.csv",
         )
 
