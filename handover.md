@@ -1,12 +1,118 @@
 # Handover
 
-## LIVE CUTOVER WINDOW — HALTED MID-FREEZE, 2026-08-01 ~20:10 UTC
+## CUTOVER WINDOW ROLLED BACK — CURRENT STATE, 2026-08-02 06:26 UTC
 
-**Read this section first. Source writers are frozen and `scan.rtb.cat` is
-serving a maintenance 503 to the public right now.** GCP is still
-authoritative, no Hetzner write has occurred, and the cutover is still fully
-reversible. Do not leave the system in this state: either finish the
-remaining gates or run the rollback below.
+**This section overrides the historical live-window section immediately
+below. The public site is no longer frozen.** The 2026-08-01 cutover was
+rolled back before Gate 5 because the operator needed to end the window.
+Gate 11 never ran, Hetzner never became writable, DNS never changed, and GCP
+is again the sole production authority.
+
+### Accepted state now
+
+- Public `scan.rtb.cat` is healthy on GCP on the exact pre-freeze release
+  `10c45949d08f671c69743e9fc557cb9956921487`; API health reports
+  `sha-10c4594`, the database exists, and `/login` returns 200.
+- The final read-only preflight generated at `2026-08-02T06:06:30Z` passed
+  all 12/12 checks with `ready_for_freeze=true`, `mode=read-only` and
+  `authority_changed=false`.
+- The three Cloud Scheduler jobs are `ENABLED` on their recorded schedules
+  and still target `https://scan.rtb.cat/`.
+- On the GCP VM, `catscan-api`, `catscan-dashboard` and
+  `catscan-cloudsql-proxy` are running; the API is healthy. The report,
+  contracts and `certbot` timers are active, and docker-cleanup cron is back
+  at `/etc/cron.d/docker-cleanup`. The card's suspected
+  `catscan-precompute-refresh.timer` does not exist on the live VM; the
+  precompute writer is the Cloud Scheduler job.
+- All three source application roles remained `LOGIN`; the interrupted G4
+  command did not commit. `rtbcat_migration_repl` also remains `LOGIN`.
+- Hetzner remains sealed with zero application containers. Its subscription
+  is enabled, all 98 tables are ready, the monitor is healthy, and the final
+  preflight accepted the database services, backup and sealed app.
+- The temporary direct-SSH firewall rule and the temporary
+  `roles/compute.securityAdmin` grant to the operator identity have both
+  been removed and independently re-read as absent.
+- The one-window Cloud SQL `postgres` password copies were shredded on the
+  workstation and database host. That password was randomized during G4
+  preparation and is now intentionally unknown; reset it through GCP before
+  the next G4 attempt. The temporary sensitive VM env backup was also
+  shredded.
+
+### Rollback incident that must be reviewed before the retry
+
+The documented `systemctl start catscan.service` rollback command exposed a
+pre-existing release-pin defect. `/opt/catscan` was checked out at the
+accepted `10c4594` commit, but `/opt/catscan/.env` still said
+`IMAGE_TAG=sha-0d2b83e`. Because the stopped images had to be rebuilt, the
+service initially built and served that older March release. Legacy
+`docker-compose` also hit its `ContainerConfig` stale-container error; only
+the already-stopped containers belonging to compose project `catscan` were
+removed, with no image or application-data deletion, and the service then
+recreated them.
+
+The stale release was publicly healthy from roughly 20:33 UTC on August 1
+until the exact-release correction began around 05:54 UTC on August 2.
+During that interval the 22:30 UTC `precompute-refresh` job made four
+attempts; Cloud Scheduler recorded four 504 results. The immutable database
+ledger shows old-release writes only to derived precompute caches:
+
+- `home_summaries`: 20 successful ledger rows across four run IDs;
+- `config_breakdowns`: 8 successful rows across two run IDs and one failed
+  row from one additional run ID;
+- no `rtb_summaries` ledger rows in the audited start window.
+
+The retries continued backend work after the scheduler's HTTP timeout; some
+config work completed after midnight. Replacing the containers ended any
+remaining old-release process. Raw source data stayed on Cloud SQL and no
+Hetzner write occurred, but review the derived-cache results (or require a
+clean accepted-release precompute cycle plus contracts check) before opening
+the next cutover window.
+
+The correction was to set only the persisted GCP `IMAGE_TAG` to
+`sha-10c4594`, rebuild from the matching checked-out source, and require both
+private and public health to report `sha-10c4594`. Do not use the plain
+rollback `systemctl start` again without first asserting the persisted image
+tag equals the receipt's release. Keep that assertion in the next command
+card amendment.
+
+### Private rollback evidence
+
+All files below are mode 0600 under
+`/home/jen/private/rtbcat-cutover-20260801/`:
+
+- `g4-precheck.txt` — all four relevant roles were still login-enabled and
+  the unexpected-session array was empty before the interrupted G4 command;
+- `rb-schedulers-final.json` — final three-job enabled state;
+- `rb-preflight.json` and `rb-preflight.log` — accepted 12/12 final state;
+- `rb-precompute-scheduler-logs.json` — four overnight precompute attempts
+  and their 504 results;
+- `rb-controlpath-firewall-before.json`,
+  `rb-controlpath-iam-before.json` and `rb-controlpath-iam-remove.txt` —
+  before-state and removal receipts for the two temporary access changes.
+
+### Next attempt starts from G0/G1, not G5
+
+1. Review the derived precompute cache incident above and record acceptance.
+2. Reauthenticate an account with Cloud SQL admin, generate a new one-window
+   `postgres` password, reset it through GCP, and stage a root-only pgpass on
+   the database host.
+3. Amend the rollback card to assert the exact persisted GCP `IMAGE_TAG`
+   before starting `catscan.service`; preferably use the accepted immutable
+   images instead of an on-VM build.
+4. Run a fresh G0 and require 12/12. IAP worked with the refreshed billing
+   identity during the final preflight, so do not recreate direct SSH access
+   unless it fails again.
+5. Open a new freeze at G1 and follow the Guardian Amendments. None of the
+   aborted window's G5-G13 receipts may be reused.
+
+## HISTORICAL — LIVE WINDOW HALTED MID-FREEZE, 2026-08-01 ~20:10 UTC
+
+**Historical record only; the rollback checkpoint above is current. At this
+point in the window, source writers were frozen and `scan.rtb.cat` was
+serving a maintenance 503 to the public.** GCP was still authoritative, no
+Hetzner write had occurred, and the cutover was fully reversible. The system
+could not be left in that state: the remaining gates or the rollback below
+had to run.
 
 Operator/verifier/rollback owner for this window: Jen (solo, recorded
 deviation from the two-person rule). Window opened 19:00 UTC against a
