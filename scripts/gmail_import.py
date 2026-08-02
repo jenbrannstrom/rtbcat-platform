@@ -1360,9 +1360,13 @@ def import_to_catscan(filepath: Path) -> CatscanImportResult:
     """
     file_size = filepath.stat().st_size if filepath.exists() else 0
     try:
-        from importers.unified_importer import unified_import
+        from importers.unified_importer import ImportBuyerScope, unified_import
 
-        result = unified_import(str(filepath), sync_legacy_performance=False)
+        result = unified_import(
+            str(filepath),
+            buyer_scope=ImportBuyerScope.unrestricted(),
+            sync_legacy_performance=False,
+        )
         columns_str = ",".join(result.columns_mapped.values()) if result.columns_mapped else None
 
         if result.success:

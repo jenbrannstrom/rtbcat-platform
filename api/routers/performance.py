@@ -23,6 +23,7 @@ from pydantic import BaseModel
 from api.dependencies import (
     get_store,
     get_current_user,
+    get_admin_buyer_ids,
     get_allowed_buyer_ids,
     require_admin,
     require_seat_admin_or_sudo,
@@ -41,7 +42,12 @@ from api.schemas.performance import (
     CSVImportResult,
     StreamingImportResult,
 )
-from importers.unified_importer import unified_import, parse_bidder_id_from_filename
+from importers.unified_importer import (
+    BuyerScopeViolation,
+    ImportBuyerScope,
+    parse_bidder_id_from_filename,
+    unified_import,
+)
 from storage import PerformanceMetric
 from storage.postgres_repositories.creative_performance_repo import CreativePerformanceRepository
 from services.home_precompute import refresh_home_summaries
@@ -74,6 +80,28 @@ router = APIRouter(prefix="/performance", tags=["Performance"])
 
 UPLOAD_DIR = Path(tempfile.gettempdir()) / "catscan_uploads"
 UPLOAD_TTL_SECONDS = 24 * 60 * 60
+
+
+async def _import_buyer_scope(user: User) -> ImportBuyerScope:
+    """Translate the authenticated admin's seats into importer row scope."""
+    buyer_ids = await get_admin_buyer_ids(user)
+    if buyer_ids is None:
+        return ImportBuyerScope.unrestricted()
+    return ImportBuyerScope.restricted(buyer_ids)
+
+
+def _authorize_import_filename(
+    filename: Optional[str],
+    buyer_scope: ImportBuyerScope,
+) -> Optional[str]:
+    """Authorize a filename-derived buyer before creating import side effects."""
+    buyer_id = parse_bidder_id_from_filename(filename or "")
+    if buyer_id:
+        try:
+            buyer_scope.require_authorized(buyer_id)
+        except BuyerScopeViolation as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
+    return buyer_id
 
 
 class BatchImportRequest(BaseModel):
@@ -410,7 +438,7 @@ async def cleanup_old_rtb_daily(
 async def import_performance_csv(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(..., description="CSV file with performance data"),
-    _user: User = Depends(require_seat_admin_or_sudo),
+    user: User = Depends(require_seat_admin_or_sudo),
 ) -> CSVImportResult:
     """Import performance data from Authorized Buyers CSV export.
 
@@ -422,6 +450,8 @@ async def import_performance_csv(
     if not file.filename or not file.filename.endswith(".csv"):
         raise HTTPException(status_code=400, detail="File must be a CSV")
 
+    buyer_scope = await _import_buyer_scope(user)
+    buyer_id = _authorize_import_filename(file.filename, buyer_scope)
     tmp_path = None
     run_id = str(uuid.uuid4())
     uploads_repo = UploadsRepository()
@@ -432,8 +462,6 @@ async def import_performance_csv(
             tmp.write(content)
             tmp_path = tmp.name
 
-        # Extract buyer_id from filename as fallback
-        buyer_id = parse_bidder_id_from_filename(file.filename or "")
         error_summary = None if buyer_id else "buyer_id_unresolved_from_upload"
 
         # Start ingestion run tracking
@@ -446,7 +474,11 @@ async def import_performance_csv(
         )
 
         # Try flexible unified importer first - it auto-maps columns
-        result = unified_import(tmp_path, source_filename=file.filename)
+        result = unified_import(
+            tmp_path,
+            buyer_scope=buyer_scope,
+            source_filename=file.filename,
+        )
         file_size_bytes = os.path.getsize(tmp_path) if tmp_path and os.path.exists(tmp_path) else 0
         columns_found = []
         seen_columns = set()
@@ -618,11 +650,13 @@ async def upload_stream_chunk(
 async def complete_stream_import(
     request: StreamCompleteRequest,
     background_tasks: BackgroundTasks,
-    _user: User = Depends(require_seat_admin_or_sudo),
+    user: User = Depends(require_seat_admin_or_sudo),
 ) -> CSVImportResult:
     """Finalize a streamed CSV upload and run the unified importer."""
     _ensure_upload_dir()
     meta = _load_meta(request.upload_id)
+    buyer_scope = await _import_buyer_scope(user)
+    buyer_id = _authorize_import_filename(meta.get("filename"), buyer_scope)
     total_chunks = meta.get("total_chunks")
     if total_chunks is None:
         raise HTTPException(status_code=400, detail="Upload not initialized")
@@ -681,7 +715,11 @@ async def complete_stream_import(
             )
 
     try:
-        result = unified_import(str(final_path), source_filename=meta.get("filename"))
+        result = unified_import(
+            str(final_path),
+            buyer_scope=buyer_scope,
+            source_filename=meta.get("filename"),
+        )
         columns_found = []
         seen_columns = set()
         for col in list(result.columns_mapped.values()) + result.columns_unmapped:
@@ -689,7 +727,6 @@ async def complete_stream_import(
                 columns_found.append(col)
                 seen_columns.add(col)
 
-        buyer_id = parse_bidder_id_from_filename(meta.get("filename") or "")
         perf_service = PerformanceService()
         await perf_service.record_import(
             batch_id=result.batch_id,

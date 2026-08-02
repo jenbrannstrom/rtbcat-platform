@@ -9,6 +9,7 @@ from fastapi import FastAPI, HTTPException
 from tests.support.asgi_client import SyncASGIClient
 
 from api.routers import performance as performance_router
+from importers.unified_importer import ImportBuyerScope
 from services.auth_service import User
 
 
@@ -34,6 +35,11 @@ def test_import_csv_preserves_http_exception_status(
     app.include_router(performance_router.router, prefix="/api")
     app.dependency_overrides[performance_router.require_seat_admin_or_sudo] = _allow_seat_admin()
     monkeypatch.setattr(performance_router, "UploadsRepository", _StubUploadsRepository)
+
+    async def _scope(_user: User) -> ImportBuyerScope:
+        return ImportBuyerScope.unrestricted()
+
+    monkeypatch.setattr(performance_router, "_import_buyer_scope", _scope)
 
     client = SyncASGIClient(app)
     response = client.post(
