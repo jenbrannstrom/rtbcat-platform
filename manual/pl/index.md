@@ -177,15 +177,6 @@ Dla inżynierów platformowych, SRE i administratorów systemów.
   oauth2-proxy, cloudsql-proxy, nginx. Łańcuch zaufania uwierzytelniania:
   OAuth2 Proxy ustawia `X-Email`, nginx go przekazuje, API mu ufa.
 
-- [Rozdział 12: Wdrażanie](12-deployment.md)
-  Pipeline CI/CD: GitHub Actions `build-and-push.yml` buduje obrazy przy pushu;
-  `deploy.yml` wymaga ręcznego wyzwolenia (z potwierdzeniem `DEPLOY`). Tagi
-  obrazów Artifact Registry (`sha-XXXXXXX`). Sekwencja wdrożenia: git pull na
-  VM, docker compose pull, recreate, prune. Weryfikacja po wdrożeniu: health
-  check, contract check. Dlaczego auto-deploy jest wyłączony (incydent ze
-  stycznia 2026). Jak zweryfikować wdrożenie:
-  `curl /api/health | jq .git_sha`.
-
 - [Rozdział 13: Monitorowanie stanu i diagnostyka](13-health-monitoring.md)
   Endpointy stanu: `/api/health` (liveness), `/system/data-health`
   (kompletność danych). Strona statusu systemu (`/settings/system`): Python,

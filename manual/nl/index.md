@@ -178,14 +178,6 @@ Voor platformengineers, SRE's en systeembeheerders.
   cloudsql-proxy, nginx. De auth-vertrouwensketen: OAuth2 Proxy zet `X-Email`,
   nginx geeft het door, API vertrouwt het.
 
-- [Hoofdstuk 12: Uitrol](12-deployment.md)
-  CI/CD-pipeline: GitHub Actions `build-and-push.yml` bouwt images bij push;
-  `deploy.yml` is alleen handmatig te triggeren (met `DEPLOY`-bevestiging).
-  Artifact Registry image-tags (`sha-XXXXXXX`). De uitrolvolgorde: git pull op
-  VM, docker compose pull, recreate, prune. Verificatie na uitrol: health check,
-  contractcheck. Waarom auto-deploy is uitgeschakeld (incident januari 2026).
-  Hoe u een uitrol verifieert: `curl /api/health | jq .git_sha`.
-
 - [Hoofdstuk 13: Gezondheidsmonitoring en diagnostiek](13-health-monitoring.md)
   Health-endpoints: `/api/health` (liveness), `/system/data-health`
   (datavolledigheid). De Systeemstatuspagina (`/settings/system`): Python, Node,

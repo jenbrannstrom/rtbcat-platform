@@ -90,15 +90,6 @@ curl -sS https://your-deployment.example.com/api/health | jq -r '.git_sha,.versi
 Cela retourne le SHA git et le tag de l'image. Comparez avec votre historique de
 commits.
 
-### [DevOps] Comment déployer un correctif ?
-
-1. Poussez sur `main`
-2. Attendez que `build-and-push.yml` réussisse
-3. Déclenchez `deploy.yml` via `gh workflow run` avec `confirm=DEPLOY`
-4. Vérifiez avec `/api/health`
-
-Voir [Déploiement](12-deployment.md) pour la procédure complète.
-
 ### [DevOps] Les utilisateurs sont bloqués dans une boucle de connexion. Que faire ?
 
 Vérifiez Cloud SQL Proxy : `sudo docker ps | grep cloudsql`. S'il est arrêté,

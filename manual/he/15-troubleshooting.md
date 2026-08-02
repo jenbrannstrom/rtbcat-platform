@@ -134,4 +134,3 @@ conn.execute(f"SET LOCAL statement_timeout = {timeout_ms}")
 
 - [ניטור תקינות](13-health-monitoring.md): כלי ניטור
 - [פעולות מסד נתונים](14-database.md): פרטי שאילתות ואינדקסים
-- [פריסה](12-deployment.md): פריסת תיקונים

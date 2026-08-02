@@ -172,14 +172,6 @@ For platformingeniører, SRE'er og systemadministratorer.
   oauth2-proxy, cloudsql-proxy, nginx. Auth-tillidskæden: OAuth2 Proxy sætter
   `X-Email`, nginx videresender det, API'et stoler på det.
 
-- [Kapitel 12: Deployment](12-deployment.md)
-  CI/CD-pipeline: GitHub Actions `build-and-push.yml` bygger images ved push;
-  `deploy.yml` er kun manuel trigger (med `DEPLOY`-bekræftelse). Artifact
-  Registry image-tags (`sha-XXXXXXX`). Deploy-sekvensen: git pull på VM,
-  docker compose pull, recreate, prune. Post-deploy-verifikation: health check,
-  contract check. Hvorfor auto-deploy er deaktiveret (januar 2026-hændelsen).
-  Sådan verificerer du en deploy: `curl /api/health | jq .git_sha`.
-
 - [Kapitel 13: Sundhedsovervågning og diagnostik](13-health-monitoring.md)
   Health-endpoints: `/api/health` (liveness), `/system/data-health`
   (datakomplethed). Systemstatussiden (`/settings/system`): Python, Node,

@@ -79,15 +79,6 @@ curl -sS https://your-deployment.example.com/api/health | jq -r '.git_sha,.versi
 
 هذا يعيد SHA الخاص بـ git وعلامة الصورة. قارنه بسجل الإيداعات لديك.
 
-### [DevOps] كيف أنشر إصلاحاً؟
-
-1. ادفع إلى `main`
-2. انتظر نجاح `build-and-push.yml`
-3. شغّل `deploy.yml` عبر `gh workflow run` مع `confirm=DEPLOY`
-4. تحقق عبر `/api/health`
-
-راجع [النشر](12-deployment.md) للإجراء الكامل.
-
 ### [DevOps] المستخدمون عالقون في حلقة تسجيل دخول. ماذا أفعل؟
 
 تحقق من Cloud SQL Proxy: `sudo docker ps | grep cloudsql`. إذا كان متوقفاً،

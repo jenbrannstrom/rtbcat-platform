@@ -83,15 +83,6 @@ curl -sS https://your-deployment.example.com/api/health | jq -r '.git_sha,.versi
 
 Dit retourneert de git SHA en de image-tag. Vergelijk met uw commitlog.
 
-### [DevOps] Hoe rol ik een fix uit?
-
-1. Push naar `main`
-2. Wacht tot `build-and-push.yml` slaagt
-3. Trigger `deploy.yml` via `gh workflow run` met `confirm=DEPLOY`
-4. Verifieer met `/api/health`
-
-Zie [Uitrol](12-deployment.md) voor de volledige procedure.
-
 ### [DevOps] Gebruikers zitten vast in een inlogloop. Wat moet ik doen?
 
 Controleer Cloud SQL Proxy: `sudo docker ps | grep cloudsql`. Als deze niet

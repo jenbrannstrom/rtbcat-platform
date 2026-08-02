@@ -96,6 +96,5 @@ obsługują HTTP; serwisy zawierają logikę biznesową; repozytoria wykonują S
 
 ## Powiązane
 
-- [Wdrażanie](12-deployment.md): jak system jest wdrażany
 - [Operacje bazodanowe](14-database.md): szczegóły dotyczące Postgres
 - [Integracje](17-integrations.md): połączenia z zewnętrznymi usługami

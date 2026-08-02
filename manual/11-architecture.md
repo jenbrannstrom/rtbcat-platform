@@ -95,6 +95,5 @@ handle HTTP; services contain business logic; repositories execute SQL.
 
 ## Related
 
-- [Deployment](12-deployment.md): how the system gets deployed
 - [Database Operations](14-database.md): Postgres specifics
 - [Integrations](17-integrations.md): external service connections

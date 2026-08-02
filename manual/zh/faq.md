@@ -73,15 +73,6 @@ curl -sS https://your-deployment.example.com/api/health | jq -r '.git_sha,.versi
 
 返回 git SHA 和镜像标签。与你的提交日志对比。
 
-### [运维] 如何部署修复？
-
-1. 推送到 `main`
-2. 等待 `build-and-push.yml` 成功
-3. 通过 `gh workflow run` 触发 `deploy.yml`，设置 `confirm=DEPLOY`
-4. 用 `/api/health` 验证
-
-详细步骤参见[部署](12-deployment.md)。
-
 ### [运维] 用户卡在登录循环怎么办？
 
 检查 Cloud SQL Proxy：`sudo docker ps | grep cloudsql`。如果已停止，
