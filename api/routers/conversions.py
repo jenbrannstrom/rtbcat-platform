@@ -23,6 +23,7 @@ from api.dependencies import (
     is_sudo,
     require_buyer_admin_access,
     require_seat_admin_or_sudo,
+    resolve_admin_buyer_id,
     resolve_buyer_id,
 )
 from api.request_trust import get_client_ip
@@ -41,6 +42,28 @@ from services.conversions_service import ConversionsService
 
 router = APIRouter(prefix="/conversions", tags=["Conversions"])
 logger = logging.getLogger(__name__)
+
+
+async def _require_failure_admin(
+    service: ConversionIngestionService,
+    failure_id: int,
+    *,
+    user: User,
+) -> None:
+    """Require admin on the buyer that owns a queued ingestion failure.
+
+    Failure IDs are sequential, so replay and discard need the owning buyer
+    resolved before they act. A failure recorded without a buyer cannot be
+    attributed to a seat and is therefore sudo-only.
+    """
+    if is_sudo(user):
+        return
+
+    buyer_id = await service.get_failure_buyer_id(failure_id)
+    if not buyer_id:
+        raise HTTPException(status_code=404, detail="Failure item not found")
+
+    await require_buyer_admin_access(buyer_id, user=user)
 
 
 class ConversionAggregateRow(BaseModel):
@@ -1114,8 +1137,15 @@ async def ingest_conversion_csv(
     file: UploadFile = File(...),
     source_type: str = Form("manual_csv"),
     buyer_id: Optional[str] = Form(None),
-    _user: User = Depends(require_seat_admin_or_sudo),
+    user: User = Depends(require_seat_admin_or_sudo),
 ) -> ConversionCSVIngestResponse:
+    # Resolving here and passing the result as the override is what stops a
+    # caller choosing the victim: _normalize_event falls back to per-row
+    # buyer_id/buyer_account_id/seat_id when no override is supplied, so a
+    # non-sudo caller must always end up pinned to a seat they administer.
+    # Sudo still resolves to None and keeps per-row buyers for bulk imports.
+    buyer_id = await resolve_admin_buyer_id(buyer_id, user=user)
+
     raw_bytes = await file.read()
     if not raw_bytes:
         raise HTTPException(status_code=400, detail="CSV file is empty")
@@ -1164,6 +1194,7 @@ async def replay_conversion_ingestion_failure(
     user: User = Depends(require_seat_admin_or_sudo),
 ) -> ConversionReplayFailureResponse:
     service = ConversionIngestionService()
+    await _require_failure_admin(service, failure_id, user=user)
     try:
         payload = await service.replay_failure(failure_id)
     except ValueError as exc:
@@ -1187,6 +1218,7 @@ async def discard_conversion_ingestion_failure(
     user: User = Depends(require_seat_admin_or_sudo),
 ) -> ConversionDiscardFailureResponse:
     service = ConversionIngestionService()
+    await _require_failure_admin(service, failure_id, user=user)
     discarded = await service.discard_failure(failure_id)
     if not discarded:
         raise HTTPException(status_code=404, detail="Failure item not found")

@@ -7,7 +7,12 @@ from typing import Any, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from api.dependencies import get_current_user, get_store, resolve_buyer_id
+from api.dependencies import (
+    get_current_user,
+    get_store,
+    resolve_admin_buyer_id,
+    resolve_buyer_id,
+)
 from services.auth_service import User
 from services.optimizer_models_service import OptimizerModelsService
 
@@ -111,7 +116,7 @@ async def create_optimizer_model(
     store=Depends(get_store),
     user: User = Depends(get_current_user),
 ) -> OptimizerModelRow:
-    buyer_id = await resolve_buyer_id(request.buyer_id, store=store, user=user)
+    buyer_id = await resolve_admin_buyer_id(request.buyer_id, store=store, user=user)
     service = OptimizerModelsService()
     try:
         payload = await service.create_model(
@@ -153,7 +158,7 @@ async def update_optimizer_model(
     store=Depends(get_store),
     user: User = Depends(get_current_user),
 ) -> OptimizerModelRow:
-    buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
+    buyer_id = await resolve_admin_buyer_id(buyer_id, store=store, user=user)
     service = OptimizerModelsService()
     updates = request.model_dump(exclude_unset=True)
     try:
@@ -177,7 +182,7 @@ async def activate_optimizer_model(
     store=Depends(get_store),
     user: User = Depends(get_current_user),
 ) -> OptimizerModelUpdateActiveResponse:
-    buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
+    buyer_id = await resolve_admin_buyer_id(buyer_id, store=store, user=user)
     service = OptimizerModelsService()
     payload = await service.update_model(
         model_id=model_id,
@@ -199,7 +204,7 @@ async def deactivate_optimizer_model(
     store=Depends(get_store),
     user: User = Depends(get_current_user),
 ) -> OptimizerModelUpdateActiveResponse:
-    buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
+    buyer_id = await resolve_admin_buyer_id(buyer_id, store=store, user=user)
     service = OptimizerModelsService()
     payload = await service.update_model(
         model_id=model_id,
@@ -223,7 +228,7 @@ async def validate_optimizer_model(
     store=Depends(get_store),
     user: User = Depends(get_current_user),
 ) -> ValidateOptimizerModelResponse:
-    buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
+    buyer_id = await resolve_admin_buyer_id(buyer_id, store=store, user=user)
     service = OptimizerModelsService()
     try:
         payload = await service.validate_model_endpoint(

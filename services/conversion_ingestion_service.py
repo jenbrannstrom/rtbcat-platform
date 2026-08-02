@@ -871,6 +871,19 @@ class ConversionIngestionService:
             },
         }
 
+    async def get_failure_buyer_id(self, failure_id: int) -> Optional[str]:
+        """Get the buyer a queued ingestion failure belongs to.
+
+        Returns None when the failure row does not exist or was recorded
+        without a buyer; callers must treat that as unauthorized rather than
+        unrestricted.
+        """
+        row = await pg_query_one(
+            "SELECT buyer_id FROM conversion_ingestion_failures WHERE id = %s",
+            (failure_id,),
+        )
+        return row.get("buyer_id") if row else None
+
     async def replay_failure(self, failure_id: int) -> dict[str, Any]:
         row = await pg_query_one(
             """

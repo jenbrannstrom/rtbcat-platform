@@ -5,6 +5,7 @@ from typing import Optional, List
 from fastapi import HTTPException, Request, Depends
 from storage.postgres_store import PostgresStore
 from storage.postgres_database import init_postgres_database
+from storage.postgres_repositories.pretargeting_repo import PretargetingRepository
 from services.auth_service import AuthService, User
 from config import ConfigManager
 
@@ -246,8 +247,11 @@ async def require_seat_admin_or_sudo(
 ) -> User:
     """Require sudo or admin access to at least one buyer seat.
 
-    Use for bidder-level / settings mutations where the operation
-    isn't scoped to a single buyer_id but requires admin privileges.
+    This proves only that the caller administers *some* seat. It is not, on its
+    own, authorization to act on the seat a request names. Any route that
+    resolves a target buyer, bidder or pretargeting config from the path, query
+    or body must additionally call one of the object-scoped helpers below with
+    that target.
     """
     if is_sudo(user):
         return user
@@ -259,6 +263,121 @@ async def require_seat_admin_or_sudo(
         status_code=403,
         detail="Admin access to at least one seat is required.",
     )
+
+
+# ==================== Object-scoped admin authorization ====================
+
+
+async def get_admin_buyer_ids(
+    user: User = Depends(get_current_user),
+) -> Optional[list[str]]:
+    """Get buyer IDs the user has admin access to.
+
+    Returns None for sudo users to signal "all buyers".
+    """
+    if is_sudo(user):
+        return None
+
+    auth_svc = get_auth_service()
+    buyer_ids = await auth_svc.get_user_buyer_seat_ids(user.id, min_access_level="admin")
+    return list(dict.fromkeys(buyer_ids))
+
+
+async def resolve_admin_buyer_id(
+    buyer_id: Optional[str],
+    store: Optional[PostgresStore] = None,
+    user: User = Depends(get_current_user),
+) -> Optional[str]:
+    """Resolve the target buyer_id for an admin mutation.
+
+    store is accepted for symmetry with resolve_buyer_id but is unused, so
+    callers need not take a store dependency purely to authorize.
+
+    The admin-level counterpart of resolve_buyer_id: where that helper accepts
+    read access, this requires 'admin' on the specific buyer being targeted.
+    Omitting buyer_id is allowed only when the caller administers exactly one
+    seat, so it can never widen into another buyer's scope.
+    """
+    admin_buyers = await get_admin_buyer_ids(user)
+    if admin_buyers is None:
+        return buyer_id
+
+    if buyer_id:
+        if buyer_id not in admin_buyers:
+            raise HTTPException(
+                status_code=403,
+                detail="You need 'admin' access to this buyer account.",
+            )
+        return buyer_id
+
+    if len(admin_buyers) == 1:
+        return admin_buyers[0]
+
+    raise HTTPException(
+        status_code=400,
+        detail="buyer_id is required for your account access.",
+    )
+
+
+async def get_admin_bidder_ids(
+    store: PostgresStore = Depends(get_store),
+    user: User = Depends(get_current_user),
+) -> Optional[list[str]]:
+    """Get bidder IDs reachable from the seats the user administers.
+
+    Returns None for sudo users to signal "all bidders".
+    """
+    admin_buyers = await get_admin_buyer_ids(user)
+    if admin_buyers is None:
+        return None
+    if not admin_buyers:
+        return []
+    return await store.get_bidder_ids_for_buyer_ids(admin_buyers)
+
+
+async def require_bidder_admin(
+    bidder_id: Optional[str],
+    store: PostgresStore = Depends(get_store),
+    user: User = Depends(get_current_user),
+) -> Optional[str]:
+    """Require admin access to a seat under the given bidder account."""
+    allowed = await get_admin_bidder_ids(store=store, user=user)
+    if allowed is None:
+        return bidder_id
+
+    if not bidder_id or bidder_id not in allowed:
+        raise HTTPException(
+            status_code=403,
+            detail="You need 'admin' access to this bidder account.",
+        )
+    return bidder_id
+
+
+async def require_billing_id_admin(
+    billing_id: str,
+    store: PostgresStore = Depends(get_store),
+    user: User = Depends(get_current_user),
+) -> str:
+    """Require admin rights over the pretargeting config named by billing_id.
+
+    Pretargeting routes are keyed by billing_id, which carries no buyer scope of
+    its own, so the config has to be resolved to its owning bidder before any
+    seat check is meaningful.
+
+    Authorization lands at bidder granularity because a pretargeting config
+    belongs to a bidder account rather than to a single seat: buyer_seats allows
+    several buyer_ids under one bidder_id, and such seats genuinely share one
+    live config. An admin of any seat under that bidder may therefore change it.
+    """
+    if is_sudo(user):
+        return billing_id
+
+    config = await PretargetingRepository().get_config_by_billing_id(billing_id)
+    if not config:
+        raise HTTPException(status_code=404, detail="Pretargeting config not found.")
+
+    await require_bidder_admin(config.get("bidder_id"), store=store, user=user)
+    return billing_id
 
 
 async def get_user_service_accounts(

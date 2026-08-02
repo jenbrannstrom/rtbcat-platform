@@ -7,7 +7,12 @@ from typing import Any, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
-from api.dependencies import get_current_user, get_store, resolve_buyer_id
+from api.dependencies import (
+    get_current_user,
+    get_store,
+    resolve_admin_buyer_id,
+    resolve_buyer_id,
+)
 from services.auth_service import User
 from services.optimizer_proposals_service import OptimizerProposalsService
 
@@ -100,7 +105,7 @@ async def generate_qps_proposals(
     store=Depends(get_store),
     user: User = Depends(get_current_user),
 ) -> ProposalGenerateResponse:
-    buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
+    buyer_id = await resolve_admin_buyer_id(buyer_id, store=store, user=user)
     service = OptimizerProposalsService()
     try:
         payload = await service.generate_from_scores(
@@ -190,7 +195,7 @@ async def _update_proposal_status(
     store,
     user: User,
 ) -> ProposalStatusResponse:
-    resolved_buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
+    resolved_buyer_id = await resolve_admin_buyer_id(buyer_id, store=store, user=user)
     service = OptimizerProposalsService()
     try:
         payload = await service.update_status(
@@ -269,7 +274,7 @@ async def sync_qps_proposal_apply_status(
     store=Depends(get_store),
     user: User = Depends(get_current_user),
 ) -> ProposalRow:
-    resolved_buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
+    resolved_buyer_id = await resolve_admin_buyer_id(buyer_id, store=store, user=user)
     service = OptimizerProposalsService()
     payload = await service.sync_apply_status(
         proposal_id=proposal_id,

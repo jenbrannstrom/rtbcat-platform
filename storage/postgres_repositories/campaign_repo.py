@@ -468,6 +468,24 @@ class CampaignRepository:
         )
         return [row["creative_id"] for row in rows]
 
+    async def get_campaign_buyer_ids(self, campaign_id: str) -> list[str]:
+        """Get the distinct buyer IDs owning creatives in a campaign.
+
+        Campaign ownership is derived from its creatives rather than stored on
+        the campaign, matching how list_campaigns filters by buyer_id.
+        """
+        rows = await pg_query(
+            """
+            SELECT DISTINCT cr.buyer_id
+            FROM creative_campaigns cc
+            JOIN creatives cr ON cr.id = cc.creative_id
+            WHERE cc.campaign_id = %s
+              AND cr.buyer_id IS NOT NULL
+            """,
+            (campaign_id,),
+        )
+        return [row["buyer_id"] for row in rows]
+
     # ==================== Performance ====================
 
     async def get_campaign_country_breakdown(

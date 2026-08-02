@@ -40,6 +40,9 @@ def _build_actions_client(
     app.dependency_overrides[actions_router.require_seat_admin_or_sudo] = lambda: SimpleNamespace(
         id="u123", role="sudo", email="admin@example.com"
     )
+    # Sudo short-circuits require_billing_id_admin, but the route still resolves
+    # a store dependency that has no global instance under test.
+    app.dependency_overrides[actions_router.get_store] = lambda: None
     monkeypatch.setattr(actions_router, "ActionsService", lambda: stub_service)
     return SyncASGIClient(app)
 

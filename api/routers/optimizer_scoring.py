@@ -7,7 +7,12 @@ from typing import Any, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
-from api.dependencies import get_current_user, get_store, resolve_buyer_id
+from api.dependencies import (
+    get_current_user,
+    get_store,
+    resolve_admin_buyer_id,
+    resolve_buyer_id,
+)
 from services.auth_service import User
 from services.optimizer_scoring_service import OptimizerScoringService
 
@@ -86,7 +91,7 @@ async def run_scoring(
     store=Depends(get_store),
     user: User = Depends(get_current_user),
 ) -> ScoringRunResponse:
-    buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
+    buyer_id = await resolve_admin_buyer_id(buyer_id, store=store, user=user)
     service = OptimizerScoringService()
     try:
         payload = await service.run_scoring(
@@ -118,7 +123,7 @@ async def run_rules_scoring(
     store=Depends(get_store),
     user: User = Depends(get_current_user),
 ) -> ScoringRunResponse:
-    buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
+    buyer_id = await resolve_admin_buyer_id(buyer_id, store=store, user=user)
     service = OptimizerScoringService()
     try:
         payload = await service.run_rules_scoring(
