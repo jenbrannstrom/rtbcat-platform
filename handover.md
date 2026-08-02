@@ -1,14 +1,111 @@
 # Handover
 
-## CUTOVER WINDOW ROLLED BACK — CURRENT STATE, 2026-08-02 06:26 UTC
+## CUTOVER COMPLETE — HETZNER AUTHORITATIVE, 2026-08-02 10:45 UTC
 
-**This section overrides the historical live-window section immediately
-below. The public site is no longer frozen.** The 2026-08-01 cutover was
+**This section is current and overrides every historical cutover state below.**
+Production DNS now points at Hetzner, the Hetzner application and PostgreSQL
+database are writable, and the three production scheduler jobs target the
+Hetzner-backed `https://scan.rtb.cat/` endpoints. Gate 11 ran, the controlled
+post-cutover cycle passed, and the source replication slot has been dropped.
+The migration is therefore past the point of no return: do not resume logical
+replication or treat the old GCP database as an automatic failback target.
+
+### Accepted production state
+
+- Public TLS, `/api/health`, `/login`, anonymous-access rejection and the
+  authenticated agent API checks passed. Health reports the accepted
+  `10c45949d08f671c69743e9fc557cb9956921487` release and a reachable database.
+- The Hetzner API and dashboard containers are healthy. The API is writable
+  (`CATSCAN_READ_ONLY_SHADOW=false`) and all three scheduler endpoint guards
+  are enabled.
+- The `precompute-refresh`, `creative-cache-refresh` and `gmail-import` Cloud
+  Scheduler jobs are `ENABLED` on their recorded schedules and all target
+  `https://scan.rtb.cat/`.
+- The controlled Gmail cycle completed exactly once with `no_new_mail`: no
+  imported rows, no duplicate import history, and no BigQuery/GCS write. The
+  idempotency check passed.
+- Post-cycle reconciliation passed 10/10 public checks and 7/7 finance checks
+  with exact source/target results. Six data contracts passed; the sole
+  warning is the already-recorded empty application-name/application-id
+  source-data condition, not a cutover regression.
+- The final application-data sync transferred 579 files (about 6.8 GB) with
+  no target deletes, no source mutation and no credential-file replacement.
+- The target logical subscriptions are disabled and detached from a slot.
+  The source has zero logical replication slots. The Hetzner replication
+  proxy and migration monitor are disabled and inactive; target PostgreSQL
+  remains enabled and active.
+- The old GCP application is deliberately frozen: its application service is
+  inactive, it has zero application containers, the maintenance site remains
+  enabled, writer timers are inactive, and cleanup cron remains absent. Its
+  host Cloud SQL proxy is deliberately still active so the frozen source can
+  be inspected if required.
+
+### Authentication deviation accepted by the operator
+
+Email/password login is the only enabled public login method and was verified
+successfully by the operator. Google and Authing login are currently disabled.
+The expected Authing secrets do not exist in the project, and the target does
+not run the source's oauth2-proxy arrangement. The operator explicitly
+approved completing the migration with password login and repairing Google
+login as a separate follow-up. No failed Authing lookup changed IAM policy.
+
+The Hetzner runtime identity now has Secret Accessor on exactly the four
+scheduler endpoint secrets needed by the production API. Those narrowly
+scoped grants are part of the accepted production configuration; do not
+remove them while these scheduler endpoints are in service.
+
+### Cleanup completed and one manual action outstanding
+
+- The one-use file-copy SSH key was destroyed, the host `authorized_keys`
+  file was restored exactly, the temporary host firewall rule was removed,
+  normal operator SSH still works, and source-to-target TCP/22 is blocked by
+  the host firewall.
+- The local API token, the one-window database-admin password copies and the
+  source admin pgpass were securely erased. The temporary authenticated API
+  tunnel is closed and its local port is no longer listening.
+- The migration monitor, target-to-source Cloud SQL proxy and stale rehearsal
+  unit are stopped/disabled or cleared. The earlier temporary GCP control-path
+  IAM and firewall changes were already removed during the first-window
+  rollback.
+- **Manual closeout still required:** remove only the temporary inbound
+  TCP/22 rule added to the Hetzner Cloud Firewall for Gate 8. Keep the normal
+  operator SSH rule. This provider-console action cannot be proven from the
+  host and is the only remaining cutover cleanup item.
+
+### Operating and recovery rules from here
+
+- Keep GCP application writers, timers and schedulers stopped. The scheduler
+  jobs themselves are production jobs now owned by the Hetzner deployment;
+  pausing them is an incident action, not a migration rollback step.
+- Do not re-enable either target subscription. Because Hetzner has accepted
+  writes and the source slot is gone, returning to GCP requires a deliberate
+  restore/re-copy plan followed by a new authority change.
+- Keep the frozen Cloud SQL source intact until the post-migration retention
+  decision is approved. Do not delete the source instance as routine cleanup.
+- Repair Google login separately and verify `/api/auth/providers` plus an
+  end-to-end Google sign-in before making it the default method.
+- The production TLS certificate was issued through the workstation DNS-01
+  path and must be renewed from that path before its recorded expiry window.
+
+### Evidence for the completed cutover
+
+Private mode-0600 evidence is under the attempt-2 cutover evidence directory.
+The key final receipts are the G11 activation, G12 DNS/public checks, G13
+scheduler and controlled-cycle records, post-cycle public/finance
+reconciliations, slot-retirement record, final source-freeze and target-runtime
+checks, and the monitor/proxy/tunnel cleanup receipts. The private command card
+remains authoritative for the exact gate commands; its Guardian, prep and
+retry amendment sections override its original body.
+
+## HISTORICAL — FIRST WINDOW ROLLBACK CHECKPOINT, 2026-08-02 06:26 UTC
+
+**Historical record only; the completed-cutover section above is current.**
+At this checkpoint the public site was no longer frozen. The 2026-08-01 cutover was
 rolled back before Gate 5 because the operator needed to end the window.
 Gate 11 never ran, Hetzner never became writable, DNS never changed, and GCP
 is again the sole production authority.
 
-### Accepted state now
+### Accepted state at that checkpoint
 
 - Public `scan.rtb.cat` is healthy on GCP on the exact pre-freeze release
   `10c45949d08f671c69743e9fc557cb9956921487`; API health reports
