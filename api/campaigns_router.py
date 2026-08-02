@@ -22,7 +22,13 @@ from utils.app_parser import (
     get_app_name,
     parse_app_store_url,
 )
-from api.dependencies import get_store, get_current_user, resolve_buyer_id
+from api.dependencies import (
+    get_allowed_buyer_ids,
+    get_store,
+    get_current_user,
+    require_seat_admin_or_sudo,
+    resolve_buyer_id,
+)
 from storage.postgres_store import PostgresStore
 from services.auth_service import User
 
@@ -73,6 +79,52 @@ def get_campaigns_service() -> CampaignsService:
     if _campaigns_service is None:
         _campaigns_service = CampaignsService()
     return _campaigns_service
+
+
+async def require_campaign_access(
+    campaign_id: str,
+    store: PostgresStore,
+    user: User,
+) -> None:
+    """Require the caller to have access to a buyer owning part of a campaign.
+
+    Campaign IDs are enumerable and carry no scope of their own, so every route
+    that takes one must establish ownership before reading or mutating it.
+
+    Ownership is derived from the campaign's creatives, which is the same rule
+    list_campaigns already applies when filtering by buyer_id: a campaign with no
+    creatives belonging to the caller's buyer is not visible to them there
+    either. A campaign that resolves to no buyer at all is therefore sudo-only.
+
+    Raises 404 rather than 403 so the response does not confirm which campaign
+    IDs exist to a caller who cannot see them.
+    """
+    allowed = await get_allowed_buyer_ids(store=store, user=user)
+    if allowed is None:
+        return
+
+    owners = await get_campaigns_service().get_campaign_buyer_ids(campaign_id)
+    if owners and set(owners) & set(allowed):
+        return
+
+    raise HTTPException(status_code=404, detail="Campaign not found")
+
+
+async def require_creative_access(
+    creative_id: str,
+    store: PostgresStore,
+    user: User,
+) -> None:
+    """Require the caller to have access to the buyer owning a creative."""
+    allowed = await get_allowed_buyer_ids(store=store, user=user)
+    if allowed is None:
+        return
+
+    creative = await store.get_creative(creative_id)
+    if creative and creative.buyer_id and creative.buyer_id in allowed:
+        return
+
+    raise HTTPException(status_code=404, detail="Creative not found")
 
 
 # ============================================
@@ -413,8 +465,8 @@ async def _resolve_cluster_display_name(
 @router.post("/auto-cluster", response_model=AutoClusterResponse)
 async def auto_cluster_creatives(
     request: AutoClusterRequest,
-    store: PostgresStore = Depends(get_store),
     user: User = Depends(get_current_user),
+    store: PostgresStore = Depends(get_store),
 ):
     """
     Auto-cluster unclustered creatives by destination URL (and optionally country).
@@ -546,8 +598,8 @@ async def auto_cluster_creatives(
 @router.get("/unclustered")
 async def get_unclustered_creatives(
     buyer_id: Optional[str] = Query(None, description="Filter by buyer_id"),
-    store: PostgresStore = Depends(get_store),
     user: User = Depends(get_current_user),
+    store: PostgresStore = Depends(get_store),
 ):
     """
     Get all creatives that are not assigned to any campaign.
@@ -747,8 +799,8 @@ async def list_campaigns(
     include_performance: bool = Query(True),
     include_country_breakdown: bool = Query(False, description="Include country breakdown per campaign"),
     period: str = Query("7d"),
-    store: PostgresStore = Depends(get_store),
     user: User = Depends(get_current_user),
+    store: PostgresStore = Depends(get_store),
 ):
     """
     List all AI campaigns with optional performance data.
@@ -825,8 +877,8 @@ async def list_campaigns(
 @router.post("", response_model=AICampaignResponse)
 async def create_campaign(
     request: CampaignCreateRequest,
-    store: PostgresStore = Depends(get_store),
     user: User = Depends(get_current_user),
+    store: PostgresStore = Depends(get_store),
 ):
     """
     Create a new campaign and optionally assign creatives to it.
@@ -891,10 +943,13 @@ async def create_campaign(
 async def get_campaign(
     campaign_id: str,
     include_creatives: bool = Query(False),
+    user: User = Depends(get_current_user),
+    store: PostgresStore = Depends(get_store),
 ):
     """
     Get campaign details.
     """
+    await require_campaign_access(campaign_id, store=store, user=user)
     try:
         svc = get_campaigns_service()
         campaign = await svc.get_campaign(campaign_id)
@@ -934,10 +989,16 @@ async def get_campaign(
 
 
 @router.put("/{campaign_id}")
-async def update_campaign(campaign_id: str, request: CampaignUpdateRequest):
+async def update_campaign(
+    campaign_id: str,
+    request: CampaignUpdateRequest,
+    user: User = Depends(get_current_user),
+    store: PostgresStore = Depends(get_store),
+):
     """
     Update campaign name or description.
     """
+    await require_campaign_access(campaign_id, store=store, user=user)
     try:
         svc = get_campaigns_service()
         success = await svc.update_campaign(
@@ -960,12 +1021,20 @@ async def update_campaign(campaign_id: str, request: CampaignUpdateRequest):
 
 
 @router.patch("/{campaign_id}", response_model=AICampaignResponse)
-async def patch_campaign(campaign_id: str, request: CampaignPatchRequest):
+async def patch_campaign(
+    campaign_id: str,
+    request: CampaignPatchRequest,
+    user: User = Depends(get_current_user),
+    store: PostgresStore = Depends(get_store),
+):
     """
     Patch campaign: update name, add creatives, or remove creatives.
 
     This is the main endpoint used by the drag-and-drop UI for moving creatives.
     """
+    await require_campaign_access(campaign_id, store=store, user=user)
+    for creative_id in (request.remove_creative_ids or []) + (request.add_creative_ids or []):
+        await require_creative_access(creative_id, store=store, user=user)
     try:
         svc = get_campaigns_service()
 
@@ -1019,10 +1088,15 @@ async def patch_campaign(campaign_id: str, request: CampaignPatchRequest):
 
 
 @router.delete("/{campaign_id}")
-async def delete_campaign(campaign_id: str):
+async def delete_campaign(
+    campaign_id: str,
+    user: User = Depends(get_current_user),
+    store: PostgresStore = Depends(get_store),
+):
     """
     Delete a campaign and unassign all its creatives.
     """
+    await require_campaign_access(campaign_id, store=store, user=user)
     try:
         svc = get_campaigns_service()
         success = await svc.delete_campaign(campaign_id)
@@ -1044,10 +1118,15 @@ async def delete_campaign(campaign_id: str):
 # ============================================
 
 @router.get("/{campaign_id}/creatives")
-async def get_campaign_creatives(campaign_id: str):
+async def get_campaign_creatives(
+    campaign_id: str,
+    user: User = Depends(get_current_user),
+    store: PostgresStore = Depends(get_store),
+):
     """
     Get all creative IDs in a campaign.
     """
+    await require_campaign_access(campaign_id, store=store, user=user)
     try:
         svc = get_campaigns_service()
         creative_ids = await svc.get_campaign_creatives(campaign_id)
@@ -1061,10 +1140,18 @@ async def get_campaign_creatives(campaign_id: str):
 
 
 @router.post("/{campaign_id}/creatives")
-async def add_creatives_to_campaign(campaign_id: str, request: AssignCreativesRequest):
+async def add_creatives_to_campaign(
+    campaign_id: str,
+    request: AssignCreativesRequest,
+    user: User = Depends(get_current_user),
+    store: PostgresStore = Depends(get_store),
+):
     """
     Manually assign creatives to a campaign.
     """
+    await require_campaign_access(campaign_id, store=store, user=user)
+    for creative_id in request.creative_ids:
+        await require_creative_access(creative_id, store=store, user=user)
     try:
         svc = get_campaigns_service()
         count = await svc.assign_creatives_batch(
@@ -1083,10 +1170,17 @@ async def add_creatives_to_campaign(campaign_id: str, request: AssignCreativesRe
 
 
 @router.delete("/{campaign_id}/creatives/{creative_id}")
-async def remove_creative_from_campaign(campaign_id: str, creative_id: str):
+async def remove_creative_from_campaign(
+    campaign_id: str,
+    creative_id: str,
+    user: User = Depends(get_current_user),
+    store: PostgresStore = Depends(get_store),
+):
     """
     Remove a creative from a campaign.
     """
+    await require_campaign_access(campaign_id, store=store, user=user)
+    await require_creative_access(creative_id, store=store, user=user)
     try:
         svc = get_campaigns_service()
         success = await svc.remove_creative(creative_id)
@@ -1104,10 +1198,17 @@ async def remove_creative_from_campaign(campaign_id: str, creative_id: str):
 
 
 @router.post("/creatives/{creative_id}/move")
-async def move_creative(creative_id: str, request: MoveCreativeRequest):
+async def move_creative(
+    creative_id: str,
+    request: MoveCreativeRequest,
+    user: User = Depends(get_current_user),
+    store: PostgresStore = Depends(get_store),
+):
     """
     Move a creative from one campaign to another.
     """
+    await require_creative_access(creative_id, store=store, user=user)
+    await require_campaign_access(request.to_campaign_id, store=store, user=user)
     try:
         svc = get_campaigns_service()
         await svc.assign_creative(
@@ -1133,14 +1234,19 @@ async def move_creative(creative_id: str, request: MoveCreativeRequest):
 async def get_campaign_performance(
     campaign_id: str,
     period: str = Query("7d"),
+    buyer_id: Optional[str] = Query(None),
+    user: User = Depends(get_current_user),
+    store: PostgresStore = Depends(get_store),
 ):
     """
     Get performance metrics for a campaign.
     """
+    await require_campaign_access(campaign_id, store=store, user=user)
+    buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
     try:
         days = {"1d": 1, "7d": 7, "30d": 30, "all": 365}.get(period, 7)
         svc = get_campaigns_service()
-        perf = await svc.get_campaign_performance(campaign_id, days=days)
+        perf = await svc.get_campaign_performance(campaign_id, days=days, buyer_id=buyer_id)
         return CampaignPerformanceResponse(**perf)
 
     except HTTPException:
@@ -1154,10 +1260,13 @@ async def get_campaign_performance(
 async def get_campaign_daily_trend(
     campaign_id: str,
     days: int = Query(30),
+    user: User = Depends(get_current_user),
+    store: PostgresStore = Depends(get_store),
 ):
     """
     Get daily performance trend for a campaign.
     """
+    await require_campaign_access(campaign_id, store=store, user=user)
     try:
         svc = get_campaigns_service()
         trend = await svc.get_campaign_daily_trend(campaign_id, days=days)
@@ -1171,10 +1280,17 @@ async def get_campaign_daily_trend(
 
 
 @router.post("/refresh-summaries")
-async def refresh_campaign_summaries(seat_id: Optional[int] = None):
+async def refresh_campaign_summaries(
+    seat_id: Optional[int] = None,
+    _user: User = Depends(require_seat_admin_or_sudo),
+):
     """
     Recalculate campaign_daily_summary from performance_metrics.
     Run this after importing new data.
+
+    Seat-admin gated rather than buyer-scoped: this recomputes derived summaries
+    from data already stored, so it exposes no cross-tenant data, but it is an
+    expensive global job that read-only users should not be able to trigger.
     """
     try:
         svc = get_campaigns_service()
