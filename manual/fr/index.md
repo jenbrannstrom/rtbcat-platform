@@ -191,15 +191,6 @@ Pour les ingénieurs plateforme, SRE et administrateurs système.
   de confiance d'authentification : OAuth2 Proxy définit `X-Email`, nginx le
   transmet, l'API lui fait confiance.
 
-- [Chapitre 12 : Déploiement](12-deployment.md)
-  Pipeline CI/CD : GitHub Actions `build-and-push.yml` construit les images au
-  push ; `deploy.yml` est à déclenchement manuel uniquement (avec confirmation
-  `DEPLOY`). Tags d'images Artifact Registry (`sha-XXXXXXX`). La séquence de
-  déploiement : git pull sur la VM, docker compose pull, recréation, nettoyage.
-  Vérification post-déploiement : health check, vérification de contrat.
-  Pourquoi le déploiement automatique est désactivé (incident de janvier 2026).
-  Comment vérifier un déploiement : `curl /api/health | jq .git_sha`.
-
 - [Chapitre 13 : Surveillance de santé et diagnostics](13-health-monitoring.md)
   Endpoints de santé : `/api/health` (disponibilité), `/system/data-health`
   (complétude des données). La page État du système

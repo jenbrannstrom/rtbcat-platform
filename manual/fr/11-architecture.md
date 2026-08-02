@@ -92,6 +92,5 @@ Le backend suit le pattern **Router -> Service -> Repository**. Les routers gere
 
 ## Voir aussi
 
-- [Deploiement](12-deployment.md) : comment le systeme est deploye
 - [Operations de base de donnees](14-database.md) : specificites Postgres
 - [Integrations](17-integrations.md) : connexions aux services externes

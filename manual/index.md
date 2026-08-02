@@ -170,14 +170,6 @@ For platform engineers, SREs, and system administrators.
   cloudsql-proxy, nginx. The auth trust chain: OAuth2 Proxy sets `X-Email`,
   nginx passes it, API trusts it.
 
-- [Chapter 12: Deployment](12-deployment.md)
-  CI/CD pipeline: GitHub Actions `build-and-push.yml` builds images on push;
-  `deploy.yml` is manual-trigger only (with `DEPLOY` confirmation). Artifact
-  Registry image tags (`sha-XXXXXXX`). The deploy sequence: git pull on VM,
-  docker compose pull, recreate, prune. Post-deploy verification: health check,
-  contract check. Why auto-deploy is disabled (Jan 2026 incident). How to
-  verify a deploy: `curl /api/health | jq .git_sha`.
-
 - [Chapter 13: Health Monitoring and Diagnostics](13-health-monitoring.md)
   Health endpoints: `/api/health` (liveness), `/system/data-health` (data
   completeness). The System Status page (`/settings/system`): Python, Node,

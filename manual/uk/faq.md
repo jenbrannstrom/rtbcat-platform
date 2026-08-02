@@ -82,15 +82,6 @@ curl -sS https://your-deployment.example.com/api/health | jq -r '.git_sha,.versi
 
 Це повертає git SHA та тег образу. Порівняйте з вашим журналом комітів.
 
-### [DevOps] Як розгорнути виправлення?
-
-1. Запуште до `main`
-2. Дочекайтеся успішного виконання `build-and-push.yml`
-3. Запустіть `deploy.yml` через `gh workflow run` з `confirm=DEPLOY`
-4. Перевірте через `/api/health`
-
-Див. [Розгортання](12-deployment.md) для повної процедури.
-
 ### [DevOps] Користувачі застрягли в петлі входу. Що робити?
 
 Перевірте Cloud SQL Proxy: `sudo docker ps | grep cloudsql`. Якщо він не працює,

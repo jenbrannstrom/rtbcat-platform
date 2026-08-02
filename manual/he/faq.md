@@ -79,15 +79,6 @@ curl -sS https://your-deployment.example.com/api/health | jq -r '.git_sha,.versi
 
 פקודה זו מחזירה את ה-git SHA ותגית התמונה. השוו מול יומן ה-commits שלכם.
 
-### [DevOps] כיצד אפרוס תיקון?
-
-1. דחפו ל-`main`
-2. המתינו שה-`build-and-push.yml` יסתיים בהצלחה
-3. הפעילו את `deploy.yml` דרך `gh workflow run` עם `confirm=DEPLOY`
-4. אמתו עם `/api/health`
-
-ראו [פריסה](12-deployment.md) לתהליך המלא.
-
 ### [DevOps] משתמשים תקועים בלולאת התחברות. מה לעשות?
 
 בדקו את Cloud SQL Proxy: `sudo docker ps | grep cloudsql`. אם הוא למטה,

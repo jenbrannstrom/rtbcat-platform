@@ -79,15 +79,6 @@ curl -sS https://your-deployment.example.com/api/health | jq -r '.git_sha,.versi
 
 This returns the git SHA and image tag. Compare against your commit log.
 
-### [DevOps] How do I deploy a fix?
-
-1. Push to `main`
-2. Wait for `build-and-push.yml` to succeed
-3. Trigger `deploy.yml` via `gh workflow run` with `confirm=DEPLOY`
-4. Verify with `/api/health`
-
-See [Deployment](12-deployment.md) for the full procedure.
-
 ### [DevOps] Users are stuck in a login loop. What do I do?
 
 Check Cloud SQL Proxy: `sudo docker ps | grep cloudsql`. If it's down,

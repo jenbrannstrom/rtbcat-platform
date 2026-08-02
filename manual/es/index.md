@@ -170,14 +170,6 @@ Para ingenieros de plataforma, SREs y administradores de sistemas.
   cloudsql-proxy, nginx. La cadena de confianza de autenticación: OAuth2 Proxy establece
   `X-Email`, nginx lo pasa, la API confía en él.
 
-- [Capítulo 12: Despliegue](12-deployment.md)
-  Pipeline CI/CD: GitHub Actions `build-and-push.yml` construye imágenes al hacer push;
-  `deploy.yml` solo se ejecuta manualmente (con confirmación `DEPLOY`). Etiquetas de
-  imagen de Artifact Registry (`sha-XXXXXXX`). La secuencia de despliegue: git pull en
-  la VM, docker compose pull, recrear, podar. Verificación post-despliegue: health check,
-  verificación de contratos. Por qué el auto-deploy está deshabilitado (incidente de
-  enero 2026). Cómo verificar un despliegue: `curl /api/health | jq .git_sha`.
-
 - [Capítulo 13: Monitoreo de Salud y Diagnósticos](13-health-monitoring.md)
   Endpoints de salud: `/api/health` (disponibilidad), `/system/data-health` (completitud
   de datos). La página de Estado del Sistema (`/settings/system`): Python, Node, FFmpeg,

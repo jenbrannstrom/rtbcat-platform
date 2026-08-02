@@ -110,6 +110,5 @@ con `https://your-deployment.example.com/api`.
 
 ## Relacionado
 
-- [Despliegue](12-deployment.md): verificación de despliegues
 - [Solución de problemas](15-troubleshooting.md): cuando las verificaciones de salud fallan
 - Para media buyers: [Importación de datos](09-data-import.md) explica la cuadrícula de frescura de datos en términos orientados al comprador.

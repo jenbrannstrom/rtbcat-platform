@@ -111,7 +111,6 @@ gh workflow run v1-runtime-health-strict.yml \
 
 ## 相关内容
 
-- [部署](12-deployment.md)：部署验证
 - [故障排除](15-troubleshooting.md)：当健康检查失败时
 - 面向媒体买手：[数据导入](09-data-import.md)用买手友好的方式说明
   数据新鲜度网格。
