@@ -52,6 +52,7 @@ router = APIRouter(prefix="/auth/authing", tags=["Authing Authentication"])
 
 # ==================== Configuration ====================
 
+
 def get_authing_config() -> dict:
     """Get Authing configuration from environment variables."""
     secrets_mgr = get_secrets_manager()
@@ -62,7 +63,7 @@ def get_authing_config() -> dict:
     if not all([app_id, app_secret, issuer]):
         raise HTTPException(
             status_code=500,
-            detail="Authing not configured. Set AUTHING_APP_ID, AUTHING_APP_SECRET, and AUTHING_ISSUER."
+            detail="Authing not configured. Set AUTHING_APP_ID, AUTHING_APP_SECRET, and AUTHING_ISSUER.",
         )
 
     return {
@@ -96,7 +97,11 @@ def _get_client_ip(request: Request) -> Optional[str]:
 
 def _is_auto_user_provisioning_enabled() -> bool:
     """Whether unknown OIDC users may be auto-created after bootstrap."""
-    return os.environ.get("CATSCAN_ALLOW_AUTO_USER_PROVISIONING", "").lower() in ("1", "true", "yes")
+    return os.environ.get("CATSCAN_ALLOW_AUTO_USER_PROVISIONING", "").lower() in (
+        "1",
+        "true",
+        "yes",
+    )
 
 
 def _is_trusted_proxy_request(request: Request) -> bool:
@@ -129,7 +134,11 @@ def _sanitize_callback_url(callback_url: str) -> str:
 def _normalize_host(value: str) -> Optional[str]:
     """Normalize and validate Host header style values."""
     host = (value or "").strip()
-    if not host or "/" in host or "\\" in host or " " in host or "@" in host:
+    if (
+        not host
+        or any(ord(char) <= 0x20 or ord(char) == 0x7F for char in host)
+        or any(delimiter in host for delimiter in "/\\@?#")
+    ):
         return None
 
     try:
@@ -195,13 +204,17 @@ def _get_callback_url(request: Request) -> str:
         return f"{configured_base}/api/auth/authing/callback"
 
     scheme = _get_request_scheme(request)
-    host = _normalize_host(request.url.netloc)
+    raw_hosts = request.headers.getlist("host")
+    if len(raw_hosts) != 1:
+        raise HTTPException(status_code=400, detail="Invalid Host header")
+
+    host = _normalize_host(raw_hosts[0])
     if _is_trusted_proxy_request(request):
         forwarded_host = request.headers.get("X-Forwarded-Host")
         if forwarded_host:
             # RFC7239-style forwarding can include multiple hosts; use left-most
             forwarded_value = forwarded_host.split(",")[0].strip()
-            host = _normalize_host(forwarded_value) or host
+            host = _normalize_host(forwarded_value)
 
     if not host:
         raise HTTPException(status_code=400, detail="Invalid Host header")
@@ -210,6 +223,7 @@ def _get_callback_url(request: Request) -> str:
 
 
 # ==================== Auth Endpoints ====================
+
 
 @router.get("/login")
 async def authing_login(request: Request, callback_url: str = "/"):
@@ -375,7 +389,11 @@ async def authing_callback(
     if not email:
         logger.error(
             "No email in Authing userinfo (keys present: %s)",
-            ", ".join(sorted(userinfo.keys())) if isinstance(userinfo, dict) else type(userinfo).__name__,
+            (
+                ", ".join(sorted(userinfo.keys()))
+                if isinstance(userinfo, dict)
+                else type(userinfo).__name__
+            ),
         )
         return RedirectResponse(
             url="/login?error=No+email+in+user+info",
@@ -383,7 +401,9 @@ async def authing_callback(
         )
 
     email = email.lower().strip()
-    display_name = userinfo.get("name") or userinfo.get("nickname") or email.split("@")[0]
+    display_name = (
+        userinfo.get("name") or userinfo.get("nickname") or email.split("@")[0]
+    )
 
     # Get or create user
     auth_svc = get_auth_service()
@@ -393,7 +413,11 @@ async def authing_callback(
         # Auto-create user (first user gets sudo role)
         user_id = str(uuid.uuid4())
         user_count = await auth_svc.count_users()
-        if user_count == 0 and is_bootstrap_token_required() and not await is_bootstrap_completed():
+        if (
+            user_count == 0
+            and is_bootstrap_token_required()
+            and not await is_bootstrap_completed()
+        ):
             if not get_bootstrap_token():
                 logger.error(
                     "Blocked Authing first-user auto-sudo for %s (CATSCAN_REQUIRE_BOOTSTRAP_TOKEN=true but CATSCAN_BOOTSTRAP_TOKEN is missing)",
