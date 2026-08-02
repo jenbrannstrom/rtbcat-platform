@@ -14,7 +14,7 @@ import hashlib
 import re
 import uuid
 import logging
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 from dataclasses import dataclass, field
 
 import psycopg
@@ -35,6 +35,47 @@ from utils.size_normalization import canonical_size_with_tolerance
 logger = logging.getLogger(__name__)
 
 IMPORT_BATCH_SIZE = int(os.getenv("CATSCAN_IMPORT_BATCH_SIZE", "1000"))
+
+
+class BuyerScopeViolation(ValueError):
+    """Raised when a CSV row targets a buyer outside the importer's scope."""
+
+
+@dataclass(frozen=True)
+class ImportBuyerScope:
+    """Buyer accounts a caller is authorized to import.
+
+    API callers must use ``restricted`` with their admin seats. Trusted jobs
+    that intentionally process every configured seat must explicitly opt into
+    ``unrestricted``.
+    """
+
+    allowed_buyer_ids: Optional[frozenset[str]]
+
+    @classmethod
+    def restricted(cls, buyer_ids: Iterable[str]) -> "ImportBuyerScope":
+        return cls(
+            frozenset(
+                normalized
+                for buyer_id in buyer_ids
+                if (normalized := sanitize_csv_text(buyer_id))
+            )
+        )
+
+    @classmethod
+    def unrestricted(cls) -> "ImportBuyerScope":
+        return cls(None)
+
+    @property
+    def is_unrestricted(self) -> bool:
+        return self.allowed_buyer_ids is None
+
+    def require_authorized(self, buyer_id: Any) -> None:
+        normalized = sanitize_csv_text(buyer_id)
+        if self.allowed_buyer_ids is not None and normalized not in self.allowed_buyer_ids:
+            raise BuyerScopeViolation(
+                "CSV contains a buyer account outside the authorized import scope"
+            )
 
 
 def is_web_lane_enabled(buyer_id: str = "") -> bool:
@@ -108,6 +149,20 @@ class UnifiedImportResult:
         )
 
 
+def abort_buyer_scoped_import(
+    conn: Any,
+    result: UnifiedImportResult,
+    error: BuyerScopeViolation,
+) -> None:
+    """Roll back a scoped file as one unit and report no persisted rows."""
+    conn.rollback()
+    result.success = False
+    result.rows_imported = 0
+    result.rows_duplicate = 0
+    result.error_message = str(error)
+    result.errors.append(f"Fatal: {error}")
+
+
 def compute_row_hash(row_data: Dict, keys: List[str]) -> str:
     """Compute hash of specified keys for deduplication."""
     hash_input = "|".join(str(row_data.get(k, "")) for k in keys)
@@ -159,6 +214,17 @@ def get_optional_float(row: Dict, mapping: MappingResult, db_field: str) -> Opti
     if not mapping.has_field(db_field):
         return None
     return parse_float(get_value(row, mapping, db_field, ""), default=None)
+
+
+def enforce_import_buyer_scope(
+    buyer_scope: ImportBuyerScope,
+    buyer_account_id: Any,
+    bidder_id: Any = None,
+) -> None:
+    """Reject rows whose resolved buyer or bidder escapes the caller's seats."""
+    buyer_scope.require_authorized(buyer_account_id)
+    if sanitize_csv_text(bidder_id):
+        buyer_scope.require_authorized(bidder_id)
 
 
 _SIZE_SEPARATORS = re.compile(r"[xX×]")
@@ -545,6 +611,8 @@ def import_to_rtb_daily(
     mapping: MappingResult,
     batch_id: str,
     result: UnifiedImportResult,
+    *,
+    buyer_scope: ImportBuyerScope,
     bidder_id: Optional[str] = None,
     parquet_exporter: Optional["ParquetExportManager"] = None,
     report_type: Optional[str] = None,
@@ -677,6 +745,11 @@ def import_to_rtb_daily(
                         row_data["buyer_account_id"] = effective_bidder_id
                     if not row_data["buyer_account_id"]:
                         raise ValueError("buyer_account_id missing and no seat ID detected in filename")
+                    enforce_import_buyer_scope(
+                        buyer_scope,
+                        row_data["buyer_account_id"],
+                        effective_bidder_id,
+                    )
 
                     # Parse spend (convert to micros)
                     spend = get_optional_float(row, mapping, "spend")
@@ -716,6 +789,8 @@ def import_to_rtb_daily(
                     if len(rows_to_insert) >= IMPORT_BATCH_SIZE:
                         flush_rows()
 
+                except BuyerScopeViolation:
+                    raise
                 except Exception as e:
                     result.rows_skipped += 1
                     if len(result.errors) < 10:
@@ -730,6 +805,8 @@ def import_to_rtb_daily(
         result.success = True
         _apply_date_continuity(result, observed_dates, min_date, max_date)
 
+    except BuyerScopeViolation as e:
+        abort_buyer_scoped_import(conn, result, e)
     except Exception as e:
         result.error_message = str(e)
         result.errors.append(f"Fatal: {e}")
@@ -743,6 +820,8 @@ def import_to_rtb_bidstream(
     mapping: MappingResult,
     batch_id: str,
     result: UnifiedImportResult,
+    *,
+    buyer_scope: ImportBuyerScope,
     bidder_id: Optional[str] = None,
     parquet_exporter: Optional["ParquetExportManager"] = None,
     report_type: Optional[str] = None,
@@ -847,6 +926,11 @@ def import_to_rtb_bidstream(
                             effective_bidder_id = None
                     row_data["bidder_id"] = effective_bidder_id
                     row_data["source_report"] = report_type
+                    enforce_import_buyer_scope(
+                        buyer_scope,
+                        row_data["buyer_account_id"],
+                        effective_bidder_id,
+                    )
 
                     row_hash = compute_row_hash(row_data, hash_keys)
 
@@ -875,6 +959,8 @@ def import_to_rtb_bidstream(
                     if len(rows_to_insert) >= IMPORT_BATCH_SIZE:
                         flush_rows()
 
+                except BuyerScopeViolation:
+                    raise
                 except Exception as e:
                     result.rows_skipped += 1
                     if len(result.errors) < 10:
@@ -885,6 +971,8 @@ def import_to_rtb_bidstream(
         result.success = True
         _apply_date_continuity(result, observed_dates, min_date, max_date)
 
+    except BuyerScopeViolation as e:
+        abort_buyer_scoped_import(conn, result, e)
     except Exception as e:
         result.error_message = str(e)
         result.errors.append(f"Fatal: {e}")
@@ -898,6 +986,8 @@ def import_to_rtb_bid_filtering(
     mapping: MappingResult,
     batch_id: str,
     result: UnifiedImportResult,
+    *,
+    buyer_scope: ImportBuyerScope,
     bidder_id: Optional[str] = None,
     parquet_exporter: Optional["ParquetExportManager"] = None,
     report_type: Optional[str] = None,
@@ -981,6 +1071,11 @@ def import_to_rtb_bid_filtering(
                             effective_bidder_id = None
                     row_data["bidder_id"] = effective_bidder_id
                     row_data["source_report"] = report_type
+                    enforce_import_buyer_scope(
+                        buyer_scope,
+                        row_data["buyer_account_id"],
+                        effective_bidder_id,
+                    )
 
                     # Parse opportunity cost
                     opp_cost = get_optional_float(row, mapping, "opportunity_cost")
@@ -1012,6 +1107,8 @@ def import_to_rtb_bid_filtering(
                     if len(rows_to_insert) >= IMPORT_BATCH_SIZE:
                         flush_rows()
 
+                except BuyerScopeViolation:
+                    raise
                 except Exception as e:
                     result.rows_skipped += 1
                     if len(result.errors) < 10:
@@ -1022,6 +1119,8 @@ def import_to_rtb_bid_filtering(
         result.success = True
         _apply_date_continuity(result, observed_dates, min_date, max_date)
 
+    except BuyerScopeViolation as e:
+        abort_buyer_scoped_import(conn, result, e)
     except Exception as e:
         result.error_message = str(e)
         result.errors.append(f"Fatal: {e}")
@@ -1035,6 +1134,8 @@ def import_to_rtb_quality(
     mapping: MappingResult,
     batch_id: str,
     result: UnifiedImportResult,
+    *,
+    buyer_scope: ImportBuyerScope,
     bidder_id: Optional[str] = None,
     parquet_exporter: Optional["ParquetExportManager"] = None,
     report_type: Optional[str] = None,
@@ -1137,6 +1238,11 @@ def import_to_rtb_quality(
                             effective_bidder_id = None
                     row_data["bidder_id"] = effective_bidder_id
                     row_data["source_report"] = report_type
+                    enforce_import_buyer_scope(
+                        buyer_scope,
+                        row_data["buyer_account_id"],
+                        effective_bidder_id,
+                    )
 
                     impressions = row_data["impressions"] or 0
                     measurable = row_data["measurable_impressions"] or 0
@@ -1187,6 +1293,8 @@ def import_to_rtb_quality(
                     if len(rows_to_insert) >= IMPORT_BATCH_SIZE:
                         flush_rows()
 
+                except BuyerScopeViolation:
+                    raise
                 except Exception as e:
                     result.rows_skipped += 1
                     if len(result.errors) < 10:
@@ -1197,6 +1305,8 @@ def import_to_rtb_quality(
         result.success = True
         _apply_date_continuity(result, observed_dates, min_date, max_date)
 
+    except BuyerScopeViolation as e:
+        abort_buyer_scoped_import(conn, result, e)
     except Exception as e:
         result.error_message = str(e)
         result.errors.append(f"Fatal: {e}")
@@ -1223,6 +1333,8 @@ def import_to_web_domain_daily(
     mapping: MappingResult,
     batch_id: str,
     result: UnifiedImportResult,
+    *,
+    buyer_scope: ImportBuyerScope,
     bidder_id: Optional[str] = None,
     parquet_exporter: Optional["ParquetExportManager"] = None,
     report_type: Optional[str] = None,
@@ -1269,6 +1381,11 @@ def import_to_web_domain_daily(
                         raise ValueError(
                             "buyer_account_id missing and no seat ID detected in filename"
                         )
+                    enforce_import_buyer_scope(
+                        buyer_scope,
+                        buyer_account_id,
+                        bidder_id,
+                    )
 
                     # Buyer allowlist check
                     if not is_web_lane_enabled(buyer_account_id):
@@ -1329,6 +1446,8 @@ def import_to_web_domain_daily(
 
                     all_rows.append(row_data)
 
+                except BuyerScopeViolation:
+                    raise
                 except Exception as e:
                     result.rows_skipped += 1
                     if len(result.errors) < 10:
@@ -1377,6 +1496,8 @@ def import_to_web_domain_daily(
         result.success = True
         _apply_date_continuity(result, observed_dates, min_date, max_date)
 
+    except BuyerScopeViolation as e:
+        abort_buyer_scoped_import(conn, result, e)
     except Exception as e:
         result.error_message = str(e)
         result.errors.append(f"Fatal: {e}")
@@ -1387,6 +1508,8 @@ def import_to_web_domain_daily(
 
 def unified_import(
     csv_path: str,
+    *,
+    buyer_scope: ImportBuyerScope,
     bidder_id: Optional[str] = None,
     source_filename: Optional[str] = None,
     sync_legacy_performance: bool = True,
@@ -1396,6 +1519,8 @@ def unified_import(
 
     Args:
         csv_path: Path to CSV file
+        buyer_scope: Explicit set of authorized buyer accounts, or an explicit
+            unrestricted scope for trusted cross-seat jobs.
         bidder_id: Optional bidder ID override
         source_filename: Optional original filename used for report routing
         sync_legacy_performance: Hydrate the legacy table for this file. Batch
@@ -1489,6 +1614,7 @@ def unified_import(
                 mapping,
                 result.batch_id,
                 result,
+                buyer_scope=buyer_scope,
                 bidder_id=bidder_id,
                 parquet_exporter=parquet_exporter,
                 report_type=report_type,
@@ -1500,6 +1626,7 @@ def unified_import(
                 mapping,
                 result.batch_id,
                 result,
+                buyer_scope=buyer_scope,
                 bidder_id=bidder_id,
                 parquet_exporter=parquet_exporter,
                 report_type=report_type,
@@ -1510,6 +1637,7 @@ def unified_import(
                 mapping,
                 result.batch_id,
                 result,
+                buyer_scope=buyer_scope,
                 bidder_id=bidder_id,
                 parquet_exporter=parquet_exporter,
                 report_type=report_type,
@@ -1520,6 +1648,7 @@ def unified_import(
                 mapping,
                 result.batch_id,
                 result,
+                buyer_scope=buyer_scope,
                 bidder_id=bidder_id,
                 parquet_exporter=parquet_exporter,
                 report_type=report_type,
@@ -1530,6 +1659,7 @@ def unified_import(
                 mapping,
                 result.batch_id,
                 result,
+                buyer_scope=buyer_scope,
                 bidder_id=bidder_id,
                 parquet_exporter=parquet_exporter,
                 report_type=report_type,
@@ -1538,7 +1668,13 @@ def unified_import(
             result.error_message = f"Unknown target table: {target_table}"
     finally:
         if parquet_exporter:
-            if result.is_fully_duplicate:
+            if not result.success:
+                logger.warning(
+                    "Discarding raw export for failed import batch %s",
+                    result.batch_id,
+                )
+                parquet_exporter.discard()
+            elif result.is_fully_duplicate:
                 logger.warning(
                     "Skipping GCS/BQ export for 100%%-duplicate import batch %s (%s rows)",
                     result.batch_id,
@@ -1565,7 +1701,10 @@ if __name__ == "__main__":
     csv_path = sys.argv[1]
     print(f"Importing: {csv_path}\n")
 
-    result = unified_import(csv_path)
+    result = unified_import(
+        csv_path,
+        buyer_scope=ImportBuyerScope.unrestricted(),
+    )
 
     print("=" * 60)
     if result.success:

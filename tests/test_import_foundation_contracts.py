@@ -10,7 +10,10 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from importers.flexible_mapper import map_columns
-from importers.unified_importer import unified_import
+from importers.unified_importer import ImportBuyerScope, unified_import
+
+
+UNRESTRICTED_BUYER_SCOPE = ImportBuyerScope.unrestricted()
 
 
 def _write_csv(path: str, headers: list[str], rows: list[list[str]]) -> None:
@@ -82,6 +85,7 @@ def test_quality_signals_import_routes_and_writes_rtb_quality():
         mock_pem.from_env.return_value = None
         result = unified_import(
             csv_path,
+            buyer_scope=UNRESTRICTED_BUYER_SCOPE,
             source_filename="catscan-ivt-1234567890-yesterday-UTC.csv",
         )
 
@@ -157,6 +161,7 @@ def test_bidstream_import_persists_optional_dimensions():
         mock_pem.from_env.return_value = None
         result = unified_import(
             csv_path,
+            buyer_scope=UNRESTRICTED_BUYER_SCOPE,
             source_filename="catscan-pipeline-1111111111-yesterday-UTC.csv",
         )
 
@@ -206,6 +211,7 @@ def test_bidstream_missing_metric_columns_are_null_not_zero():
         mock_pem.from_env.return_value = None
         result = unified_import(
             csv_path,
+            buyer_scope=UNRESTRICTED_BUYER_SCOPE,
             source_filename="catscan-pipeline-1111111111-yesterday-UTC.csv",
         )
 
@@ -253,6 +259,7 @@ def test_rtb_daily_missing_metric_columns_are_null_not_zero():
         mock_pem.from_env.return_value = exporter
         result = unified_import(
             csv_path,
+            buyer_scope=UNRESTRICTED_BUYER_SCOPE,
             source_filename="catscan-quality-3333333333-yesterday-UTC.csv",
         )
 
@@ -288,6 +295,7 @@ def test_fully_duplicate_import_discards_raw_export_before_bigquery():
         mock_pem.from_env.return_value = exporter
         result = unified_import(
             csv_path,
+            buyer_scope=UNRESTRICTED_BUYER_SCOPE,
             source_filename="catscan-bidsinauction-6634662463-yesterday-UTC.csv",
         )
 
@@ -329,6 +337,7 @@ def test_bid_filtering_missing_metric_columns_are_null_not_zero():
         mock_pem.from_env.return_value = None
         result = unified_import(
             csv_path,
+            buyer_scope=UNRESTRICTED_BUYER_SCOPE,
             source_filename="catscan-bid-filtering-4444444444-yesterday-UTC.csv",
         )
 

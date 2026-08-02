@@ -15,7 +15,7 @@ import sys
 # Ensure repo root is on path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from importers.unified_importer import unified_import
+from importers.unified_importer import ImportBuyerScope, unified_import
 
 
 FIXTURES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures")
@@ -33,7 +33,12 @@ def run_test(name: str, csv_name: str, bidder_id: str = "999999999"):
     print(f"CSV:  {csv_name}")
     print(f"{'='*60}")
 
-    result = unified_import(csv_path, bidder_id=bidder_id, source_filename=csv_name)
+    result = unified_import(
+        csv_path,
+        buyer_scope=ImportBuyerScope.unrestricted(),
+        bidder_id=bidder_id,
+        source_filename=csv_name,
+    )
 
     print(f"  success:          {result.success}")
     print(f"  report_type:      {result.report_type}")
