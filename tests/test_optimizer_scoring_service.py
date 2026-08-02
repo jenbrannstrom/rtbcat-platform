@@ -236,6 +236,18 @@ async def test_run_scoring_api_loads_auth_header_from_model_service(monkeypatch:
 
 
 @pytest.mark.asyncio
+async def test_external_model_request_rejects_private_endpoint() -> None:
+    service = OptimizerScoringService()
+
+    with pytest.raises(ValueError, match="non-public address"):
+        await service._post_json(
+            endpoint_url="http://127.0.0.1/score",
+            payload={"features": []},
+            headers={"Content-Type": "application/json"},
+        )
+
+
+@pytest.mark.asyncio
 async def test_run_rules_scoring_writes_scores(monkeypatch: pytest.MonkeyPatch):
     writes: list[tuple[str, tuple]] = []
 

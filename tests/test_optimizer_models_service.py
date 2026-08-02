@@ -284,6 +284,29 @@ async def test_validate_model_endpoint_checks_contract(monkeypatch: pytest.Monke
     assert payload["skipped"] is False
 
 
+@pytest.mark.asyncio
+async def test_validate_model_endpoint_rejects_private_endpoint(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def _stub_get_model(self, *, model_id: str, buyer_id=None):
+        return {
+            "model_id": model_id,
+            "buyer_id": "1111111111",
+            "model_type": "api",
+            "endpoint_url": "http://169.254.169.254/latest/meta-data",
+            "has_auth_header": False,
+        }
+
+    monkeypatch.setattr(OptimizerModelsService, "get_model", _stub_get_model)
+    service = OptimizerModelsService()
+
+    with pytest.raises(ValueError, match="non-public address"):
+        await service.validate_model_endpoint(
+            model_id="mdl_api",
+            buyer_id="1111111111",
+        )
+
+
 def test_to_json_obj_logs_debug_and_returns_default_on_invalid_json(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
