@@ -16,14 +16,12 @@ def test_live_smoke_rejects_control_characters_before_github_env_export() -> Non
     )
 
 
-def test_deploy_cleans_registry_credentials_on_every_exit_path() -> None:
-    source = (ROOT / ".github" / "workflows" / "deploy.yml").read_text(
-        encoding="utf-8"
-    )
+def test_no_gcp_deploy_workflow_is_reintroduced() -> None:
+    """The GCP deploy workflow must stay retired.
 
-    assert "cleanup_ar_credentials()" in source
-    assert "trap cleanup_ar_credentials EXIT" in source
-    assert source.index("trap cleanup_ar_credentials EXIT") < source.index(
-        "docker compose -f docker-compose.gcp.yml pull"
-    )
-    assert "trap - EXIT" in source
+    It deployed to a VM that stopped serving traffic at the 2026-08-01 Hetzner
+    cutover, and reintroducing it would restart a second writer against the
+    frozen source. Production releases go through
+    build-and-push-ghcr.yml plus scripts/hetzner/deploy_app_release.sh.
+    """
+    assert not (ROOT / ".github" / "workflows" / "deploy.yml").exists()

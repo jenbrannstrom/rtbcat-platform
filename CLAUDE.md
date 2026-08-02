@@ -33,10 +33,25 @@ middleware files.
 
 ## Deployment
 
-- Deploy workflow is manual-only (GitHub Actions `workflow_dispatch`)
-- Production is the only deploy target (staging retired May 2026; VM, disk and
-  IPv4 deleted July 22, 2026; retirement snapshot kept)
-- Production VM: `catscan-production-sg` (asia-southeast1-b)
+- Production has run on Hetzner since the 2026-08-01 cutover. The GCP VM
+  `catscan-production-sg` and its Cloud SQL source are **frozen**: keep their
+  application writers, timers and schedulers stopped. `terraform/gcp/` is kept
+  because it still manages those frozen resources.
+- Releasing is two manual steps, both `workflow_dispatch` / explicit confirm:
+  1. `build-and-push-ghcr.yml` (`confirm=PUBLISH_HETZNER`) builds digest-pinned
+     GHCR images and a `hetzner-release.env` manifest for one exact commit.
+  2. On the app host, `scripts/hetzner/deploy_app_release.sh --mode production
+     --confirm deploy-production-live` with that manifest.
+- `--mode` must match the host's current posture and is asserted against
+  `/etc/rtbcat/runtime.env` before anything is pulled. It also renders the
+  `RTBCAT_DEPLOY_*` controls, because `deploy/hetzner/compose.yml` defaults them
+  to the shadow values — a deploy that leaves them unset brings a live host back
+  up read-only. Moving between postures is `activate_writable_release.sh`'s job,
+  not the deploy's.
+- Rollback: `scripts/hetzner/rollback_app_release.sh --list`, then
+  `--to-sha <40-char> --mode production --confirm rollback-immutable-release`.
+- The old GCP `deploy.yml` was removed. Do not reintroduce it: it targeted the
+  frozen VM, so it would ship nothing and restart a second writer.
 - **Nothing serves traffic that isn't a pushed, sha-tagged image.** No
   hot-patching containers via `docker cp`, no unpushed commits on the VM,
   no `/app` edits: they survive restarts but not recreation, and they make
