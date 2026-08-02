@@ -11,7 +11,12 @@ usage() {
   cat <<'EOF'
 Usage: sudo scripts/hetzner/verify_app_release.sh \
   --release-file <digest-release.env> \
-  [--mode shadow|writable-schedulers-off] [--with-google]
+  [--mode shadow|writable-schedulers-off|production] [--with-google]
+
+Modes describe the posture the running container is expected to be in:
+  shadow                  read-only, schedulers off (pre-cutover shadow host)
+  writable-schedulers-off writable, schedulers off (one-shot activation step)
+  production              writable, schedulers on (post-cutover steady state)
 EOF
 }
 
@@ -25,11 +30,14 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ "$EXPECTED_MODE" != "shadow" && \
-      "$EXPECTED_MODE" != "writable-schedulers-off" ]]; then
-  echo "Expected mode must be shadow or writable-schedulers-off." >&2
-  exit 2
-fi
+case "$EXPECTED_MODE" in
+  shadow|writable-schedulers-off) EXPECTED_SCHEDULER_STATE="false" ;;
+  production) EXPECTED_SCHEDULER_STATE="true" ;;
+  *)
+    echo "Expected mode must be shadow, writable-schedulers-off or production." >&2
+    exit 2
+    ;;
+esac
 
 if [[ ${EUID} -ne 0 ]]; then
   echo "Run this script as root on the Hetzner app host." >&2
@@ -95,8 +103,8 @@ for scheduler_flag in \
   CATSCAN_ENABLE_GMAIL_IMPORT_SCHEDULER \
   CATSCAN_ENABLE_PRECOMPUTE_SCHEDULER \
   CATSCAN_ENABLE_CREATIVE_CACHE_SCHEDULER; do
-  if ! grep -qx "${scheduler_flag}=false" <<<"$container_env"; then
-    echo "Shadow scheduler guard is not false: ${scheduler_flag}." >&2
+  if ! grep -qx "${scheduler_flag}=${EXPECTED_SCHEDULER_STATE}" <<<"$container_env"; then
+    echo "Scheduler flag ${scheduler_flag} is not ${EXPECTED_SCHEDULER_STATE} in ${EXPECTED_MODE} mode." >&2
     exit 1
   fi
 done
