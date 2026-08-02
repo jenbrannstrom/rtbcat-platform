@@ -1,5 +1,11 @@
 # Cat-Scan Architecture
 
+> **Last updated 2026-03-07.** Still broadly accurate for the application's
+> shape, and the GCP deployment mode it describes remains valid for
+> self-hosting. It predates the 2026-08-01 production migration to Hetzner,
+> so do not read it as a description of where this project's production runs.
+
+
 Last updated: March 7, 2026
 
 This document describes the architecture that exists in this repo now. It is not a design wish list.
