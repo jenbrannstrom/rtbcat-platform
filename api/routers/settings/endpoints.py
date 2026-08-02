@@ -9,7 +9,13 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from googleapiclient.errors import HttpError
 
-from api.dependencies import get_current_user, require_seat_admin_or_sudo
+from api.dependencies import (
+    get_current_user,
+    get_store,
+    require_bidder_admin,
+    require_seat_admin_or_sudo,
+)
+from storage.postgres_store import PostgresStore
 from collectors import EndpointsClient
 from services.auth_service import User
 from services.endpoints_service import EndpointsService
@@ -217,7 +223,8 @@ def _build_endpoint_items(rows: list[dict]) -> tuple[list[RTBEndpointItem], int,
 @router.post("/settings/endpoints/sync", response_model=SyncEndpointsResponse)
 async def sync_rtb_endpoints(
     service_account_id: Optional[str] = Query(None, description="Service account ID to use"),
-    _user: User = Depends(require_seat_admin_or_sudo),
+    user: User = Depends(require_seat_admin_or_sudo),
+    store: PostgresStore = Depends(get_store),
     seats_service: SeatsService = Depends(get_seats_service),
 ) -> SyncEndpointsResponse:
     """Sync RTB endpoints from Google Authorized Buyers API.
@@ -228,6 +235,7 @@ async def sync_rtb_endpoints(
     bidder_id, _, creds_path = await _resolve_bidder_context(
         seats_service, service_account_id=service_account_id,
     )
+    await require_bidder_admin(bidder_id, store=store, user=user)
     logger.info(f"Using bidder_id: {bidder_id} for RTB endpoints sync")
 
     try:
@@ -349,7 +357,8 @@ async def get_rtb_endpoints(
 async def update_endpoint_qps(
     endpoint_id: str,
     request: UpdateEndpointQpsRequest,
-    _user: User = Depends(require_seat_admin_or_sudo),
+    user: User = Depends(require_seat_admin_or_sudo),
+    store: PostgresStore = Depends(get_store),
     seats_service: SeatsService = Depends(get_seats_service),
 ) -> RTBEndpointItem:
     """Update the allocated QPS for a single RTB endpoint.
@@ -362,6 +371,7 @@ async def update_endpoint_qps(
         buyer_id=request.buyer_id,
         service_account_id=request.service_account_id,
     )
+    await require_bidder_admin(bidder_id, store=store, user=user)
 
     try:
         client = EndpointsClient(credentials_path=creds_path, account_id=bidder_id)

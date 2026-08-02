@@ -144,6 +144,10 @@ class CampaignsService:
         """Get all creative IDs in a campaign."""
         return await self._repo.get_campaign_creatives(campaign_id, buyer_id=buyer_id)
 
+    async def get_campaign_buyer_ids(self, campaign_id: str) -> list[str]:
+        """Get the distinct buyer IDs owning creatives in a campaign."""
+        return await self._repo.get_campaign_buyer_ids(campaign_id)
+
     # ==================== Performance ====================
 
     async def get_campaign_performance(

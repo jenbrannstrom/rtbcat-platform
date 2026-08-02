@@ -20,6 +20,19 @@ def _allow_seat_admin():
     return _allow
 
 
+def _bypass_object_authz(monkeypatch: pytest.MonkeyPatch, app: FastAPI) -> None:
+    """Neutralize the billing_id ownership check for passthrough tests.
+
+    Cross-seat denial is covered in test_settings_mutation_rbac_api.py; these
+    tests only assert that service exceptions reach the client unchanged.
+    """
+    async def _allow_billing_id(billing_id: str, store=None, user=None):
+        return billing_id
+
+    monkeypatch.setattr(actions_router, "require_billing_id_admin", _allow_billing_id)
+    app.dependency_overrides[actions_router.get_store] = lambda: None
+
+
 def test_actions_apply_all_preserves_http_exception_status(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -31,6 +44,7 @@ def test_actions_apply_all_preserves_http_exception_status(
     app = FastAPI()
     app.include_router(actions_router.router, prefix="/api")
     app.dependency_overrides[actions_router.require_seat_admin_or_sudo] = _allow_seat_admin()
+    _bypass_object_authz(monkeypatch, app)
     monkeypatch.setattr(actions_router, "ActionsService", _StubActionsService)
 
     client = SyncASGIClient(app)

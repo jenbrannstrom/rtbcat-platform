@@ -4,9 +4,14 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from api.dependencies import require_seat_admin_or_sudo
+from api.dependencies import (
+    get_store,
+    require_billing_id_admin,
+    require_seat_admin_or_sudo,
+)
 from services.auth_service import User
 from services.actions_service import ActionsService
+from storage.postgres_store import PostgresStore
 
 from .models import (
     ApplyAllResponse,
@@ -26,7 +31,8 @@ router = APIRouter(tags=["RTB Settings"])
 async def apply_pending_change(
     billing_id: str,
     request: ApplyChangeRequest,
-    _user: User = Depends(require_seat_admin_or_sudo),
+    user: User = Depends(require_seat_admin_or_sudo),
+    store: PostgresStore = Depends(get_store),
 ) -> ApplyChangeResponse:
     """
     Apply a single pending change to Google Authorized Buyers.
@@ -42,6 +48,7 @@ async def apply_pending_change(
     - add_publisher / remove_publisher
     - set_publisher_mode
     """
+    await require_billing_id_admin(billing_id, store=store, user=user)
     try:
         service = ActionsService()
         result = await service.apply_pending_change(
@@ -63,7 +70,8 @@ async def apply_pending_change(
 async def apply_all_pending_changes(
     billing_id: str,
     dry_run: bool = Query(True, description="Preview changes without applying"),
-    _user: User = Depends(require_seat_admin_or_sudo),
+    user: User = Depends(require_seat_admin_or_sudo),
+    store: PostgresStore = Depends(get_store),
 ) -> ApplyAllResponse:
     """
     Apply all pending changes for a pretargeting config ID (`billing_id`) to Google.
@@ -71,6 +79,7 @@ async def apply_all_pending_changes(
     WARNING: This modifies your live pretargeting configuration!
     Use dry_run=True (default) to preview changes first.
     """
+    await require_billing_id_admin(billing_id, store=store, user=user)
     try:
         service = ActionsService()
         result = await service.apply_all_pending_changes(
@@ -91,7 +100,8 @@ async def apply_all_pending_changes(
 @router.post("/settings/pretargeting/{billing_id}/suspend", response_model=SuspendActivateResponse)
 async def suspend_pretargeting_config(
     billing_id: str,
-    _user: User = Depends(require_seat_admin_or_sudo),
+    user: User = Depends(require_seat_admin_or_sudo),
+    store: PostgresStore = Depends(get_store),
 ) -> SuspendActivateResponse:
     """
     Suspend a pretargeting configuration.
@@ -101,6 +111,7 @@ async def suspend_pretargeting_config(
 
     WARNING: This affects live bidding!
     """
+    await require_billing_id_admin(billing_id, store=store, user=user)
     try:
         service = ActionsService()
         result = await service.suspend_config(billing_id=billing_id)
@@ -117,7 +128,8 @@ async def suspend_pretargeting_config(
 @router.post("/settings/pretargeting/{billing_id}/activate", response_model=SuspendActivateResponse)
 async def activate_pretargeting_config(
     billing_id: str,
-    _user: User = Depends(require_seat_admin_or_sudo),
+    user: User = Depends(require_seat_admin_or_sudo),
+    store: PostgresStore = Depends(get_store),
 ) -> SuspendActivateResponse:
     """
     Activate a suspended pretargeting configuration.
@@ -126,6 +138,7 @@ async def activate_pretargeting_config(
 
     WARNING: This affects live bidding!
     """
+    await require_billing_id_admin(billing_id, store=store, user=user)
     try:
         service = ActionsService()
         result = await service.activate_config(billing_id=billing_id)
@@ -144,6 +157,7 @@ async def rollback_to_snapshot(
     billing_id: str,
     request: RollbackRequest,
     user: User = Depends(require_seat_admin_or_sudo),
+    store: PostgresStore = Depends(get_store),
 ) -> RollbackResponse:
     """
     Rollback a pretargeting config to a previous snapshot state.
@@ -153,6 +167,7 @@ async def rollback_to_snapshot(
 
     WARNING: This modifies your live pretargeting configuration!
     """
+    await require_billing_id_admin(billing_id, store=store, user=user)
     try:
         service = ActionsService()
         result = await service.rollback_to_snapshot(
