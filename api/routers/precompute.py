@@ -10,13 +10,9 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from services.secrets_manager import get_secrets_manager
-from services.config_precompute import refresh_config_breakdowns
-from services.endpoints_service import EndpointsService
-from services.home_precompute import refresh_home_summaries
+from services.precompute_queue import enqueue_precompute_job
 from services.precompute_service import PrecomputeService
 from services.precompute_utils import normalize_refresh_dates, refresh_window
-from services.precompute_validation import run_precompute_validation
-from services.rtb_precompute import refresh_rtb_summaries
 from services.scheduler_guard import require_scheduler_enabled
 
 logger = logging.getLogger(__name__)
@@ -24,18 +20,16 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Precompute"])
 
 
-class PrecomputeRefreshResponse(BaseModel):
-    """Response model for scheduled precompute refresh."""
+class PrecomputeEnqueueResponse(BaseModel):
+    """Response model for the scheduled precompute enqueue."""
 
-    success: bool
+    accepted: bool
+    job_id: int
+    status: str
+    deduplicated: bool
     start_date: str
     end_date: str
     dates: list[str]
-    home_summaries: dict
-    config_breakdowns: dict
-    rtb_summaries: dict
-    endpoints_current_rows: int
-    validation: dict
 
 
 class PrecomputeHealthResponse(BaseModel):
@@ -54,9 +48,19 @@ class PrecomputeHealthResponse(BaseModel):
     date_parity_ok: bool = False
 
 
-@router.post("/precompute/refresh/scheduled", response_model=PrecomputeRefreshResponse)
-async def refresh_precompute_scheduled(request: Request) -> PrecomputeRefreshResponse:
-    """Trigger scheduled precompute refreshes for Cloud Scheduler or cron."""
+@router.post(
+    "/precompute/refresh/scheduled",
+    response_model=PrecomputeEnqueueResponse,
+    status_code=202,
+)
+async def refresh_precompute_scheduled(request: Request) -> PrecomputeEnqueueResponse:
+    """Enqueue the scheduled precompute refresh and return immediately.
+
+    A full refresh runs for hours — past Cloud Scheduler's 30-minute attempt
+    deadline and the edge proxy timeout — so the work is queued for the
+    precompute worker instead of running inline. Scheduler success means
+    "accepted"; /precompute/health remains the completion/freshness authority.
+    """
     require_scheduler_enabled("CATSCAN_ENABLE_PRECOMPUTE_SCHEDULER")
 
     secrets_mgr = get_secrets_manager()
@@ -65,14 +69,6 @@ async def refresh_precompute_scheduled(request: Request) -> PrecomputeRefreshRes
     if not secret or not header_secret or not hmac.compare_digest(header_secret, secret):
         raise HTTPException(status_code=403, detail="Invalid scheduler secret")
 
-    # The Gmail worker performs the causal refresh after a successful import.
-    # This scheduled run is a fallback; never compete with an active import for
-    # database and BigQuery capacity.
-    from scripts.gmail_import import get_status as get_gmail_import_status
-
-    if get_gmail_import_status().get("running"):
-        raise HTTPException(status_code=409, detail="Gmail import is still running")
-
     refresh_days = secrets_mgr.get_int("PRECOMPUTE_REFRESH_DAYS", 2)
     if refresh_days < 1:
         raise HTTPException(status_code=400, detail="PRECOMPUTE_REFRESH_DAYS must be >= 1")
@@ -80,28 +76,40 @@ async def refresh_precompute_scheduled(request: Request) -> PrecomputeRefreshRes
     date_list = normalize_refresh_dates(days=refresh_days)
     refresh_start, refresh_end = refresh_window(date_list)
 
-    home_result = await refresh_home_summaries(dates=date_list)
-    config_result = await refresh_config_breakdowns(dates=date_list)
-    rtb_result = await refresh_rtb_summaries(refresh_start, refresh_end)
-    endpoint_svc = EndpointsService()
-    endpoints_refreshed = await endpoint_svc.refresh_endpoints_current()
-    validation = await run_precompute_validation(refresh_start, refresh_end)
+    # Cloud Scheduler keeps X-CloudScheduler-ScheduleTime constant across
+    # retries of one execution, so retries collapse onto one job. Without the
+    # headers, the refresh window itself identifies the night's work.
+    scheduler_job = request.headers.get("X-CloudScheduler-JobName")
+    schedule_time = request.headers.get("X-CloudScheduler-ScheduleTime")
+    if scheduler_job and schedule_time:
+        dedupe_key = f"{scheduler_job}:{schedule_time}"
+    else:
+        dedupe_key = f"scheduler:{refresh_start}:{refresh_end}"
 
-    logger.info(
-        "Scheduled precompute refresh completed endpoint observations: endpoints_current_rows=%s",
-        endpoints_refreshed,
+    result = await enqueue_precompute_job(
+        source="scheduler",
+        start_date=refresh_start,
+        end_date=refresh_end,
+        dedupe_key=dedupe_key,
+        run_validation=True,
     )
 
-    return PrecomputeRefreshResponse(
-        success=True,
+    logger.info(
+        "Scheduled precompute refresh accepted: job_id=%s deduplicated=%s window=%s..%s",
+        result["job_id"],
+        result["deduplicated"],
+        refresh_start,
+        refresh_end,
+    )
+
+    return PrecomputeEnqueueResponse(
+        accepted=True,
+        job_id=result["job_id"],
+        status=result["status"],
+        deduplicated=result["deduplicated"],
         start_date=refresh_start,
         end_date=refresh_end,
         dates=date_list,
-        home_summaries=home_result,
-        config_breakdowns=config_result,
-        rtb_summaries=rtb_result,
-        endpoints_current_rows=endpoints_refreshed,
-        validation=validation,
     )
 
 
