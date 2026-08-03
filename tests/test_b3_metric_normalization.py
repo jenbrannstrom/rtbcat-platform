@@ -19,7 +19,9 @@ async def test_resolve_request_cost_prefers_account_query_cost(monkeypatch):
 
     monkeypatch.setattr(cost_estimator, "db_query_one", fake_db_query_one)
 
-    cost = await cost_estimator.resolve_request_cost_per_1000(days=7, buyer_id="buyer-1")
+    cost = await cost_estimator.resolve_request_cost_per_1000(
+        days=7, buyer_id="buyer-1"
+    )
     assert cost == pytest.approx(0.005, rel=1e-6)
 
 
@@ -36,8 +38,12 @@ async def test_resolve_request_cost_falls_back_to_format_profile(monkeypatch):
 
     monkeypatch.setattr(cost_estimator, "db_query_one", fake_db_query_one)
 
-    banner_cost = await cost_estimator.resolve_request_cost_per_1000(days=7, format_hint="banner")
-    video_cost = await cost_estimator.resolve_request_cost_per_1000(days=7, format_hint="video")
+    banner_cost = await cost_estimator.resolve_request_cost_per_1000(
+        days=7, format_hint="banner"
+    )
+    video_cost = await cost_estimator.resolve_request_cost_per_1000(
+        days=7, format_hint="video"
+    )
 
     assert banner_cost == pytest.approx(0.002, rel=1e-6)
     assert video_cost == pytest.approx(0.006, rel=1e-6)
@@ -50,7 +56,9 @@ def test_fraud_threshold_is_format_aware():
     assert FraudAnalyzer._high_ctr_threshold_for_format("VIDEO") == pytest.approx(0.20)
     assert FraudAnalyzer._high_ctr_threshold_for_format("NATIVE") == pytest.approx(0.12)
     assert FraudAnalyzer._high_ctr_threshold_for_format("HTML") == pytest.approx(0.10)
-    assert FraudAnalyzer._high_ctr_threshold_for_format("unknown") == pytest.approx(0.10)
+    assert FraudAnalyzer._high_ctr_threshold_for_format("unknown") == pytest.approx(
+        0.10
+    )
 
 
 @pytest.mark.asyncio
@@ -82,7 +90,7 @@ async def test_click_fraud_detection_uses_format_thresholds(monkeypatch):
     monkeypatch.setattr(fraud_module, "db_query", fake_db_query)
 
     analyzer = FraudAnalyzer()
-    recs = await analyzer._check_click_fraud(days=7)
+    recs = await analyzer._check_click_fraud(buyer_id="buyer-1", days=7)
 
     assert len(recs) == 1
     assert "banner.example" in recs[0].title.lower()

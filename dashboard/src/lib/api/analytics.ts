@@ -676,36 +676,45 @@ export interface PretargetingRecommendation {
   };
 }
 
-export async function getRecommendations(params?: {
+export async function getRecommendations(params: {
+  buyer_id: string;
   days?: number;
   min_severity?: string;
   type_filter?: string;
 }): Promise<Recommendation[]> {
   const searchParams = new URLSearchParams();
-  if (params?.days) searchParams.set("days", String(params.days));
-  if (params?.min_severity) searchParams.set("min_severity", params.min_severity);
-  if (params?.type_filter) searchParams.set("type_filter", params.type_filter);
+  searchParams.set("buyer_id", params.buyer_id);
+  if (params.days) searchParams.set("days", String(params.days));
+  if (params.min_severity) searchParams.set("min_severity", params.min_severity);
+  if (params.type_filter) searchParams.set("type_filter", params.type_filter);
 
   const query = searchParams.toString();
   return fetchApi<Recommendation[]>(`/recommendations${query ? `?${query}` : ""}`);
 }
 
 export async function getRecommendationSummary(
+  buyerId: string,
   days: number = 7
 ): Promise<RecommendationSummary> {
-  return fetchApi<RecommendationSummary>(`/recommendations/summary?days=${days}`);
+  const searchParams = new URLSearchParams({
+    buyer_id: buyerId,
+    days: String(days),
+  });
+  return fetchApi<RecommendationSummary>(
+    `/recommendations/summary?${searchParams.toString()}`
+  );
 }
 
 export async function resolveRecommendation(
   id: string,
+  buyerId: string,
   notes?: string
 ): Promise<{ status: string; id: string }> {
-  const searchParams = new URLSearchParams();
+  const searchParams = new URLSearchParams({ buyer_id: buyerId });
   if (notes) searchParams.set("notes", notes);
-  const query = searchParams.toString();
 
   return fetchApi<{ status: string; id: string }>(
-    `/recommendations/${encodeURIComponent(id)}/resolve${query ? `?${query}` : ""}`,
+    `/recommendations/${encodeURIComponent(id)}/resolve?${searchParams.toString()}`,
     { method: "POST" }
   );
 }

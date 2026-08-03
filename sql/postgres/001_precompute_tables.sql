@@ -105,6 +105,27 @@ CREATE TABLE IF NOT EXISTS rtb_geo_daily (
     PRIMARY KEY (metric_date, buyer_account_id, country)
 );
 
+CREATE TABLE IF NOT EXISTS rtb_buyer_spend_daily (
+    metric_date DATE NOT NULL,
+    buyer_account_id TEXT NOT NULL,
+    reached_queries BIGINT DEFAULT 0,
+    impressions BIGINT DEFAULT 0,
+    clicks BIGINT DEFAULT 0,
+    spend_micros BIGINT DEFAULT 0,
+    PRIMARY KEY (metric_date, buyer_account_id)
+);
+
+CREATE TABLE IF NOT EXISTS rtb_platform_daily (
+    metric_date DATE NOT NULL,
+    buyer_account_id TEXT NOT NULL,
+    platform TEXT NOT NULL,
+    reached_queries BIGINT DEFAULT 0,
+    impressions BIGINT DEFAULT 0,
+    clicks BIGINT DEFAULT 0,
+    spend_micros BIGINT DEFAULT 0,
+    PRIMARY KEY (metric_date, buyer_account_id, platform)
+);
+
 CREATE TABLE IF NOT EXISTS rtb_app_daily (
     metric_date DATE NOT NULL,
     buyer_account_id TEXT NOT NULL,
@@ -166,6 +187,8 @@ CREATE TABLE IF NOT EXISTS rtb_app_creative_daily (
 CREATE INDEX IF NOT EXISTS idx_rtb_funnel_date ON rtb_funnel_daily(metric_date);
 CREATE INDEX IF NOT EXISTS idx_rtb_publisher_date ON rtb_publisher_daily(metric_date);
 CREATE INDEX IF NOT EXISTS idx_rtb_geo_date ON rtb_geo_daily(metric_date);
+CREATE INDEX IF NOT EXISTS idx_rtb_platform_date_buyer
+    ON rtb_platform_daily(metric_date, buyer_account_id);
 CREATE INDEX IF NOT EXISTS idx_rtb_app_date ON rtb_app_daily(metric_date);
 CREATE INDEX IF NOT EXISTS idx_rtb_app_name ON rtb_app_daily(app_name);
 CREATE INDEX IF NOT EXISTS idx_rtb_app_billing ON rtb_app_daily(billing_id);

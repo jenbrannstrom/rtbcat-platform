@@ -1,30 +1,44 @@
-"""Recommendations Router - Optimization recommendation endpoints.
+"""Buyer-scoped optimization recommendation endpoints."""
 
-The recommendation surface is temporarily contained because its legacy metric
-queries aggregate data across buyers.  Keep every endpoint fail-closed until
-the complete call graph and serving data are buyer-scoped.
-"""
-
+import logging
 from typing import NoReturn, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
-from api.dependencies import get_current_user, require_seat_admin_or_sudo
+from analytics.recommendation_data import RecommendationDataUnavailable
+from api.dependencies import (
+    get_current_user,
+    get_store,
+    resolve_admin_buyer_id,
+    resolve_buyer_id,
+)
 from services.auth_service import User
+from services.recommendations_service import RecommendationsService
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["Recommendations"])
 
-RECOMMENDATIONS_UNAVAILABLE_DETAIL = (
-    "Recommendations are temporarily unavailable while tenant isolation is upgraded."
+RECOMMENDATION_DATA_UNAVAILABLE_DETAIL = (
+    "Buyer-scoped recommendation metrics are temporarily unavailable."
 )
 
 
-def _raise_recommendations_unavailable() -> NoReturn:
-    """Fail closed until recommendation inputs and persistence are buyer-safe."""
+def _require_recommendation_buyer_id(buyer_id: Optional[str]) -> str:
+    """Recommendation analysis never permits a global buyer scope."""
+    if not buyer_id:
+        raise HTTPException(
+            status_code=400,
+            detail="buyer_id is required for recommendation endpoints.",
+        )
+    return buyer_id
+
+
+def _raise_data_unavailable() -> NoReturn:
     raise HTTPException(
         status_code=503,
-        detail=RECOMMENDATIONS_UNAVAILABLE_DETAIL,
+        detail=RECOMMENDATION_DATA_UNAVAILABLE_DETAIL,
     )
 
 
@@ -111,32 +125,85 @@ async def get_recommendations(
     min_severity: str = Query(
         "low", description="Minimum severity: low, medium, high, critical"
     ),
-    _user: User = Depends(get_current_user),
+    buyer_id: Optional[str] = Query(None, description="Buyer seat ID"),
+    user: User = Depends(get_current_user),
+    store=Depends(get_store),
 ) -> list[RecommendationResponse]:
-    """Fail closed while buyer-scoped recommendation generation is rebuilt."""
-    _ = (days, min_severity)
-    _raise_recommendations_unavailable()
+    """Generate recommendations for one authorized buyer."""
+    try:
+        resolved_buyer_id = _require_recommendation_buyer_id(
+            await resolve_buyer_id(buyer_id, store=store, user=user)
+        )
+        service = RecommendationsService(store)
+        return await service.generate(
+            buyer_id=resolved_buyer_id,
+            days=days,
+            min_severity=min_severity,
+        )
+    except HTTPException:
+        raise
+    except RecommendationDataUnavailable:
+        _raise_data_unavailable()
+    except Exception:
+        logger.exception("Failed to generate buyer-scoped recommendations")
+        raise HTTPException(
+            status_code=500, detail="Failed to generate recommendations"
+        )
 
 
 @router.get("/recommendations/summary", response_model=RecommendationSummaryResponse)
 async def get_recommendations_summary(
     days: int = Query(7, ge=1, le=90, description="Days of data to analyze"),
-    _user: User = Depends(get_current_user),
+    buyer_id: Optional[str] = Query(None, description="Buyer seat ID"),
+    user: User = Depends(get_current_user),
+    store=Depends(get_store),
 ) -> RecommendationSummaryResponse:
-    """Fail closed while buyer-scoped recommendation summaries are rebuilt."""
-    _ = days
-    _raise_recommendations_unavailable()
+    """Return summary metrics for one authorized buyer."""
+    try:
+        resolved_buyer_id = _require_recommendation_buyer_id(
+            await resolve_buyer_id(buyer_id, store=store, user=user)
+        )
+        return await RecommendationsService(store).summary(
+            buyer_id=resolved_buyer_id,
+            days=days,
+        )
+    except HTTPException:
+        raise
+    except RecommendationDataUnavailable:
+        _raise_data_unavailable()
+    except Exception:
+        logger.exception("Failed to summarize buyer-scoped recommendations")
+        raise HTTPException(
+            status_code=500, detail="Failed to summarize recommendations"
+        )
 
 
 @router.post("/recommendations/{recommendation_id}/resolve")
 async def resolve_recommendation(
     recommendation_id: str,
     notes: Optional[str] = Query(None, description="Resolution notes"),
-    _user: User = Depends(require_seat_admin_or_sudo),
+    buyer_id: Optional[str] = Query(None, description="Buyer seat ID"),
+    user: User = Depends(get_current_user),
+    store=Depends(get_store),
 ) -> dict[str, str]:
-    """Fail closed while recommendation ownership is made buyer-specific."""
-    _ = (recommendation_id, notes)
-    _raise_recommendations_unavailable()
+    """Resolve a recommendation owned by one administered buyer."""
+    try:
+        resolved_buyer_id = _require_recommendation_buyer_id(
+            await resolve_admin_buyer_id(buyer_id, store=store, user=user)
+        )
+        success = await RecommendationsService(store).resolve(
+            buyer_id=resolved_buyer_id,
+            recommendation_id=recommendation_id,
+            notes=notes,
+        )
+        if not success:
+            raise HTTPException(status_code=404, detail="Recommendation not found")
+        return {"status": "resolved", "id": recommendation_id}
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("Failed to resolve buyer-owned recommendation")
+        raise HTTPException(status_code=500, detail="Failed to resolve recommendation")
 
 
 @router.get(
@@ -145,8 +212,24 @@ async def resolve_recommendation(
 async def get_recommendations_by_type(
     rec_type: str,
     days: int = Query(7, ge=1, le=90, description="Days of data to analyze"),
-    _user: User = Depends(get_current_user),
+    buyer_id: Optional[str] = Query(None, description="Buyer seat ID"),
+    user: User = Depends(get_current_user),
+    store=Depends(get_store),
 ) -> list[RecommendationResponse]:
-    """Fail closed while buyer-scoped recommendation generation is rebuilt."""
-    _ = (rec_type, days)
-    _raise_recommendations_unavailable()
+    """Return one recommendation type for an authorized buyer."""
+    try:
+        resolved_buyer_id = _require_recommendation_buyer_id(
+            await resolve_buyer_id(buyer_id, store=store, user=user)
+        )
+        return await RecommendationsService(store).by_type(
+            buyer_id=resolved_buyer_id,
+            rec_type=rec_type,
+            days=days,
+        )
+    except HTTPException:
+        raise
+    except RecommendationDataUnavailable:
+        _raise_data_unavailable()
+    except Exception:
+        logger.exception("Failed to filter buyer-scoped recommendations")
+        raise HTTPException(status_code=500, detail="Failed to filter recommendations")
