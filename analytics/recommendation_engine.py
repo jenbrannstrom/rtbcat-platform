@@ -9,13 +9,16 @@ The engine answers: "What QPS is wasted, why, and what specific action should I 
 
 from __future__ import annotations
 
+import json
 import logging
-from dataclasses import dataclass, field, asdict
+import uuid
+from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from enum import Enum
 from typing import Optional
 
-from storage.postgres_database import pg_execute
+from analytics.recommendation_data import ensure_recommendation_data_available
+from storage.postgres_database import pg_execute, pg_query_one
 from storage.serving_database import db_query_one
 
 logger = logging.getLogger(__name__)
@@ -25,46 +28,52 @@ logger = logging.getLogger(__name__)
 # Enums
 # =============================================================================
 
+
 class RecommendationType(Enum):
     """Categories of optimization recommendations."""
-    SIZE_MISMATCH = "size_mismatch"           # Block sizes you don't have creatives for
+
+    SIZE_MISMATCH = "size_mismatch"  # Block sizes you don't have creatives for
     CONFIG_INEFFICIENCY = "config_inefficiency"  # Tighten pretargeting config
-    PUBLISHER_BLOCK = "publisher_block"        # Block fraudulent/wasteful publishers
-    APP_BLOCK = "app_block"                    # Block fraudulent/wasteful apps
-    GEO_EXCLUSION = "geo_exclusion"            # Exclude wasteful geographies
-    CREATIVE_PAUSE = "creative_pause"          # Pause problematic creatives
-    CREATIVE_REVIEW = "creative_review"        # Review creative quality (broken video, etc.)
-    FRAUD_ALERT = "fraud_alert"                # Human review for suspected fraud
+    PUBLISHER_BLOCK = "publisher_block"  # Block fraudulent/wasteful publishers
+    APP_BLOCK = "app_block"  # Block fraudulent/wasteful apps
+    GEO_EXCLUSION = "geo_exclusion"  # Exclude wasteful geographies
+    CREATIVE_PAUSE = "creative_pause"  # Pause problematic creatives
+    CREATIVE_REVIEW = "creative_review"  # Review creative quality (broken video, etc.)
+    FRAUD_ALERT = "fraud_alert"  # Human review for suspected fraud
 
 
 class Severity(Enum):
     """Recommendation severity/urgency."""
+
     CRITICAL = "critical"  # >10% of total waste, immediate action needed
-    HIGH = "high"          # 5-10% of total waste
-    MEDIUM = "medium"      # 1-5% of total waste
-    LOW = "low"            # <1% of total waste, nice to fix
+    HIGH = "high"  # 5-10% of total waste
+    MEDIUM = "medium"  # 1-5% of total waste
+    LOW = "low"  # <1% of total waste, nice to fix
 
 
 class Confidence(Enum):
     """How confident we are in the recommendation."""
-    HIGH = "high"          # Clear pattern, multiple data points
-    MEDIUM = "medium"      # Some evidence, may need verification
-    LOW = "low"            # Single data point or edge case
+
+    HIGH = "high"  # Clear pattern, multiple data points
+    MEDIUM = "medium"  # Some evidence, may need verification
+    LOW = "low"  # Single data point or edge case
 
 
 # =============================================================================
 # Data Classes
 # =============================================================================
 
+
 @dataclass
 class Evidence:
     """Supporting data for a recommendation."""
-    metric_name: str           # e.g., "waste_rate", "ctr", "vcr"
-    metric_value: float        # The actual value
-    threshold: float           # The threshold that was exceeded
-    comparison: str            # "above", "below", "equals"
-    time_period_days: int      # How many days of data
-    sample_size: int           # Number of data points
+
+    metric_name: str  # e.g., "waste_rate", "ctr", "vcr"
+    metric_value: float  # The actual value
+    threshold: float  # The threshold that was exceeded
+    comparison: str  # "above", "below", "equals"
+    time_period_days: int  # How many days of data
+    sample_size: int  # Number of data points
     trend: Optional[str] = None  # "increasing", "decreasing", "stable"
 
     def to_dict(self) -> dict:
@@ -74,9 +83,10 @@ class Evidence:
 @dataclass
 class Impact:
     """Quantified impact of the problem."""
-    wasted_qps: float              # Queries per second being wasted
-    wasted_queries_daily: int      # Absolute daily waste
-    wasted_spend_usd: float        # Money wasted (estimated)
+
+    wasted_qps: float  # Queries per second being wasted
+    wasted_queries_daily: int  # Absolute daily waste
+    wasted_spend_usd: float  # Money wasted (estimated)
     percent_of_total_waste: float  # What % of all waste this represents
     potential_savings_monthly: float  # If fixed, save this much
 
@@ -93,12 +103,13 @@ class Impact:
 @dataclass
 class Action:
     """Specific action to take."""
-    action_type: str           # "block", "exclude", "pause", "review", "add"
-    target_type: str           # "size", "publisher", "app", "geo", "creative", "config"
-    target_id: str             # The specific ID to act on
-    target_name: str           # Human-readable name
+
+    action_type: str  # "block", "exclude", "pause", "review", "add"
+    target_type: str  # "size", "publisher", "app", "geo", "creative", "config"
+    target_id: str  # The specific ID to act on
+    target_name: str  # Human-readable name
     pretargeting_field: Optional[str] = None  # Which pretargeting field to modify
-    api_example: Optional[str] = None         # Example API call or config change
+    api_example: Optional[str] = None  # Example API call or config change
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -107,26 +118,27 @@ class Action:
 @dataclass
 class Recommendation:
     """A complete optimization recommendation."""
-    id: str                            # Unique identifier
+
+    id: str  # Unique identifier
     type: RecommendationType
     severity: Severity
     confidence: Confidence
 
-    title: str                         # Short description
-    description: str                   # Detailed explanation
+    title: str  # Short description
+    description: str  # Detailed explanation
 
-    evidence: list[Evidence]           # Supporting data
-    impact: Impact                     # Quantified impact
-    actions: list[Action]              # What to do
+    evidence: list[Evidence]  # Supporting data
+    impact: Impact  # Quantified impact
+    actions: list[Action]  # What to do
 
     affected_creatives: list[str] = field(default_factory=list)  # Creative IDs involved
     affected_campaigns: list[str] = field(default_factory=list)  # Campaign IDs involved
 
-    generated_at: str = ""             # ISO timestamp
-    expires_at: Optional[str] = None   # When this becomes stale
+    generated_at: str = ""  # ISO timestamp
+    expires_at: Optional[str] = None  # When this becomes stale
 
     # For tracking
-    status: str = "new"                # new, acknowledged, resolved, dismissed
+    status: str = "new"  # new, acknowledged, resolved, dismissed
     resolved_at: Optional[str] = None
     resolution_notes: Optional[str] = None
 
@@ -200,6 +212,7 @@ def severity_from_spend(spend_usd: float) -> Severity:
 # Master Recommendation Engine
 # =============================================================================
 
+
 class RecommendationEngine:
     """
     Master orchestrator that runs all analyzers and aggregates recommendations.
@@ -229,6 +242,8 @@ class RecommendationEngine:
 
     async def generate_recommendations(
         self,
+        *,
+        buyer_id: str,
         days: int = 7,
         min_severity: Severity = Severity.LOW,
     ) -> list[Recommendation]:
@@ -242,20 +257,23 @@ class RecommendationEngine:
         Returns:
             List of recommendations sorted by impact
         """
+        await ensure_recommendation_data_available(buyer_id=buyer_id, days=days)
         all_recommendations: list[Recommendation] = []
 
         for analyzer in self._get_analyzers():
-            try:
-                logger.info(f"Running analyzer: {analyzer.__class__.__name__}")
-                recs = await analyzer.analyze(days)
-                logger.info(f"  Found {len(recs)} recommendations")
-                all_recommendations.extend(recs)
-            except Exception as e:
-                logger.error(f"Analyzer {analyzer.__class__.__name__} failed: {e}")
+            logger.info(
+                "Running analyzer %s for buyer_id=%s",
+                analyzer.__class__.__name__,
+                buyer_id,
+            )
+            recs = await analyzer.analyze(buyer_id=buyer_id, days=days)
+            logger.info("  Found %d recommendations", len(recs))
+            all_recommendations.extend(recs)
 
         # Filter by severity
         filtered = [
-            r for r in all_recommendations
+            r
+            for r in all_recommendations
             if severity_rank(r.severity) >= severity_rank(min_severity)
         ]
 
@@ -267,30 +285,56 @@ class RecommendationEngine:
         seen_targets: dict[tuple, Recommendation] = {}
         for r in filtered:
             key = (r.type, r.actions[0].target_id if r.actions else r.id)
-            if key not in seen_targets or severity_rank(r.severity) > severity_rank(seen_targets[key].severity):
+            if key not in seen_targets or severity_rank(r.severity) > severity_rank(
+                seen_targets[key].severity
+            ):
                 seen_targets[key] = r
 
-        return list(seen_targets.values())
+        scoped = list(seen_targets.values())
+        for recommendation in scoped:
+            self._assign_scoped_id(recommendation, buyer_id=buyer_id)
+            await self.save_recommendation(buyer_id=buyer_id, rec=recommendation)
 
-    async def get_summary(self, days: int = 7) -> dict:
+        return scoped
+
+    @staticmethod
+    def _assign_scoped_id(rec: Recommendation, *, buyer_id: str) -> None:
+        """Assign a stable opaque ID within the buyer ownership boundary."""
+        action = rec.actions[0] if rec.actions else None
+        identity = "|".join(
+            (
+                buyer_id,
+                rec.type.value,
+                action.target_type if action else "recommendation",
+                action.target_id if action else rec.title,
+            )
+        )
+        digest = uuid.uuid5(uuid.NAMESPACE_URL, identity).hex[:24]
+        rec.id = f"{rec.type.value}-{digest}"
+
+    async def get_summary(self, *, buyer_id: str, days: int = 7) -> dict:
         """
         Get high-level waste summary.
 
         Returns:
             Summary dictionary with total waste metrics
         """
-        # Get total queries and impressions from performance_metrics
+        await ensure_recommendation_data_available(buyer_id=buyer_id, days=days)
+
+        # Canonical buyer totals are precomputed from one authoritative report
+        # shape, so dimensional report families cannot be double-counted.
         query = """
             SELECT
                 COALESCE(SUM(reached_queries), 0) as total_queries,
                 COALESCE(SUM(impressions), 0) as total_impressions,
                 COALESCE(SUM(clicks), 0) as total_clicks,
                 COALESCE(SUM(spend_micros), 0) as total_spend_micros
-            FROM performance_metrics
-            WHERE metric_date >= date('now', ?)
+            FROM rtb_buyer_spend_daily
+            WHERE buyer_account_id = ?
+              AND metric_date >= date('now', ?)
         """
 
-        totals = await db_query_one(query, (f"-{days} days",)) or {}
+        totals = await db_query_one(query, (buyer_id, f"-{days} days")) or {}
 
         total_queries = totals.get("total_queries", 0) or 0
         total_impressions = totals.get("total_impressions", 0) or 0
@@ -301,7 +345,10 @@ class RecommendationEngine:
         wasted_qps = waste_queries / (days * 86400) if days > 0 else 0
 
         # Get recommendation counts
-        recommendations = await self.generate_recommendations(days=days)
+        recommendations = await self.generate_recommendations(
+            buyer_id=buyer_id,
+            days=days,
+        )
         severity_counts = {"critical": 0, "high": 0, "medium": 0, "low": 0}
         for r in recommendations:
             severity_counts[r.severity.value] += 1
@@ -319,18 +366,24 @@ class RecommendationEngine:
             "generated_at": datetime.now(UTC).isoformat(),
         }
 
-    async def save_recommendation(self, rec: Recommendation) -> None:
-        """Save a recommendation to the database for tracking."""
-        import json
-
+    async def save_recommendation(
+        self,
+        *,
+        buyer_id: str,
+        rec: Recommendation,
+    ) -> None:
+        """Save recommendation content without resetting buyer-owned state."""
         query = """
             INSERT INTO recommendations (
-                id, type, severity, confidence, title, description,
+                buyer_account_id, id, type, severity, confidence, title, description,
                 evidence_json, impact_json, actions_json,
                 affected_creatives, affected_campaigns,
-                status, generated_at, resolved_at, resolution_notes
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-            ON CONFLICT (id) DO UPDATE SET
+                status, generated_at, expires_at, resolved_at, resolution_notes
+            ) VALUES (
+                %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                %s, %s, %s, %s, %s, %s, %s, %s
+            )
+            ON CONFLICT (buyer_account_id, id) DO UPDATE SET
                 type = EXCLUDED.type,
                 severity = EXCLUDED.severity,
                 confidence = EXCLUDED.confidence,
@@ -341,34 +394,47 @@ class RecommendationEngine:
                 actions_json = EXCLUDED.actions_json,
                 affected_creatives = EXCLUDED.affected_creatives,
                 affected_campaigns = EXCLUDED.affected_campaigns,
-                status = EXCLUDED.status,
                 generated_at = EXCLUDED.generated_at,
-                resolved_at = EXCLUDED.resolved_at,
-                resolution_notes = EXCLUDED.resolution_notes
+                expires_at = EXCLUDED.expires_at
+            RETURNING status, resolved_at, resolution_notes
         """
 
-        await pg_execute(query, (
-            rec.id,
-            rec.type.value,
-            rec.severity.value,
-            rec.confidence.value,
-            rec.title,
-            rec.description,
-            json.dumps([e.to_dict() for e in rec.evidence]),
-            json.dumps(rec.impact.to_dict()),
-            json.dumps([a.to_dict() for a in rec.actions]),
-            json.dumps(rec.affected_creatives),
-            json.dumps(rec.affected_campaigns),
-            rec.status,
-            rec.generated_at,
-            rec.resolved_at,
-            rec.resolution_notes,
-        ))
+        state = (
+            await pg_query_one(
+                query,
+                (
+                    buyer_id,
+                    rec.id,
+                    rec.type.value,
+                    rec.severity.value,
+                    rec.confidence.value,
+                    rec.title,
+                    rec.description,
+                    json.dumps([e.to_dict() for e in rec.evidence]),
+                    json.dumps(rec.impact.to_dict()),
+                    json.dumps([a.to_dict() for a in rec.actions]),
+                    json.dumps(rec.affected_creatives),
+                    json.dumps(rec.affected_campaigns),
+                    rec.status,
+                    rec.generated_at,
+                    rec.expires_at,
+                    rec.resolved_at,
+                    rec.resolution_notes,
+                ),
+            )
+            or {}
+        )
+
+        rec.status = str(state.get("status") or rec.status)
+        resolved_at = state.get("resolved_at")
+        if hasattr(resolved_at, "isoformat"):
+            rec.resolved_at = resolved_at.isoformat()
+        elif resolved_at is not None:
+            rec.resolved_at = str(resolved_at)
+        rec.resolution_notes = state.get("resolution_notes")
 
     async def resolve_recommendation(
-        self,
-        rec_id: str,
-        notes: Optional[str] = None
+        self, *, buyer_id: str, rec_id: str, notes: Optional[str] = None
     ) -> bool:
         """Mark a recommendation as resolved."""
         query = """
@@ -376,12 +442,17 @@ class RecommendationEngine:
             SET status = 'resolved',
                 resolved_at = %s,
                 resolution_notes = %s
-            WHERE id = %s
+            WHERE buyer_account_id = %s
+              AND id = %s
         """
 
-        rows = await pg_execute(query, (
-            datetime.now(UTC).isoformat(),
-            notes,
-            rec_id,
-        ))
+        rows = await pg_execute(
+            query,
+            (
+                datetime.now(UTC).isoformat(),
+                notes,
+                buyer_id,
+                rec_id,
+            ),
+        )
         return rows > 0

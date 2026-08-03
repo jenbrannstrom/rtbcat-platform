@@ -79,6 +79,18 @@ RTB_TABLES_SQL = [
     )
     """,
     """
+    CREATE TABLE IF NOT EXISTS rtb_platform_daily (
+        metric_date DATE NOT NULL,
+        buyer_account_id TEXT NOT NULL,
+        platform TEXT NOT NULL,
+        reached_queries BIGINT DEFAULT 0,
+        impressions BIGINT DEFAULT 0,
+        clicks BIGINT DEFAULT 0,
+        spend_micros BIGINT DEFAULT 0,
+        PRIMARY KEY (metric_date, buyer_account_id, platform)
+    )
+    """,
+    """
     CREATE TABLE IF NOT EXISTS rtb_app_daily (
         metric_date TEXT NOT NULL,
         buyer_account_id TEXT NOT NULL,
@@ -143,6 +155,8 @@ RTB_TABLES_SQL = [
     "CREATE INDEX IF NOT EXISTS idx_rtb_funnel_date ON rtb_funnel_daily(metric_date)",
     "CREATE INDEX IF NOT EXISTS idx_rtb_publisher_date ON rtb_publisher_daily(metric_date)",
     "CREATE INDEX IF NOT EXISTS idx_rtb_geo_date ON rtb_geo_daily(metric_date)",
+    "CREATE INDEX IF NOT EXISTS idx_rtb_platform_date_buyer "
+    "ON rtb_platform_daily(metric_date, buyer_account_id)",
     "CREATE INDEX IF NOT EXISTS idx_rtb_app_date ON rtb_app_daily(metric_date)",
     "CREATE INDEX IF NOT EXISTS idx_rtb_app_name ON rtb_app_daily(app_name)",
     "CREATE INDEX IF NOT EXISTS idx_rtb_app_billing ON rtb_app_daily(billing_id)",
@@ -174,7 +188,9 @@ async def refresh_rtb_summaries(
     rtb_daily_table = build_table_ref(
         client, table_env="BIGQUERY_RTB_DAILY_TABLE", default_table="rtb_daily"
     )
-    buyer_clause = " AND buyer_account_id = @buyer_account_id" if buyer_account_id else ""
+    buyer_clause = (
+        " AND buyer_account_id = @buyer_account_id" if buyer_account_id else ""
+    )
     start_date_value = date.fromisoformat(start_date)
     end_date_value = date.fromisoformat(end_date)
     query_timeout_seconds = float(
@@ -218,7 +234,11 @@ async def refresh_rtb_summaries(
             bigquery.ScalarQueryParameter("start_date", "DATE", start_date_value),
             bigquery.ScalarQueryParameter("end_date", "DATE", end_date_value),
             *(
-                [bigquery.ScalarQueryParameter("buyer_account_id", "STRING", buyer_account_id)]
+                [
+                    bigquery.ScalarQueryParameter(
+                        "buyer_account_id", "STRING", buyer_account_id
+                    )
+                ]
                 if buyer_account_id
                 else []
             ),
@@ -245,7 +265,42 @@ async def refresh_rtb_summaries(
             bigquery.ScalarQueryParameter("start_date", "DATE", start_date_value),
             bigquery.ScalarQueryParameter("end_date", "DATE", end_date_value),
             *(
-                [bigquery.ScalarQueryParameter("buyer_account_id", "STRING", buyer_account_id)]
+                [
+                    bigquery.ScalarQueryParameter(
+                        "buyer_account_id", "STRING", buyer_account_id
+                    )
+                ]
+                if buyer_account_id
+                else []
+            ),
+        ],
+    )
+    platform_rows = _run_rtb_query(
+        sql=f"""
+            SELECT
+                metric_date,
+                COALESCE(buyer_account_id, '') AS buyer_account_id,
+                platform,
+                SUM(reached_queries) AS reached_queries,
+                SUM(impressions) AS impressions,
+                SUM(clicks) AS clicks,
+                SUM(spend_micros) AS spend_micros
+            FROM `{rtb_daily_table}`
+            WHERE metric_date BETWEEN @start_date AND @end_date
+              AND report_type = 'buyer_spend'
+              AND platform IS NOT NULL
+              AND platform != ''{buyer_clause}
+            GROUP BY metric_date, COALESCE(buyer_account_id, ''), platform
+        """,
+        params=[
+            bigquery.ScalarQueryParameter("start_date", "DATE", start_date_value),
+            bigquery.ScalarQueryParameter("end_date", "DATE", end_date_value),
+            *(
+                [
+                    bigquery.ScalarQueryParameter(
+                        "buyer_account_id", "STRING", buyer_account_id
+                    )
+                ]
                 if buyer_account_id
                 else []
             ),
@@ -274,7 +329,11 @@ async def refresh_rtb_summaries(
             bigquery.ScalarQueryParameter("start_date", "DATE", start_date_value),
             bigquery.ScalarQueryParameter("end_date", "DATE", end_date_value),
             *(
-                [bigquery.ScalarQueryParameter("buyer_account_id", "STRING", buyer_account_id)]
+                [
+                    bigquery.ScalarQueryParameter(
+                        "buyer_account_id", "STRING", buyer_account_id
+                    )
+                ]
                 if buyer_account_id
                 else []
             ),
@@ -302,7 +361,11 @@ async def refresh_rtb_summaries(
             bigquery.ScalarQueryParameter("start_date", "DATE", start_date_value),
             bigquery.ScalarQueryParameter("end_date", "DATE", end_date_value),
             *(
-                [bigquery.ScalarQueryParameter("buyer_account_id", "STRING", buyer_account_id)]
+                [
+                    bigquery.ScalarQueryParameter(
+                        "buyer_account_id", "STRING", buyer_account_id
+                    )
+                ]
                 if buyer_account_id
                 else []
             ),
@@ -330,7 +393,11 @@ async def refresh_rtb_summaries(
             bigquery.ScalarQueryParameter("start_date", "DATE", start_date_value),
             bigquery.ScalarQueryParameter("end_date", "DATE", end_date_value),
             *(
-                [bigquery.ScalarQueryParameter("buyer_account_id", "STRING", buyer_account_id)]
+                [
+                    bigquery.ScalarQueryParameter(
+                        "buyer_account_id", "STRING", buyer_account_id
+                    )
+                ]
                 if buyer_account_id
                 else []
             ),
@@ -363,7 +430,11 @@ async def refresh_rtb_summaries(
             bigquery.ScalarQueryParameter("start_date", "DATE", start_date_value),
             bigquery.ScalarQueryParameter("end_date", "DATE", end_date_value),
             *(
-                [bigquery.ScalarQueryParameter("buyer_account_id", "STRING", buyer_account_id)]
+                [
+                    bigquery.ScalarQueryParameter(
+                        "buyer_account_id", "STRING", buyer_account_id
+                    )
+                ]
                 if buyer_account_id
                 else []
             ),
@@ -394,7 +465,11 @@ async def refresh_rtb_summaries(
             bigquery.ScalarQueryParameter("start_date", "DATE", start_date_value),
             bigquery.ScalarQueryParameter("end_date", "DATE", end_date_value),
             *(
-                [bigquery.ScalarQueryParameter("buyer_account_id", "STRING", buyer_account_id)]
+                [
+                    bigquery.ScalarQueryParameter(
+                        "buyer_account_id", "STRING", buyer_account_id
+                    )
+                ]
                 if buyer_account_id
                 else []
             ),
@@ -428,7 +503,11 @@ async def refresh_rtb_summaries(
             bigquery.ScalarQueryParameter("start_date", "DATE", start_date_value),
             bigquery.ScalarQueryParameter("end_date", "DATE", end_date_value),
             *(
-                [bigquery.ScalarQueryParameter("buyer_account_id", "STRING", buyer_account_id)]
+                [
+                    bigquery.ScalarQueryParameter(
+                        "buyer_account_id", "STRING", buyer_account_id
+                    )
+                ]
                 if buyer_account_id
                 else []
             ),
@@ -451,6 +530,7 @@ async def refresh_rtb_summaries(
         for table in (
             "rtb_funnel_daily",
             "rtb_buyer_spend_daily",
+            "rtb_platform_daily",
             "rtb_publisher_daily",
             "rtb_geo_daily",
             "rtb_app_daily",
@@ -502,6 +582,26 @@ async def refresh_rtb_summaries(
                     row.spend_micros or 0,
                 )
                 for row in buyer_spend_rows
+            ],
+        )
+        execute_many(
+            conn,
+            sql=(
+                "INSERT INTO rtb_platform_daily "
+                "(metric_date, buyer_account_id, platform, reached_queries, impressions, "
+                "clicks, spend_micros) VALUES (%s, %s, %s, %s, %s, %s, %s)"
+            ),
+            rows=[
+                (
+                    _format_date(row.metric_date),
+                    row.buyer_account_id,
+                    row.platform,
+                    row.reached_queries or 0,
+                    row.impressions or 0,
+                    row.clicks or 0,
+                    row.spend_micros or 0,
+                )
+                for row in platform_rows
             ],
         )
         execute_many(
@@ -664,6 +764,7 @@ async def refresh_rtb_summaries(
             "row_counts": {
                 "rtb_funnel_daily": len(funnel_rows),
                 "rtb_buyer_spend_daily": len(buyer_spend_rows),
+                "rtb_platform_daily": len(platform_rows),
                 "rtb_publisher_daily": len(publisher_rows),
                 "rtb_geo_daily": len(geo_rows),
                 "rtb_app_daily": len(app_rows),
@@ -673,7 +774,9 @@ async def refresh_rtb_summaries(
             },
         }
 
-    async def _record_run_rows(status: str, row_counts: dict[str, int], error_text: Optional[str]) -> None:
+    async def _record_run_rows(
+        status: str, row_counts: dict[str, int], error_text: Optional[str]
+    ) -> None:
         def _write(conn):
             for table_name, row_count in row_counts.items():
                 record_refresh_run_postgres(
@@ -701,7 +804,9 @@ async def refresh_rtb_summaries(
     try:
         result = await pg_transaction_async(_run)
     except Exception as exc:
-        await _record_run_rows(status="failed", row_counts={"__all__": 0}, error_text=str(exc))
+        await _record_run_rows(
+            status="failed", row_counts={"__all__": 0}, error_text=str(exc)
+        )
         raise
 
     row_counts = result.pop("row_counts", {})
