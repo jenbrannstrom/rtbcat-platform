@@ -329,6 +329,30 @@ CREATE TABLE IF NOT EXISTS rtb_geo_daily (
     PRIMARY KEY (metric_date, buyer_account_id, country)
 );
 
+CREATE TABLE IF NOT EXISTS rtb_buyer_spend_daily (
+    metric_date DATE NOT NULL,
+    buyer_account_id TEXT NOT NULL,
+    reached_queries BIGINT DEFAULT 0,
+    impressions BIGINT DEFAULT 0,
+    clicks BIGINT DEFAULT 0,
+    spend_micros BIGINT DEFAULT 0,
+    PRIMARY KEY (metric_date, buyer_account_id)
+);
+
+CREATE TABLE IF NOT EXISTS rtb_platform_daily (
+    metric_date DATE NOT NULL,
+    buyer_account_id TEXT NOT NULL,
+    platform TEXT NOT NULL,
+    reached_queries BIGINT DEFAULT 0,
+    impressions BIGINT DEFAULT 0,
+    clicks BIGINT DEFAULT 0,
+    spend_micros BIGINT DEFAULT 0,
+    PRIMARY KEY (metric_date, buyer_account_id, platform)
+);
+
+CREATE INDEX IF NOT EXISTS idx_rtb_platform_date_buyer
+    ON rtb_platform_daily(metric_date, buyer_account_id);
+
 CREATE TABLE IF NOT EXISTS rtb_app_daily (
     metric_date DATE NOT NULL,
     buyer_account_id TEXT NOT NULL,
@@ -436,7 +460,8 @@ CREATE TABLE IF NOT EXISTS campaign_daily_summary (
 );
 
 CREATE TABLE IF NOT EXISTS recommendations (
-    id TEXT PRIMARY KEY,
+    buyer_account_id TEXT NOT NULL,
+    id TEXT NOT NULL,
     type TEXT NOT NULL,
     severity TEXT NOT NULL,
     confidence TEXT NOT NULL,
@@ -451,8 +476,12 @@ CREATE TABLE IF NOT EXISTS recommendations (
     generated_at TIMESTAMPTZ DEFAULT NOW(),
     expires_at TIMESTAMPTZ,
     resolved_at TIMESTAMPTZ,
-    resolution_notes TEXT
+    resolution_notes TEXT,
+    PRIMARY KEY (buyer_account_id, id)
 );
+
+CREATE INDEX IF NOT EXISTS idx_recommendations_buyer_status
+    ON recommendations(buyer_account_id, status);
 
 -- ============================================================================
 -- IMPORT AND ANOMALY TRACKING

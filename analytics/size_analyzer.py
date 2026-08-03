@@ -14,7 +14,7 @@ Related modules:
 Usage:
     >>> from analytics.size_analyzer import SizeAnalyzer
     >>> analyzer = SizeAnalyzer()
-    >>> recommendations = await analyzer.analyze(days=7)
+    >>> recommendations = await analyzer.analyze(buyer_id="123", days=7)
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ from __future__ import annotations
 import logging
 import re
 import uuid
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Optional
 
 from analytics.recommendation_engine import (
@@ -33,12 +33,10 @@ from analytics.recommendation_engine import (
     Recommendation,
     RecommendationType,
     Severity,
-    severity_from_waste_rate,
 )
 from storage.serving_database import db_query
 from utils.size_normalization import (
     IAB_STANDARD_SIZES,
-    canonical_size_with_tolerance,
     get_size_category,
 )
 
@@ -64,7 +62,7 @@ class SizeAnalyzer:
     def __init__(self, db_store: object | None = None):
         self._store = db_store
 
-    async def analyze(self, days: int = 7) -> list[Recommendation]:
+    async def analyze(self, *, buyer_id: str, days: int = 7) -> list[Recommendation]:
         """
         Run size mismatch analysis and generate recommendations.
 
@@ -76,86 +74,86 @@ class SizeAnalyzer:
         """
         recommendations: list[Recommendation] = []
 
-        try:
-            # Get creative inventory by size
-            inventory = await self._get_inventory_by_size()
+        inventory = await self._get_inventory_by_size(buyer_id=buyer_id, days=days)
+        traffic = await self._get_traffic_by_size(buyer_id=buyer_id, days=days)
 
-            # Get traffic data by size
-            traffic = await self._get_traffic_by_size(days)
+        if not traffic:
+            logger.info("No buyer-scoped traffic data available for size analysis")
+            return recommendations
 
-            if not traffic:
-                logger.warning("No traffic data available for size analysis")
-                return recommendations
+        total_requests = sum(t["count"] for t in traffic.values())
+        total_waste = 0
 
-            # Calculate totals for context
-            total_requests = sum(t["count"] for t in traffic.values())
-            total_waste = 0
+        for size, traffic_data in traffic.items():
+            request_count = traffic_data["count"]
+            creative_count = inventory.get(size, {"count": 0})["count"]
 
-            # Find gaps: sizes with traffic but no creatives
-            for size, traffic_data in traffic.items():
-                request_count = traffic_data["count"]
-                inv_data = inventory.get(size, {"count": 0})
-                creative_count = inv_data["count"]
+            if creative_count == 0 and request_count > 0:
+                total_waste += request_count
+                rec = self._create_size_recommendation(
+                    canonical_size=size,
+                    request_count=request_count,
+                    total_requests=total_requests,
+                    days=days,
+                )
+                if rec:
+                    recommendations.append(rec)
 
-                # Only analyze gaps (have traffic, no creatives)
-                if creative_count == 0 and request_count > 0:
-                    total_waste += request_count
-
-                    rec = self._create_size_recommendation(
-                        canonical_size=size,
-                        request_count=request_count,
-                        total_requests=total_requests,
-                        days=days,
-                    )
-                    if rec:
-                        recommendations.append(rec)
-
-            logger.info(
-                f"Size analysis: {len(recommendations)} recommendations from "
-                f"{len(traffic)} sizes, {total_waste:,} wasted of {total_requests:,} total"
-            )
-
-        except Exception as e:
-            logger.error(f"Size analysis failed: {e}")
+        logger.info(
+            "Size analysis for buyer_id=%s: %d recommendations from %d sizes, "
+            "%d wasted of %d total",
+            buyer_id,
+            len(recommendations),
+            len(traffic),
+            total_waste,
+            total_requests,
+        )
 
         return recommendations
 
-    async def _get_inventory_by_size(self) -> dict[str, dict]:
-        """Get creative inventory grouped by canonical size."""
-        rows = await db_query("""
-            SELECT canonical_size, COUNT(*) as count, format
-            FROM creatives
-            WHERE canonical_size IS NOT NULL
-            GROUP BY canonical_size, format
-        """)
+    async def _get_inventory_by_size(
+        self, *, buyer_id: str, days: int
+    ) -> dict[str, dict]:
+        """Get observed buyer creative inventory grouped by canonical size."""
+        rows = await db_query(
+            """
+            SELECT creative_size AS canonical_size,
+                   COUNT(DISTINCT creative_id) AS count
+            FROM config_creative_daily
+            WHERE buyer_account_id = ?
+              AND metric_date >= date('now', ?)
+              AND creative_size IS NOT NULL
+              AND creative_size != ''
+            GROUP BY creative_size
+        """,
+            (buyer_id, f"-{days} days"),
+        )
 
         inventory: dict[str, dict] = {}
         for row in rows:
             size = row["canonical_size"]
-            if size not in inventory:
-                inventory[size] = {"count": 0, "formats": {}}
-            inventory[size]["count"] += row["count"]
-            fmt = row["format"] or "UNKNOWN"
-            inventory[size]["formats"][fmt] = row["count"]
+            inventory[size] = {"count": row["count"] or 0}
 
         return inventory
 
-    async def _get_traffic_by_size(self, days: int) -> dict[str, dict]:
-        """
-        Get RTB traffic data grouped by canonical size.
-
-        Uses performance_metrics table to aggregate queries by size.
-        """
-        rows = await db_query("""
+    async def _get_traffic_by_size(
+        self, *, buyer_id: str, days: int
+    ) -> dict[str, dict]:
+        """Get buyer-scoped RTB traffic grouped by canonical size."""
+        rows = await db_query(
+            """
             SELECT
-                c.canonical_size,
-                COALESCE(SUM(pm.reached_queries), 0) as request_count
-            FROM performance_metrics pm
-            JOIN creatives c ON pm.creative_id = c.id
-            WHERE pm.metric_date >= date('now', ?)
-              AND c.canonical_size IS NOT NULL
-            GROUP BY c.canonical_size
-        """, (f"-{days} days",))
+                creative_size AS canonical_size,
+                COALESCE(SUM(reached_queries), 0) AS request_count
+            FROM config_size_daily
+            WHERE buyer_account_id = ?
+              AND metric_date >= date('now', ?)
+              AND creative_size IS NOT NULL
+              AND creative_size != ''
+            GROUP BY creative_size
+        """,
+            (buyer_id, f"-{days} days"),
+        )
 
         traffic: dict[str, dict] = {}
         for row in rows:
@@ -197,7 +195,10 @@ class SizeAnalyzer:
 
         # Determine recommendation type and severity
         closest_iab = self._find_closest_iab_size(canonical_size)
-        is_near_iab = closest_iab is not None and get_size_category(canonical_size) == "Non-Standard"
+        is_near_iab = (
+            closest_iab is not None
+            and get_size_category(canonical_size) == "Non-Standard"
+        )
 
         # Build evidence
         evidence = [
@@ -205,7 +206,9 @@ class SizeAnalyzer:
                 metric_name="daily_requests",
                 metric_value=daily_requests,
                 threshold=MEDIUM_VOLUME_THRESHOLD,
-                comparison="above" if daily_requests >= MEDIUM_VOLUME_THRESHOLD else "below",
+                comparison="above"
+                if daily_requests >= MEDIUM_VOLUME_THRESHOLD
+                else "below",
                 time_period_days=days,
                 sample_size=request_count,
                 trend=None,  # Could compute if we have historical data
@@ -319,7 +322,7 @@ class SizeAnalyzer:
             actions=[action],
             affected_creatives=[],
             affected_campaigns=[],
-            expires_at=(datetime.utcnow() + timedelta(days=7)).isoformat(),
+            expires_at=(datetime.now(UTC) + timedelta(days=7)).isoformat(),
         )
 
     def _find_closest_iab_size(

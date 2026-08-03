@@ -12,9 +12,7 @@ from __future__ import annotations
 
 import logging
 import uuid
-from datetime import datetime, timedelta
-from typing import Optional
-
+from datetime import UTC, datetime, timedelta
 from analytics.recommendation_engine import (
     Action,
     Confidence,
@@ -50,7 +48,7 @@ class CreativeAnalyzer:
     def __init__(self, db_store: object | None = None):
         self._store = db_store
 
-    async def analyze(self, days: int = 7) -> list[Recommendation]:
+    async def analyze(self, *, buyer_id: str, days: int = 7) -> list[Recommendation]:
         """
         Run creative health analysis and generate recommendations.
 
@@ -61,58 +59,66 @@ class CreativeAnalyzer:
             List of Recommendation objects for creative issues
         """
         recommendations: list[Recommendation] = []
+        recommendations.extend(
+            await self._check_low_ctr_creatives(buyer_id=buyer_id, days=days)
+        )
+        recommendations.extend(
+            await self._check_zero_engagement(buyer_id=buyer_id, days=days)
+        )
 
-        try:
-            # Check for creatives with very low CTR compared to average
-            low_ctr_recs = await self._check_low_ctr_creatives(days)
-            recommendations.extend(low_ctr_recs)
-
-            # Check for zero engagement (if any exist)
-            zero_engagement_recs = await self._check_zero_engagement(days)
-            recommendations.extend(zero_engagement_recs)
-
-            # Check disapproved creatives
-            disapproved_recs = await self._check_disapproved(days)
-            recommendations.extend(disapproved_recs)
-
-            # Note: _check_broken_videos and _check_low_win_rate
-            # require reached_queries data which may not be available
-
-            logger.info(f"Creative analysis: {len(recommendations)} recommendations")
-
-        except Exception as e:
-            logger.error(f"Creative analysis failed: {e}")
+        logger.info(
+            "Creative analysis for buyer_id=%s: %d recommendations",
+            buyer_id,
+            len(recommendations),
+        )
 
         return recommendations
 
-    async def _check_low_ctr_creatives(self, days: int) -> list[Recommendation]:
+    async def _check_low_ctr_creatives(
+        self, *, buyer_id: str, days: int
+    ) -> list[Recommendation]:
         """Check for creatives with CTR significantly below average."""
         recommendations: list[Recommendation] = []
 
-        totals = await db_query_one("""
+        totals = (
+            await db_query_one(
+                """
             SELECT
                 COALESCE(SUM(impressions), 0) as total_impressions,
                 COALESCE(SUM(clicks), 0) as total_clicks
-            FROM performance_metrics
-            WHERE metric_date >= date('now', ?)
-        """, (f"-{days} days",)) or {}
+            FROM rtb_buyer_spend_daily
+            WHERE buyer_account_id = ?
+              AND metric_date >= date('now', ?)
+        """,
+                (buyer_id, f"-{days} days"),
+            )
+            or {}
+        )
         total_imps = totals.get("total_impressions", 0) or 1
         total_clicks = totals.get("total_clicks", 0) or 0
         avg_ctr = total_clicks / total_imps if total_imps > 0 else 0
 
-        results = await db_query("""
+        results = await db_query(
+            """
             SELECT
-                c.id,
-                COALESCE(SUM(pm.impressions), 0) as impressions,
-                COALESCE(SUM(pm.clicks), 0) as clicks,
-                COALESCE(SUM(pm.spend_micros), 0) as spend_micros
-            FROM creatives c
-            JOIN performance_metrics pm ON c.id = pm.creative_id
-            WHERE pm.metric_date >= date('now', ?)
-            GROUP BY c.id
-            HAVING COALESCE(SUM(pm.impressions), 0) > ?
-               AND COALESCE(SUM(pm.spend_micros), 0) > ?
-        """, (f"-{days} days", MIN_IMPRESSIONS_FOR_ANALYSIS, MIN_SPEND_FOR_REVIEW * 1_000_000))
+                creative_id AS id,
+                COALESCE(SUM(impressions), 0) AS impressions,
+                COALESCE(SUM(clicks), 0) AS clicks,
+                COALESCE(SUM(spend_micros), 0) AS spend_micros
+            FROM rtb_app_creative_daily
+            WHERE buyer_account_id = ?
+              AND metric_date >= date('now', ?)
+            GROUP BY creative_id
+            HAVING COALESCE(SUM(impressions), 0) > ?
+               AND COALESCE(SUM(spend_micros), 0) > ?
+        """,
+            (
+                buyer_id,
+                f"-{days} days",
+                MIN_IMPRESSIONS_FOR_ANALYSIS,
+                MIN_SPEND_FOR_REVIEW * 1_000_000,
+            ),
+        )
 
         for row in results:
             creative_id = row["id"]
@@ -130,10 +136,12 @@ class CreativeAnalyzer:
                     id=f"low-ctr-creative-{creative_id}-{uuid.uuid4().hex[:8]}",
                     type=RecommendationType.CREATIVE_REVIEW,
                     severity=severity,
-                    confidence=Confidence.HIGH if impressions > 10000 else Confidence.MEDIUM,
+                    confidence=Confidence.HIGH
+                    if impressions > 10000
+                    else Confidence.MEDIUM,
                     title=f"Underperforming creative #{creative_id}",
                     description=(
-                        f"Creative #{creative_id} has {ctr*100:.2f}% CTR vs {avg_ctr*100:.2f}% average. "
+                        f"Creative #{creative_id} has {ctr * 100:.2f}% CTR vs {avg_ctr * 100:.2f}% average. "
                         f"Spent ${spend_usd:.2f} on {impressions:,} impressions with only {clicks:,} clicks. "
                         f"Review creative quality or pause to reduce waste."
                     ),
@@ -179,30 +187,35 @@ class CreativeAnalyzer:
                         ),
                     ],
                     affected_creatives=[str(creative_id)],
-                    expires_at=(datetime.utcnow() + timedelta(days=7)).isoformat(),
+                    expires_at=(datetime.now(UTC) + timedelta(days=7)).isoformat(),
                 )
                 recommendations.append(rec)
 
         return recommendations
 
-    async def _check_broken_videos(self, days: int) -> list[Recommendation]:
+    async def _check_broken_videos(
+        self, *, buyer_id: str, days: int
+    ) -> list[Recommendation]:
         """Check for video creatives that may be broken."""
         recommendations: list[Recommendation] = []
 
-        results = await db_query("""
+        results = await db_query(
+            """
             SELECT
-                c.id,
-                COALESCE(SUM(pm.reached_queries), 0) as queries,
-                COALESCE(SUM(pm.impressions), 0) as impressions,
-                COALESCE(SUM(pm.spend_micros), 0) as spend_micros
-            FROM creatives c
-            LEFT JOIN performance_metrics pm ON c.id = pm.creative_id
-                AND pm.metric_date >= date('now', ?)
-            WHERE c.format = 'VIDEO'
-            GROUP BY c.id
-            HAVING COALESCE(SUM(pm.reached_queries), 0) > 10000
-               AND COALESCE(SUM(pm.impressions), 0) = 0
-        """, (f"-{days} days",))
+                creative_id AS id,
+                COALESCE(SUM(reached_queries), 0) AS queries,
+                COALESCE(SUM(impressions), 0) AS impressions,
+                COALESCE(SUM(spend_micros), 0) AS spend_micros
+            FROM rtb_app_creative_daily
+            WHERE buyer_account_id = ?
+              AND metric_date >= date('now', ?)
+              AND UPPER(COALESCE(creative_format, '')) = 'VIDEO'
+            GROUP BY creative_id
+            HAVING COALESCE(SUM(reached_queries), 0) > 10000
+               AND COALESCE(SUM(impressions), 0) = 0
+        """,
+            (buyer_id, f"-{days} days"),
+        )
 
         for row in results:
             creative_id = row["id"]
@@ -262,29 +275,34 @@ class CreativeAnalyzer:
                     ),
                 ],
                 affected_creatives=[str(creative_id)],
-                expires_at=(datetime.utcnow() + timedelta(days=3)).isoformat(),
+                expires_at=(datetime.now(UTC) + timedelta(days=3)).isoformat(),
             )
             recommendations.append(rec)
 
         return recommendations
 
-    async def _check_zero_engagement(self, days: int) -> list[Recommendation]:
+    async def _check_zero_engagement(
+        self, *, buyer_id: str, days: int
+    ) -> list[Recommendation]:
         """Check for creatives with impressions but zero clicks."""
         recommendations: list[Recommendation] = []
 
-        results = await db_query("""
+        results = await db_query(
+            """
             SELECT
-                c.id,
-                COALESCE(SUM(pm.impressions), 0) as impressions,
-                COALESCE(SUM(pm.clicks), 0) as clicks,
-                COALESCE(SUM(pm.spend_micros), 0) as spend_micros
-            FROM creatives c
-            LEFT JOIN performance_metrics pm ON c.id = pm.creative_id
-                AND pm.metric_date >= date('now', ?)
-            GROUP BY c.id
-            HAVING COALESCE(SUM(pm.impressions), 0) > ?
-               AND COALESCE(SUM(pm.clicks), 0) = 0
-        """, (f"-{days} days", MIN_IMPRESSIONS_FOR_ANALYSIS))
+                creative_id AS id,
+                COALESCE(SUM(impressions), 0) AS impressions,
+                COALESCE(SUM(clicks), 0) AS clicks,
+                COALESCE(SUM(spend_micros), 0) AS spend_micros
+            FROM rtb_app_creative_daily
+            WHERE buyer_account_id = ?
+              AND metric_date >= date('now', ?)
+            GROUP BY creative_id
+            HAVING COALESCE(SUM(impressions), 0) > ?
+               AND COALESCE(SUM(clicks), 0) = 0
+        """,
+            (buyer_id, f"-{days} days", MIN_IMPRESSIONS_FOR_ANALYSIS),
+        )
 
         for row in results:
             creative_id = row["id"]
@@ -354,30 +372,36 @@ class CreativeAnalyzer:
                     ),
                 ],
                 affected_creatives=[str(creative_id)],
-                expires_at=(datetime.utcnow() + timedelta(days=7)).isoformat(),
+                expires_at=(datetime.now(UTC) + timedelta(days=7)).isoformat(),
             )
             recommendations.append(rec)
 
         return recommendations
 
-    async def _check_low_win_rate(self, days: int) -> list[Recommendation]:
+    async def _check_low_win_rate(
+        self, *, buyer_id: str, days: int
+    ) -> list[Recommendation]:
         """Check for creatives with very low win rates."""
         recommendations: list[Recommendation] = []
 
-        results = await db_query("""
+        results = await db_query(
+            """
             SELECT
-                c.id,
-                COALESCE(SUM(pm.reached_queries), 0) as queries,
-                COALESCE(SUM(pm.impressions), 0) as impressions,
-                COALESCE(SUM(pm.spend_micros), 0) as spend_micros
-            FROM creatives c
-            LEFT JOIN performance_metrics pm ON c.id = pm.creative_id
-                AND pm.metric_date >= date('now', ?)
-            GROUP BY c.id
-            HAVING COALESCE(SUM(pm.reached_queries), 0) > 50000
-               AND COALESCE(SUM(pm.impressions), 0) > 0
-               AND CAST(COALESCE(SUM(pm.impressions), 0) AS FLOAT) / COALESCE(SUM(pm.reached_queries), 0) < ?
-        """, (f"-{days} days", LOW_WIN_RATE_THRESHOLD))
+                creative_id AS id,
+                COALESCE(SUM(reached_queries), 0) AS queries,
+                COALESCE(SUM(impressions), 0) AS impressions,
+                COALESCE(SUM(spend_micros), 0) AS spend_micros
+            FROM rtb_app_creative_daily
+            WHERE buyer_account_id = ?
+              AND metric_date >= date('now', ?)
+            GROUP BY creative_id
+            HAVING COALESCE(SUM(reached_queries), 0) > 50000
+               AND COALESCE(SUM(impressions), 0) > 0
+               AND CAST(COALESCE(SUM(impressions), 0) AS FLOAT)
+                   / COALESCE(SUM(reached_queries), 0) < ?
+        """,
+            (buyer_id, f"-{days} days", LOW_WIN_RATE_THRESHOLD),
+        )
 
         for row in results:
             creative_id = row["id"]
@@ -393,7 +417,7 @@ class CreativeAnalyzer:
                 confidence=Confidence.MEDIUM,
                 title=f"Low win rate for creative #{creative_id}",
                 description=(
-                    f"Creative #{creative_id} has a {win_rate*100:.2f}% win rate "
+                    f"Creative #{creative_id} has a {win_rate * 100:.2f}% win rate "
                     f"({impressions:,} wins from {queries:,} queries). This may indicate "
                     f"bid strategy issues, poor floor price competitiveness, or creative quality problems."
                 ),
@@ -424,90 +448,7 @@ class CreativeAnalyzer:
                     ),
                 ],
                 affected_creatives=[str(creative_id)],
-                expires_at=(datetime.utcnow() + timedelta(days=7)).isoformat(),
-            )
-            recommendations.append(rec)
-
-        return recommendations
-
-    async def _check_disapproved(self, days: int) -> list[Recommendation]:
-        """Check for disapproved creatives still receiving traffic."""
-        recommendations: list[Recommendation] = []
-
-        results = await db_query("""
-            SELECT
-                c.id,
-                c.approval_status,
-                COALESCE(SUM(pm.reached_queries), 0) as queries
-            FROM creatives c
-            LEFT JOIN performance_metrics pm ON c.id = pm.creative_id
-                AND pm.metric_date >= date('now', ?)
-            WHERE c.approval_status IS NOT NULL
-                AND c.approval_status != 'APPROVED'
-            GROUP BY c.id, c.approval_status
-            HAVING COALESCE(SUM(pm.reached_queries), 0) > 0
-        """, (f"-{days} days",))
-
-        for row in results:
-            creative_id = row["id"]
-            approval_status = row["approval_status"]
-            queries = row["queries"]
-            daily_queries = queries / days
-
-            rec = Recommendation(
-                id=f"disapproved-{creative_id}-{uuid.uuid4().hex[:8]}",
-                type=RecommendationType.CREATIVE_PAUSE,
-                severity=Severity.CRITICAL,
-                confidence=Confidence.HIGH,
-                title=f"Disapproved creative #{creative_id} receiving traffic",
-                description=(
-                    f"Creative #{creative_id} has status '{approval_status}' but is still "
-                    f"receiving {queries:,} queries. These queries are wasted since the "
-                    f"creative cannot win auctions. Pause immediately."
-                ),
-                evidence=[
-                    Evidence(
-                        metric_name="approval_status",
-                        metric_value=0,  # Not applicable
-                        threshold=1,
-                        comparison="below",
-                        time_period_days=days,
-                        sample_size=1,
-                    ),
-                    Evidence(
-                        metric_name="queries",
-                        metric_value=queries,
-                        threshold=0,
-                        comparison="above",
-                        time_period_days=days,
-                        sample_size=queries,
-                    ),
-                ],
-                impact=Impact(
-                    wasted_qps=daily_queries / SECONDS_PER_DAY,
-                    wasted_queries_daily=int(daily_queries),
-                    wasted_spend_usd=0,
-                    percent_of_total_waste=0,
-                    potential_savings_monthly=daily_queries * 30 * 0.002 / 1000,
-                ),
-                actions=[
-                    Action(
-                        action_type="pause",
-                        target_type="creative",
-                        target_id=str(creative_id),
-                        target_name=f"Creative #{creative_id}",
-                        api_example=f"Pause creative {creative_id} immediately",
-                    ),
-                    Action(
-                        action_type="review",
-                        target_type="creative",
-                        target_id=str(creative_id),
-                        target_name=f"Creative #{creative_id}",
-                        api_example="Fix disapproval reason and resubmit for approval",
-                    ),
-                ],
-                affected_creatives=[str(creative_id)],
-                expires_at=(datetime.utcnow() + timedelta(days=1)).isoformat(),
+                expires_at=(datetime.now(UTC) + timedelta(days=7)).isoformat(),
             )
             recommendations.append(rec)
 

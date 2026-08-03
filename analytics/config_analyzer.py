@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import logging
 import uuid
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 from analytics.recommendation_engine import (
     Action,
@@ -48,7 +48,7 @@ class ConfigAnalyzer:
     def __init__(self, db_store: object | None = None):
         self._store = db_store
 
-    async def analyze(self, days: int = 7) -> list[Recommendation]:
+    async def analyze(self, *, buyer_id: str, days: int = 7) -> list[Recommendation]:
         """
         Run configuration efficiency analysis and generate recommendations.
 
@@ -59,39 +59,44 @@ class ConfigAnalyzer:
             List of Recommendation objects for config-related issues
         """
         recommendations: list[Recommendation] = []
-
-        try:
-            # Check overall waste rate
-            overall_recs = await self._check_overall_waste_rate(days)
-            recommendations.extend(overall_recs)
-
-            # Check format coverage
-            format_recs = await self._check_format_coverage(days)
-            recommendations.extend(format_recs)
-
-            # Check device type efficiency
-            device_recs = await self._check_device_efficiency(days)
-            recommendations.extend(device_recs)
-
-            logger.info(f"Config analysis: {len(recommendations)} recommendations")
-
-        except Exception as e:
-            logger.error(f"Config analysis failed: {e}")
+        recommendations.extend(
+            await self._check_overall_waste_rate(buyer_id=buyer_id, days=days)
+        )
+        recommendations.extend(
+            await self._check_format_coverage(buyer_id=buyer_id, days=days)
+        )
+        recommendations.extend(
+            await self._check_device_efficiency(buyer_id=buyer_id, days=days)
+        )
+        logger.info(
+            "Config analysis for buyer_id=%s: %d recommendations",
+            buyer_id,
+            len(recommendations),
+        )
 
         return recommendations
 
-    async def _check_overall_waste_rate(self, days: int) -> list[Recommendation]:
+    async def _check_overall_waste_rate(
+        self, *, buyer_id: str, days: int
+    ) -> list[Recommendation]:
         """Check if overall query-to-impression rate is too low."""
         recommendations: list[Recommendation] = []
 
-        result = await db_query_one("""
+        result = (
+            await db_query_one(
+                """
             SELECT
                 COALESCE(SUM(reached_queries), 0) as total_queries,
                 COALESCE(SUM(impressions), 0) as total_impressions,
                 COALESCE(SUM(spend_micros), 0) as total_spend_micros
-            FROM performance_metrics
-            WHERE metric_date >= date('now', ?)
-        """, (f"-{days} days",)) or {}
+            FROM rtb_buyer_spend_daily
+            WHERE buyer_account_id = ?
+              AND metric_date >= date('now', ?)
+        """,
+                (buyer_id, f"-{days} days"),
+            )
+            or {}
+        )
 
         total_queries = result.get("total_queries", 0) or 0
         total_impressions = result.get("total_impressions", 0) or 0
@@ -110,10 +115,10 @@ class ConfigAnalyzer:
                 type=RecommendationType.CONFIG_INEFFICIENCY,
                 severity=Severity.HIGH if waste_rate > 0.90 else Severity.MEDIUM,
                 confidence=Confidence.HIGH,
-                title=f"High overall waste rate: {waste_rate*100:.1f}%",
+                title=f"High overall waste rate: {waste_rate * 100:.1f}%",
                 description=(
                     f"Your pretargeting configuration is receiving {total_queries:,} queries "
-                    f"but only winning {total_impressions:,} impressions ({waste_rate*100:.1f}% waste). "
+                    f"but only winning {total_impressions:,} impressions ({waste_rate * 100:.1f}% waste). "
                     f"This suggests overly broad targeting. Consider tightening geo, device, "
                     f"or publisher targeting to reduce wasted QPS."
                 ),
@@ -154,35 +159,34 @@ class ConfigAnalyzer:
                 ],
                 affected_creatives=[],
                 affected_campaigns=[],
-                expires_at=(datetime.utcnow() + timedelta(days=7)).isoformat(),
+                expires_at=(datetime.now(UTC) + timedelta(days=7)).isoformat(),
             )
             recommendations.append(rec)
 
         return recommendations
 
-    async def _check_format_coverage(self, days: int) -> list[Recommendation]:
+    async def _check_format_coverage(
+        self, *, buyer_id: str, days: int
+    ) -> list[Recommendation]:
         """Check for format mismatches between traffic and inventory."""
         recommendations: list[Recommendation] = []
 
-        available_rows = await db_query("""
-            SELECT DISTINCT format
-            FROM creatives
-            WHERE format IS NOT NULL
-        """)
-        available_formats = {row["format"] for row in available_rows if row.get("format")}
-
-        results = await db_query("""
+        results = await db_query(
+            """
             SELECT
-                c.format,
-                COALESCE(SUM(pm.reached_queries), 0) as queries,
-                COALESCE(SUM(pm.impressions), 0) as impressions,
-                COUNT(DISTINCT c.id) as creative_count
-            FROM creatives c
-            LEFT JOIN performance_metrics pm ON c.id = pm.creative_id
-                AND pm.metric_date >= date('now', ?)
-            WHERE c.format IS NOT NULL
-            GROUP BY c.format
-        """, (f"-{days} days",))
+                creative_format AS format,
+                COALESCE(SUM(reached_queries), 0) AS queries,
+                COALESCE(SUM(impressions), 0) AS impressions,
+                COUNT(DISTINCT creative_id) AS creative_count
+            FROM rtb_app_creative_daily
+            WHERE buyer_account_id = ?
+              AND metric_date >= date('now', ?)
+              AND creative_format IS NOT NULL
+              AND creative_format != ''
+            GROUP BY creative_format
+        """,
+            (buyer_id, f"-{days} days"),
+        )
 
         results = [
             {
@@ -216,7 +220,7 @@ class ConfigAnalyzer:
                     title=f"Low coverage for {fmt} format",
                     description=(
                         f"Format '{fmt}' has only {creative_count} creative(s) but receives "
-                        f"{queries:,} queries ({win_rate*100:.1f}% win rate). "
+                        f"{queries:,} queries ({win_rate * 100:.1f}% win rate). "
                         f"Either add more {fmt} creatives or exclude this format from targeting."
                     ),
                     evidence=[
@@ -263,30 +267,35 @@ class ConfigAnalyzer:
                     ],
                     affected_creatives=[],
                     affected_campaigns=[],
-                    expires_at=(datetime.utcnow() + timedelta(days=14)).isoformat(),
+                    expires_at=(datetime.now(UTC) + timedelta(days=14)).isoformat(),
                 )
                 recommendations.append(rec)
 
         return recommendations
 
-    async def _check_device_efficiency(self, days: int) -> list[Recommendation]:
+    async def _check_device_efficiency(
+        self, *, buyer_id: str, days: int
+    ) -> list[Recommendation]:
         """Check for device types with poor performance."""
         recommendations: list[Recommendation] = []
 
-        results = await db_query("""
+        results = await db_query(
+            """
             SELECT
-                pm.device_type,
-                COALESCE(SUM(pm.reached_queries), 0) as queries,
-                COALESCE(SUM(pm.impressions), 0) as impressions,
-                COALESCE(SUM(pm.clicks), 0) as clicks,
-                COALESCE(SUM(pm.spend_micros), 0) as spend_micros
-            FROM performance_metrics pm
-            WHERE pm.metric_date >= date('now', ?)
-              AND pm.device_type IS NOT NULL
-              AND pm.device_type != ''
-            GROUP BY pm.device_type
-            HAVING COALESCE(SUM(pm.reached_queries), 0) > ?
-        """, (f"-{days} days", MIN_QUERIES_FOR_ANALYSIS))
+                platform AS device_type,
+                COALESCE(SUM(reached_queries), 0) AS queries,
+                COALESCE(SUM(impressions), 0) AS impressions,
+                COALESCE(SUM(clicks), 0) AS clicks,
+                COALESCE(SUM(spend_micros), 0) AS spend_micros
+            FROM rtb_platform_daily
+            WHERE buyer_account_id = ?
+              AND metric_date >= date('now', ?)
+              AND platform != ''
+            GROUP BY platform
+            HAVING COALESCE(SUM(reached_queries), 0) > ?
+        """,
+            (buyer_id, f"-{days} days", MIN_QUERIES_FOR_ANALYSIS),
+        )
 
         for row in results:
             device = row["device_type"]
@@ -309,8 +318,8 @@ class ConfigAnalyzer:
                     confidence=Confidence.MEDIUM,
                     title=f"Poor performance on {device}",
                     description=(
-                        f"Device type '{device}' has a {win_rate*100:.1f}% win rate and "
-                        f"{ctr*100:.3f}% CTR with ${spend_usd:.2f} spend. Consider excluding "
+                        f"Device type '{device}' has a {win_rate * 100:.1f}% win rate and "
+                        f"{ctr * 100:.3f}% CTR with ${spend_usd:.2f} spend. Consider excluding "
                         f"this device type or reviewing device-specific creative quality."
                     ),
                     evidence=[
@@ -350,7 +359,7 @@ class ConfigAnalyzer:
                     ],
                     affected_creatives=[],
                     affected_campaigns=[],
-                    expires_at=(datetime.utcnow() + timedelta(days=7)).isoformat(),
+                    expires_at=(datetime.now(UTC) + timedelta(days=7)).isoformat(),
                 )
                 recommendations.append(rec)
 

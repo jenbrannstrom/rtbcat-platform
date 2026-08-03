@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import logging
 import uuid
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 from analytics.cost_estimator import resolve_request_cost_per_1000
 from analytics.recommendation_engine import (
@@ -51,7 +51,7 @@ class GeoAnalyzer:
     def __init__(self, db_store: object | None = None):
         self._store = db_store
 
-    async def analyze(self, days: int = 7) -> list[Recommendation]:
+    async def analyze(self, *, buyer_id: str, days: int = 7) -> list[Recommendation]:
         """
         Run geographic waste analysis and generate recommendations.
 
@@ -61,53 +61,59 @@ class GeoAnalyzer:
         Returns:
             List of Recommendation objects for geo-related issues
         """
-        recommendations: list[Recommendation] = []
-
-        try:
-            # Check for low-performing geos (compares CTR to average)
-            low_perf_recs = await self._check_low_performance_geos(days)
-            recommendations.extend(low_perf_recs)
-
-            # Note: _check_high_waste_geos and _check_geo_coverage_gaps
-            # require reached_queries data which may not be available
-            # in all CSV imports. Skip if no query data.
-
-            logger.info(f"Geo analysis: {len(recommendations)} recommendations")
-
-        except Exception as e:
-            logger.error(f"Geo analysis failed: {e}")
+        recommendations = await self._check_low_performance_geos(
+            buyer_id=buyer_id,
+            days=days,
+        )
+        logger.info(
+            "Geo analysis for buyer_id=%s: %d recommendations",
+            buyer_id,
+            len(recommendations),
+        )
 
         return recommendations
 
-    async def _check_low_performance_geos(self, days: int) -> list[Recommendation]:
+    async def _check_low_performance_geos(
+        self, *, buyer_id: str, days: int
+    ) -> list[Recommendation]:
         """Check for geos with CTR significantly below average."""
         recommendations: list[Recommendation] = []
 
-        totals = await db_query_one("""
+        totals = (
+            await db_query_one(
+                """
             SELECT
                 COALESCE(SUM(impressions), 0) as total_impressions,
                 COALESCE(SUM(clicks), 0) as total_clicks
-            FROM performance_metrics
-            WHERE metric_date >= date('now', ?)
-        """, (f"-{days} days",)) or {}
+            FROM rtb_buyer_spend_daily
+            WHERE buyer_account_id = ?
+              AND metric_date >= date('now', ?)
+        """,
+                (buyer_id, f"-{days} days"),
+            )
+            or {}
+        )
         total_imps = totals.get("total_impressions", 0) or 1
         total_clicks = totals.get("total_clicks", 0) or 0
         avg_ctr = total_clicks / total_imps if total_imps > 0 else 0
 
-        results = await db_query("""
+        results = await db_query(
+            """
             SELECT
-                pm.geography as geo,
-                COALESCE(SUM(pm.impressions), 0) as impressions,
-                COALESCE(SUM(pm.clicks), 0) as clicks,
-                COALESCE(SUM(pm.spend_micros), 0) as spend_micros,
-                COUNT(DISTINCT pm.creative_id) as creative_count
-            FROM performance_metrics pm
-            WHERE pm.metric_date >= date('now', ?)
-              AND pm.geography IS NOT NULL
-              AND pm.geography != ''
-            GROUP BY pm.geography
-            HAVING COALESCE(SUM(pm.spend_micros), 0) > ?
-        """, (f"-{days} days", MIN_GEO_SPEND_USD * 1_000_000))
+                country AS geo,
+                COALESCE(SUM(impressions), 0) AS impressions,
+                COALESCE(SUM(clicks), 0) AS clicks,
+                COALESCE(SUM(spend_micros), 0) AS spend_micros
+            FROM rtb_app_country_daily
+            WHERE buyer_account_id = ?
+              AND metric_date >= date('now', ?)
+              AND country IS NOT NULL
+              AND country != ''
+            GROUP BY country
+            HAVING COALESCE(SUM(spend_micros), 0) > ?
+        """,
+            (buyer_id, f"-{days} days", MIN_GEO_SPEND_USD * 1_000_000),
+        )
 
         for row in results:
             geo = row["geo"]
@@ -118,7 +124,7 @@ class GeoAnalyzer:
             ctr = clicks / impressions if impressions > 0 else 0
 
             # Check if CTR is significantly below average OR below absolute threshold
-            is_underperformer = (avg_ctr > 0 and ctr < avg_ctr * CTR_UNDERPERFORM_RATIO)
+            is_underperformer = avg_ctr > 0 and ctr < avg_ctr * CTR_UNDERPERFORM_RATIO
             is_low_absolute = ctr < LOW_CTR_THRESHOLD
 
             if (is_underperformer or is_low_absolute) and impressions > 1000:
@@ -134,10 +140,12 @@ class GeoAnalyzer:
                     id=f"low-perf-geo-{geo}-{uuid.uuid4().hex[:8]}",
                     type=RecommendationType.GEO_EXCLUSION,
                     severity=severity,
-                    confidence=Confidence.HIGH if impressions > 10000 else Confidence.MEDIUM,
+                    confidence=Confidence.HIGH
+                    if impressions > 10000
+                    else Confidence.MEDIUM,
                     title=f"Underperforming geo: {geo}",
                     description=(
-                        f"Geographic region '{geo}' has {ctr*100:.2f}% CTR vs {avg_ctr*100:.2f}% average. "
+                        f"Geographic region '{geo}' has {ctr * 100:.2f}% CTR vs {avg_ctr * 100:.2f}% average. "
                         f"Spent ${spend_usd:.2f} on {impressions:,} impressions with {clicks:,} clicks. "
                         f"Consider reducing bids or excluding this geo."
                     ),
@@ -178,30 +186,39 @@ class GeoAnalyzer:
                     ],
                     affected_creatives=[],
                     affected_campaigns=[],
-                    expires_at=(datetime.utcnow() + timedelta(days=7)).isoformat(),
+                    expires_at=(datetime.now(UTC) + timedelta(days=7)).isoformat(),
                 )
                 recommendations.append(rec)
 
         return recommendations
 
-    async def _check_high_waste_geos(self, days: int) -> list[Recommendation]:
+    async def _check_high_waste_geos(
+        self, *, buyer_id: str, days: int
+    ) -> list[Recommendation]:
         """Check for geos with high query volume but low impression rate."""
         recommendations: list[Recommendation] = []
-        request_cost_per_1000 = await resolve_request_cost_per_1000(days=days)
+        request_cost_per_1000 = await resolve_request_cost_per_1000(
+            days=days,
+            buyer_id=buyer_id,
+        )
 
-        results = await db_query("""
+        results = await db_query(
+            """
             SELECT
-                pm.geography as geo,
-                COALESCE(SUM(pm.reached_queries), 0) as queries,
-                COALESCE(SUM(pm.impressions), 0) as impressions,
-                COALESCE(SUM(pm.spend_micros), 0) as spend_micros
-            FROM performance_metrics pm
-            WHERE pm.metric_date >= date('now', ?)
-              AND pm.geography IS NOT NULL
-              AND pm.geography != ''
-            GROUP BY pm.geography
-            HAVING COALESCE(SUM(pm.reached_queries), 0) > 100000
-        """, (f"-{days} days",))
+                country AS geo,
+                COALESCE(SUM(reached_queries), 0) AS queries,
+                COALESCE(SUM(impressions), 0) AS impressions,
+                COALESCE(SUM(spend_micros), 0) AS spend_micros
+            FROM rtb_app_country_daily
+            WHERE buyer_account_id = ?
+              AND metric_date >= date('now', ?)
+              AND country IS NOT NULL
+              AND country != ''
+            GROUP BY country
+            HAVING COALESCE(SUM(reached_queries), 0) > 100000
+        """,
+            (buyer_id, f"-{days} days"),
+        )
 
         for row in results:
             geo = row["geo"]
@@ -219,7 +236,7 @@ class GeoAnalyzer:
                     confidence=Confidence.MEDIUM,
                     title=f"High waste rate in {geo}",
                     description=(
-                        f"Geographic region '{geo}' has a {waste_rate*100:.1f}% waste rate - "
+                        f"Geographic region '{geo}' has a {waste_rate * 100:.1f}% waste rate - "
                         f"receiving {queries:,} queries but only {impressions:,} impressions. "
                         f"This could indicate missing creatives for this geo or bid issues."
                     ),
@@ -238,7 +255,8 @@ class GeoAnalyzer:
                         wasted_queries_daily=int(wasted_daily),
                         wasted_spend_usd=0,
                         percent_of_total_waste=0,
-                        potential_savings_monthly=(wasted_daily * 30 / 1000) * request_cost_per_1000,
+                        potential_savings_monthly=(wasted_daily * 30 / 1000)
+                        * request_cost_per_1000,
                     ),
                     actions=[
                         Action(
@@ -251,87 +269,8 @@ class GeoAnalyzer:
                     ],
                     affected_creatives=[],
                     affected_campaigns=[],
-                    expires_at=(datetime.utcnow() + timedelta(days=7)).isoformat(),
+                    expires_at=(datetime.now(UTC) + timedelta(days=7)).isoformat(),
                 )
                 recommendations.append(rec)
-
-        return recommendations
-
-    async def _check_geo_coverage_gaps(self, days: int) -> list[Recommendation]:
-        """Check for geos with traffic but limited creative coverage."""
-        recommendations: list[Recommendation] = []
-
-        results = await db_query("""
-            SELECT
-                pm.geography as geo,
-                COUNT(DISTINCT pm.creative_id) as active_creatives,
-                COALESCE(SUM(pm.reached_queries), 0) as queries,
-                COALESCE(SUM(pm.impressions), 0) as impressions
-            FROM performance_metrics pm
-            WHERE pm.metric_date >= date('now', ?)
-              AND pm.geography IS NOT NULL
-              AND pm.geography != ''
-            GROUP BY pm.geography
-            HAVING COALESCE(SUM(pm.reached_queries), 0) > 50000
-               AND COUNT(DISTINCT pm.creative_id) < 3
-        """, (f"-{days} days",))
-
-        for row in results:
-            geo = row["geo"]
-            creative_count = row["active_creatives"]
-            queries = row["queries"]
-            impressions = row["impressions"]
-            win_rate = impressions / queries if queries > 0 else 0
-
-            rec = Recommendation(
-                id=f"geo-gap-{geo}-{uuid.uuid4().hex[:8]}",
-                type=RecommendationType.CONFIG_INEFFICIENCY,
-                severity=Severity.LOW,
-                confidence=Confidence.MEDIUM,
-                title=f"Limited creative coverage in {geo}",
-                description=(
-                    f"Geographic region '{geo}' has {queries:,} queries but only "
-                    f"{creative_count} active creative(s). Consider adding more geo-targeted "
-                    f"creatives or reviewing pretargeting configuration."
-                ),
-                evidence=[
-                    Evidence(
-                        metric_name="creative_count",
-                        metric_value=creative_count,
-                        threshold=3,
-                        comparison="below",
-                        time_period_days=days,
-                        sample_size=creative_count,
-                    ),
-                    Evidence(
-                        metric_name="queries",
-                        metric_value=queries,
-                        threshold=50000,
-                        comparison="above",
-                        time_period_days=days,
-                        sample_size=queries,
-                    ),
-                ],
-                impact=Impact(
-                    wasted_qps=0,
-                    wasted_queries_daily=0,
-                    wasted_spend_usd=0,
-                    percent_of_total_waste=0,
-                    potential_savings_monthly=0,
-                ),
-                actions=[
-                    Action(
-                        action_type="add",
-                        target_type="creative",
-                        target_id=geo,
-                        target_name=f"Geo-targeted creative for {geo}",
-                        api_example=f"Add creatives targeting {geo} specifically",
-                    ),
-                ],
-                affected_creatives=[],
-                affected_campaigns=[],
-                expires_at=(datetime.utcnow() + timedelta(days=14)).isoformat(),
-            )
-            recommendations.append(rec)
 
         return recommendations
