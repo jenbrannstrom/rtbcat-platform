@@ -28,34 +28,24 @@ def _run_import(*, verbose: bool, job_id: str, import_trigger: str) -> dict:
     )
 
 
-def _refresh_home_precompute(*, start_date: str, end_date: str) -> None:
-    from services.home_precompute import refresh_home_summaries
+def _enqueue_refresh(*, start_date: str, end_date: str, job_id: str) -> dict:
+    """Queue the post-import refresh for the API's precompute worker.
 
-    asyncio.run(refresh_home_summaries(start_date=start_date, end_date=end_date))
+    Running the multi-hour refresh chain inline here competed with scheduled
+    refreshes for database capacity; the durable queue serializes them.
+    """
+    from services.precompute_queue import enqueue_precompute_job
 
-
-def _refresh_config_precompute(*, start_date: str, end_date: str) -> None:
-    from services.config_precompute import refresh_config_breakdowns
-
-    asyncio.run(refresh_config_breakdowns(start_date=start_date, end_date=end_date))
-
-
-def _refresh_rtb_precompute(*, start_date: str, end_date: str) -> None:
-    from services.rtb_precompute import refresh_rtb_summaries
-
-    asyncio.run(refresh_rtb_summaries(start_date, end_date))
-
-
-def _refresh_legacy_performance(*, start_date: str, end_date: str) -> None:
-    from scripts.backfill_performance_metrics import backfill_range
-
-    backfill_range(start_date, end_date)
-
-
-def _refresh_endpoint_snapshot() -> None:
-    from services.endpoints_service import EndpointsService
-
-    asyncio.run(EndpointsService().refresh_endpoints_current())
+    return asyncio.run(
+        enqueue_precompute_job(
+            source="gmail-import",
+            start_date=start_date,
+            end_date=end_date,
+            dedupe_key=f"gmail-import:{job_id}",
+            include_legacy_performance=True,
+            run_validation=False,
+        )
+    )
 
 
 def main() -> int:
@@ -105,20 +95,18 @@ def main() -> int:
             start_date, end_date = refresh_window(
                 normalize_refresh_dates(days=args.refresh_days)
             )
-        _print(f"Refreshing home precompute ({start_date} to {end_date})")
-        _refresh_home_precompute(start_date=start_date, end_date=end_date)
-        _print(f"Refreshing config precompute ({start_date} to {end_date})")
-        _refresh_config_precompute(start_date=start_date, end_date=end_date)
-        _print(f"Refreshing RTB precompute ({start_date} to {end_date})")
-        _refresh_rtb_precompute(start_date=start_date, end_date=end_date)
-        _print(f"Refreshing legacy performance metrics ({start_date} to {end_date})")
-        _refresh_legacy_performance(start_date=start_date, end_date=end_date)
-        _print("Refreshing endpoint observed QPS snapshot")
-        _refresh_endpoint_snapshot()
+        _print(f"Enqueueing precompute refresh ({start_date} to {end_date})")
+        enqueue_result = _enqueue_refresh(
+            start_date=start_date, end_date=end_date, job_id=args.job_id
+        )
+        _print(
+            "Refresh queued as precompute job "
+            f"{enqueue_result['job_id']} (deduplicated={enqueue_result['deduplicated']})"
+        )
         _print("Worker finished successfully")
         return 0
     except Exception as exc:
-        _print(f"Precompute refresh failed: {exc}")
+        _print(f"Precompute refresh enqueue failed: {exc}")
         return 2
 
 
