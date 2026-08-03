@@ -74,7 +74,7 @@ class FraudAnalyzer:
     def __init__(self, db_store: object | None = None):
         self._store = db_store
 
-    async def analyze(self, days: int = 7) -> list[Recommendation]:
+    async def analyze(self, *, buyer_id: str, days: int = 7) -> list[Recommendation]:
         """
         Run fraud detection analysis and generate recommendations.
 
@@ -85,51 +85,55 @@ class FraudAnalyzer:
             List of Recommendation objects for fraud-related issues
         """
         recommendations: list[Recommendation] = []
-
-        try:
-            # Check for click fraud patterns
-            click_fraud_recs = await self._check_click_fraud(days)
-            recommendations.extend(click_fraud_recs)
-
-            # Check for high spend no conversion placements
-            no_conv_recs = await self._check_high_spend_no_conversions(days)
-            recommendations.extend(no_conv_recs)
-
-            # Check for suspicious traffic patterns
-            suspicious_recs = await self._check_suspicious_patterns(days)
-            recommendations.extend(suspicious_recs)
-
-            logger.info(f"Fraud analysis: {len(recommendations)} recommendations")
-
-        except Exception as e:
-            logger.error(f"Fraud analysis failed: {e}")
+        recommendations.extend(
+            await self._check_click_fraud(buyer_id=buyer_id, days=days)
+        )
+        recommendations.extend(
+            await self._check_high_spend_no_conversions(
+                buyer_id=buyer_id,
+                days=days,
+            )
+        )
+        recommendations.extend(
+            await self._check_suspicious_patterns(buyer_id=buyer_id, days=days)
+        )
+        logger.info(
+            "Fraud analysis for buyer_id=%s: %d recommendations",
+            buyer_id,
+            len(recommendations),
+        )
 
         return recommendations
 
-    async def _check_click_fraud(self, days: int) -> list[Recommendation]:
+    async def _check_click_fraud(
+        self, *, buyer_id: str, days: int
+    ) -> list[Recommendation]:
         """Check for suspiciously high CTR indicating click fraud."""
         recommendations: list[Recommendation] = []
 
-        results = await db_query("""
+        results = await db_query(
+            """
             SELECT
-                pm.placement as source,
-                COALESCE(c.format, 'BANNER') as creative_format,
-                COALESCE(SUM(pm.impressions), 0) as impressions,
-                COALESCE(SUM(pm.clicks), 0) as clicks,
-                COALESCE(SUM(pm.spend_micros), 0) as spend_micros,
-                COUNT(DISTINCT pm.creative_id) as creative_count
-            FROM performance_metrics pm
-            JOIN creatives c ON c.id = pm.creative_id
-            WHERE pm.metric_date >= date('now', ?)
-              AND pm.placement IS NOT NULL
-              AND pm.placement != ''
-            GROUP BY pm.placement, COALESCE(c.format, 'BANNER')
-            HAVING COALESCE(SUM(pm.impressions), 0) > ?
-        """, (f"-{days} days", MIN_IMPRESSIONS_FOR_ANALYSIS))
+                app_name AS source,
+                COALESCE(creative_format, 'BANNER') AS creative_format,
+                COALESCE(SUM(impressions), 0) AS impressions,
+                COALESCE(SUM(clicks), 0) AS clicks,
+                COALESCE(SUM(spend_micros), 0) AS spend_micros
+            FROM rtb_app_size_daily
+            WHERE buyer_account_id = ?
+              AND metric_date >= date('now', ?)
+              AND app_name != ''
+            GROUP BY app_name, COALESCE(creative_format, 'BANNER')
+            HAVING COALESCE(SUM(impressions), 0) > ?
+        """,
+            (buyer_id, f"-{days} days", MIN_IMPRESSIONS_FOR_ANALYSIS),
+        )
 
         for row in results:
             source = row["source"]
-            creative_format = self._normalize_creative_format(row.get("creative_format"))
+            creative_format = self._normalize_creative_format(
+                row.get("creative_format")
+            )
             impressions = row["impressions"]
             clicks = row["clicks"]
             spend_micros = row["spend_micros"]
@@ -146,9 +150,9 @@ class FraudAnalyzer:
                     confidence=Confidence.MEDIUM,
                     title=f"Suspicious click rate ({creative_format}): {source[:50]}",
                     description=(
-                        f"Placement '{source[:80]}' has an abnormally high CTR of {ctr*100:.1f}% "
+                        f"App/site '{source[:80]}' has an abnormally high CTR of {ctr * 100:.1f}% "
                         f"for {creative_format} traffic ({clicks:,} clicks from {impressions:,} impressions). "
-                        f"This exceeds the {high_ctr_threshold*100:.1f}% threshold and is consistent "
+                        f"This exceeds the {high_ctr_threshold * 100:.1f}% threshold and is consistent "
                         f"with click fraud. Spent ${spend_usd:.2f}. Block immediately."
                     ),
                     evidence=[
@@ -179,11 +183,11 @@ class FraudAnalyzer:
                     actions=[
                         Action(
                             action_type="block",
-                            target_type="publisher",
+                            target_type="app",
                             target_id=source,
-                            target_name=f"Publisher: {source[:50]}",
-                            pretargeting_field="excluded_publisher_list",
-                            api_example=f"Add to publisher exclusion list",
+                            target_name=f"App/site: {source[:50]}",
+                            pretargeting_field="excluded_apps",
+                            api_example="Add to app/site exclusion list",
                         ),
                     ],
                     affected_creatives=[],
@@ -204,26 +208,37 @@ class FraudAnalyzer:
     def _high_ctr_threshold_for_format(format_name: str | None) -> float:
         """Return high-CTR threshold for the given creative format."""
         normalized = FraudAnalyzer._normalize_creative_format(format_name)
-        return SUSPICIOUSLY_HIGH_CTR_BY_FORMAT.get(normalized, DEFAULT_SUSPICIOUSLY_HIGH_CTR)
+        return SUSPICIOUSLY_HIGH_CTR_BY_FORMAT.get(
+            normalized, DEFAULT_SUSPICIOUSLY_HIGH_CTR
+        )
 
-    async def _check_high_spend_no_conversions(self, days: int) -> list[Recommendation]:
+    async def _check_high_spend_no_conversions(
+        self, *, buyer_id: str, days: int
+    ) -> list[Recommendation]:
         """Check for placements with high spend but zero meaningful engagement."""
         recommendations: list[Recommendation] = []
 
-        results = await db_query("""
+        results = await db_query(
+            """
             SELECT
-                pm.placement as source,
-                COALESCE(SUM(pm.impressions), 0) as impressions,
-                COALESCE(SUM(pm.clicks), 0) as clicks,
-                COALESCE(SUM(pm.spend_micros), 0) as spend_micros
-            FROM performance_metrics pm
-            WHERE pm.metric_date >= date('now', ?)
-              AND pm.placement IS NOT NULL
-              AND pm.placement != ''
-            GROUP BY pm.placement
-            HAVING COALESCE(SUM(pm.spend_micros), 0) > ?
-               AND COALESCE(SUM(pm.clicks), 0) = 0
-        """, (f"-{days} days", HIGH_SPEND_ZERO_CONVERSIONS * 1_000_000))
+                app_name AS source,
+                COALESCE(SUM(impressions), 0) AS impressions,
+                COALESCE(SUM(clicks), 0) AS clicks,
+                COALESCE(SUM(spend_micros), 0) AS spend_micros
+            FROM rtb_app_daily
+            WHERE buyer_account_id = ?
+              AND metric_date >= date('now', ?)
+              AND app_name != ''
+            GROUP BY app_name
+            HAVING COALESCE(SUM(spend_micros), 0) > ?
+               AND COALESCE(SUM(clicks), 0) = 0
+        """,
+            (
+                buyer_id,
+                f"-{days} days",
+                HIGH_SPEND_ZERO_CONVERSIONS * 1_000_000,
+            ),
+        )
 
         for row in results:
             source = row["source"]
@@ -233,12 +248,12 @@ class FraudAnalyzer:
 
             rec = Recommendation(
                 id=f"no-conv-{hash(source) % 100000}-{uuid.uuid4().hex[:8]}",
-                type=RecommendationType.PUBLISHER_BLOCK,
+                type=RecommendationType.APP_BLOCK,
                 severity=Severity.HIGH if spend_usd > 100 else Severity.MEDIUM,
                 confidence=Confidence.HIGH,
                 title=f"High spend, zero clicks: {source[:50]}",
                 description=(
-                    f"Placement '{source[:80]}' has spent ${spend_usd:.2f} on {impressions:,} "
+                    f"App/site '{source[:80]}' has spent ${spend_usd:.2f} on {impressions:,} "
                     f"impressions but received zero clicks. This indicates either bot traffic, "
                     f"non-viewable placements, or fraud. Block this source."
                 ),
@@ -270,11 +285,11 @@ class FraudAnalyzer:
                 actions=[
                     Action(
                         action_type="block",
-                        target_type="publisher",
+                        target_type="app",
                         target_id=source,
-                        target_name=f"Publisher: {source[:50]}",
-                        pretargeting_field="excluded_publisher_list",
-                        api_example="Add to publisher exclusion list",
+                        target_name=f"App/site: {source[:50]}",
+                        pretargeting_field="excluded_apps",
+                        api_example="Add to app/site exclusion list",
                     ),
                 ],
                 affected_creatives=[],
@@ -285,24 +300,29 @@ class FraudAnalyzer:
 
         return recommendations
 
-    async def _check_suspicious_patterns(self, days: int) -> list[Recommendation]:
+    async def _check_suspicious_patterns(
+        self, *, buyer_id: str, days: int
+    ) -> list[Recommendation]:
         """Check for other suspicious traffic patterns."""
         recommendations: list[Recommendation] = []
 
-        results = await db_query("""
+        results = await db_query(
+            """
             SELECT
-                pm.placement as source,
-                COALESCE(SUM(pm.impressions), 0) as impressions,
-                COALESCE(SUM(pm.clicks), 0) as clicks,
-                COALESCE(SUM(pm.spend_micros), 0) as spend_micros
-            FROM performance_metrics pm
-            WHERE pm.metric_date >= date('now', ?)
-              AND pm.placement IS NOT NULL
-              AND pm.placement != ''
-            GROUP BY pm.placement
-            HAVING COALESCE(SUM(pm.impressions), 0) > 50000
-               AND COALESCE(SUM(pm.spend_micros), 0) > ?
-        """, (f"-{days} days", 20 * 1_000_000))
+                app_name AS source,
+                COALESCE(SUM(impressions), 0) AS impressions,
+                COALESCE(SUM(clicks), 0) AS clicks,
+                COALESCE(SUM(spend_micros), 0) AS spend_micros
+            FROM rtb_app_daily
+            WHERE buyer_account_id = ?
+              AND metric_date >= date('now', ?)
+              AND app_name != ''
+            GROUP BY app_name
+            HAVING COALESCE(SUM(impressions), 0) > 50000
+               AND COALESCE(SUM(spend_micros), 0) > ?
+        """,
+            (buyer_id, f"-{days} days", 20 * 1_000_000),
+        )
 
         for row in results:
             source = row["source"]
@@ -321,8 +341,8 @@ class FraudAnalyzer:
                     confidence=Confidence.LOW,
                     title=f"Suspicious traffic pattern: {source[:50]}",
                     description=(
-                        f"Placement '{source[:80]}' has {impressions:,} impressions with "
-                        f"near-zero engagement ({ctr*100:.4f}% CTR). Spent ${spend_usd:.2f}. "
+                        f"App/site '{source[:80]}' has {impressions:,} impressions with "
+                        f"near-zero engagement ({ctr * 100:.4f}% CTR). Spent ${spend_usd:.2f}. "
                         f"This could indicate bot traffic or non-viewable inventory. "
                         f"Recommend human review."
                     ),
@@ -354,9 +374,9 @@ class FraudAnalyzer:
                     actions=[
                         Action(
                             action_type="review",
-                            target_type="publisher",
+                            target_type="app",
                             target_id=source,
-                            target_name=f"Publisher: {source[:50]}",
+                            target_name=f"App/site: {source[:50]}",
                             api_example="Human review recommended - check viewability data",
                         ),
                     ],

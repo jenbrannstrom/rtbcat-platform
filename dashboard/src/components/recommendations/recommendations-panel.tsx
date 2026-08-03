@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, RefreshCw, Sparkles } from 'lucide-react';
 import {
@@ -124,7 +124,21 @@ export function RecommendationsPanel({
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const { selectedBuyerId } = useAccount();
+  const previousBuyerId = useRef(selectedBuyerId);
   const [applyFeedback, setApplyFeedback] = useState<Record<string, { message: string; error: boolean }>>({});
+
+  useEffect(() => {
+    const previous = previousBuyerId.current;
+    if (previous && previous !== selectedBuyerId) {
+      queryClient.removeQueries({ queryKey: ['recommendations', previous] });
+      queryClient.removeQueries({ queryKey: ['recommendations-summary', previous] });
+      queryClient.removeQueries({
+        queryKey: ['recommendation-config-options', previous],
+        exact: true,
+      });
+    }
+    previousBuyerId.current = selectedBuyerId;
+  }, [queryClient, selectedBuyerId]);
 
   const {
     data: recommendations,
@@ -132,20 +146,32 @@ export function RecommendationsPanel({
     error,
     refetch
   } = useQuery({
-    queryKey: ['recommendations', days, minSeverity],
-    queryFn: () => getRecommendations({ days, min_severity: minSeverity }),
+    queryKey: ['recommendations', selectedBuyerId, days, minSeverity],
+    queryFn: () => getRecommendations({
+      buyer_id: selectedBuyerId!,
+      days,
+      min_severity: minSeverity,
+    }),
+    enabled: !!selectedBuyerId,
   });
 
   const { data: summary } = useQuery({
-    queryKey: ['recommendations-summary', days],
-    queryFn: () => getRecommendationSummary(days),
+    queryKey: ['recommendations-summary', selectedBuyerId, days],
+    queryFn: () => getRecommendationSummary(selectedBuyerId!, days),
+    enabled: !!selectedBuyerId,
   });
 
   const resolveMutation = useMutation({
-    mutationFn: (id: string) => resolveRecommendation(id),
+    mutationFn: (id: string) => resolveRecommendation(id, selectedBuyerId!),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['recommendations'] });
-      queryClient.invalidateQueries({ queryKey: ['recommendations-summary'] });
+      queryClient.invalidateQueries({
+        queryKey: ['recommendations', selectedBuyerId, days, minSeverity],
+        exact: true,
+      });
+      queryClient.invalidateQueries({
+        queryKey: ['recommendations-summary', selectedBuyerId, days],
+        exact: true,
+      });
     },
   });
 

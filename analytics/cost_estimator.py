@@ -72,22 +72,21 @@ async def resolve_request_cost_per_1000(
     if days <= 0:
         return fallback_request_cost_per_1000(format_hint)
 
+    # A missing buyer must never trigger an account-global aggregate. Callers
+    # without a buyer scope receive the deterministic estimate instead.
+    if not buyer_id:
+        return fallback_request_cost_per_1000(format_hint)
+
     query = """
         SELECT
-            COALESCE(SUM(pm.spend_micros), 0) AS spend_micros,
-            COALESCE(SUM(pm.reached_queries), 0) AS reached_queries,
-            COALESCE(SUM(pm.impressions), 0) AS impressions
-        FROM performance_metrics pm
-        JOIN creatives c ON c.id = pm.creative_id
-        WHERE pm.metric_date >= date('now', ?)
+            COALESCE(SUM(spend_micros), 0) AS spend_micros,
+            COALESCE(SUM(reached_queries), 0) AS reached_queries,
+            COALESCE(SUM(impressions), 0) AS impressions
+        FROM rtb_buyer_spend_daily
+        WHERE buyer_account_id = ?
+          AND metric_date >= date('now', ?)
     """
-    params: list = [f"-{days} days"]
-
-    if buyer_id:
-        query += " AND c.buyer_id = ?"
-        params.append(buyer_id)
-
-    row = await db_query_one(query, tuple(params)) or {}
+    row = await db_query_one(query, (buyer_id, f"-{days} days")) or {}
 
     spend_micros = row.get("spend_micros", 0) or 0
     reached_queries = row.get("reached_queries", 0) or 0
