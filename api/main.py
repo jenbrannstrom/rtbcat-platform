@@ -4,9 +4,10 @@ This module provides the main application setup and router configuration.
 All route handlers are organized in the api/routers/ directory.
 """
 
+import asyncio
 import logging
 import os
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 from typing import Optional
 
@@ -108,6 +109,7 @@ from api.routers import (
     spend_router,
 )
 from api.dependencies import set_store, set_config_manager, startup_event
+from services.scheduler_guard import scheduler_enabled
 from services.secrets_health_service import get_secrets_health
 from services.bigquery_schema_health_service import get_bigquery_raw_schema_health
 
@@ -233,11 +235,24 @@ async def lifespan(app: FastAPI):
     else:
         logger.info("Read-only shadow mode: skipped all startup maintenance writes.")
 
+    # The precompute queue worker only runs where this deployment owns the
+    # precompute scheduler; a shadow or scheduler-less posture must not start
+    # a writer even if queued jobs exist.
+    precompute_worker_task: Optional[asyncio.Task] = None
+    if not read_only_shadow and scheduler_enabled("CATSCAN_ENABLE_PRECOMPUTE_SCHEDULER"):
+        from services.precompute_queue import run_precompute_queue_worker
+
+        precompute_worker_task = asyncio.create_task(run_precompute_queue_worker())
+
     logger.info("Cat-Scan API started")
 
     yield
 
     # Cleanup on shutdown
+    if precompute_worker_task is not None:
+        precompute_worker_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await precompute_worker_task
     logger.info("Cat-Scan API shutting down")
 
 
