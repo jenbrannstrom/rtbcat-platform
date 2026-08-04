@@ -14,6 +14,25 @@ Only fall back to `rtb_daily` for:
 
 If you're writing a new endpoint that touches RTB performance data, check `config_creative_daily` first.
 
+## Precompute refreshes: enqueue, never run inline
+
+A full precompute refresh (home/config/RTB summaries) takes 1.5–3 hours.
+Never run the refresh chain inside a request handler — the edge times the
+request out and scheduler retries used to launch overlapping refreshes.
+
+- The scheduled endpoint enqueues into `precompute_jobs` and returns 202; a
+  single worker in the API process (`services/precompute_queue.py`) executes
+  jobs one at a time under an advisory lock, with heartbeats and
+  stale-job reclaim.
+- New refresh triggers (importers, admin endpoints) must call
+  `enqueue_precompute_job(...)` rather than the refresh functions directly.
+- Scheduler success means *accepted*, not *finished*. Completion and
+  freshness truth is `/precompute/health` and the `precompute_refresh_runs`
+  ledger.
+- The worker starts only when `CATSCAN_ENABLE_PRECOMPUTE_SCHEDULER=true` and
+  the deployment is writable. Do not scale the API past one replica per host
+  without revisiting the single-writer assumption.
+
 ## Database: Index awareness
 
 `rtb_daily` indexes that exist and work:
