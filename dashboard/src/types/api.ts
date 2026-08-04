@@ -81,7 +81,13 @@ export interface Creative {
     stale_threshold_hours: number | null;
     stale_age_hours: number | null;
     is_stale: boolean;
-    fallback_reason: string | null;
+    fallback_reason:
+      | "disapproved_removed_from_google"
+      | "not_found"
+      | "forbidden"
+      | "exception"
+      | string
+      | null;
   } | null;
 }
 

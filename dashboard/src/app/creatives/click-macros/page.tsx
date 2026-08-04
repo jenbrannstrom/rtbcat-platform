@@ -3,14 +3,16 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, CheckCircle2, Search } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Loader2, Search } from "lucide-react";
 import { usePathname } from "next/navigation";
-import { getCreativeClickMacroCoverage } from "@/lib/api";
+import { getCreative, getCreativeClickMacroCoverage } from "@/lib/api";
 import { LoadingPage } from "@/components/loading";
 import { ErrorPage } from "@/components/error";
+import { PreviewModal } from "@/components/preview-modal/PreviewModal";
 import { useAccount } from "@/contexts/account-context";
 import { splitBuyerPath, toBuyerScopedPath } from "@/lib/buyer-routes";
 import { cn } from "@/lib/utils";
+import type { Creative } from "@/types/api";
 
 const PAGE_SIZE = 100;
 
@@ -22,6 +24,9 @@ export default function ClickMacroCoveragePage() {
   const [search, setSearch] = useState("");
   const [macroState, setMacroState] = useState<"all" | "has_click_macro" | "missing_click_macro">("all");
   const [pageIndex, setPageIndex] = useState(0);
+  const [selectedCreative, setSelectedCreative] = useState<Creative | null>(null);
+  const [openingCreativeId, setOpeningCreativeId] = useState<string | null>(null);
+  const [previewError, setPreviewError] = useState<string | null>(null);
 
   useEffect(() => {
     setPageIndex(0);
@@ -55,6 +60,20 @@ export default function ClickMacroCoveragePage() {
     if (denominator === 0) return 0;
     return (summary.creatives_with_click_macro / denominator) * 100;
   }, [summary]);
+
+  const openCreativePreview = async (creativeId: string) => {
+    setPreviewError(null);
+    setOpeningCreativeId(creativeId);
+    try {
+      const creative = await getCreative(creativeId);
+      setSelectedCreative(creative);
+    } catch (err) {
+      console.error("Failed to load creative preview:", err);
+      setPreviewError(err instanceof Error ? err.message : "Failed to load creative preview");
+    } finally {
+      setOpeningCreativeId(null);
+    }
+  };
 
   if (isLoading) {
     return <LoadingPage />;
@@ -139,6 +158,12 @@ export default function ClickMacroCoveragePage() {
         </select>
       </div>
 
+      {previewError && (
+        <div className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          {previewError}
+        </div>
+      )}
+
       <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200 text-sm">
@@ -178,7 +203,18 @@ export default function ClickMacroCoveragePage() {
                     </div>
                   </td>
                   <td className="px-3 py-2 align-top">
-                    <div className="font-mono text-xs text-gray-900">{row.creative_id}</div>
+                    <button
+                      type="button"
+                      onClick={() => openCreativePreview(row.creative_id)}
+                      disabled={openingCreativeId === row.creative_id}
+                      className="inline-flex max-w-sm items-center gap-1 font-mono text-xs text-primary-700 hover:text-primary-900 disabled:cursor-wait disabled:opacity-70"
+                      title={`Open creative ${row.creative_id}`}
+                    >
+                      {openingCreativeId === row.creative_id && (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      )}
+                      <span className="truncate">{row.creative_id}</span>
+                    </button>
                     <div className="max-w-sm truncate text-xs text-gray-600" title={row.creative_name}>
                       {row.creative_name}
                     </div>
@@ -275,6 +311,14 @@ export default function ClickMacroCoveragePage() {
           </button>
         </div>
       </div>
+
+      {selectedCreative && (
+        <PreviewModal
+          creative={selectedCreative}
+          onCreativeUpdate={setSelectedCreative}
+          onClose={() => setSelectedCreative(null)}
+        />
+      )}
     </div>
   );
 }

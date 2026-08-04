@@ -194,3 +194,64 @@ def test_legacy_live_route_accepts_encoded_slash_creative_id(
 
     assert response.status_code == 200
     assert response.json()["creative"]["id"] == creative_id
+
+
+def test_live_route_classifies_disapproved_creative_missing_from_google(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    creative_id = "creative-removed"
+    creative = _creative(creative_id)
+    creative.approval_status = "DISAPPROVED"
+    creative.disapproval_reasons = [{"reason": "DESTINATION_NOT_WORKING"}]
+    store = _Store(creative)
+    telemetry: list[dict[str, str | None]] = []
+
+    async def _get_list_context(*_args, **_kwargs):
+        return CreativeListContext(
+            thumbnail_statuses={},
+            waste_flags={},
+            country_data={},
+            market_alerts={},
+        )
+
+    class _Client:
+        async def get_creative_by_id(self, creative_id: str, view: str, buyer_id: str):
+            return None
+
+    async def _resolve_live_client(self, creative):
+        assert creative.id == creative_id
+        return _Client()
+
+    class _Telemetry:
+        async def record_fallback(self, **kwargs):
+            telemetry.append(kwargs)
+
+    monkeypatch.setattr(
+        creatives_live_router.creatives_service,
+        "get_list_context",
+        _get_list_context,
+    )
+    monkeypatch.setattr(
+        creatives_live_router.CreativeCacheService,
+        "resolve_live_client",
+        _resolve_live_client,
+    )
+    monkeypatch.setattr(creatives_live_router, "telemetry_service", _Telemetry())
+
+    client = _build_client(store)
+    response = client.get(
+        "/api/creatives/live/creative-removed?allow_cache_fallback=true&refresh_cache=true"
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["source"] == "cache"
+    assert payload["message"] == (
+        "Creative is disapproved and no longer returned by Google live API. "
+        "Showing cached snapshot."
+    )
+    assert payload["creative"]["approval_status"] == "DISAPPROVED"
+    assert payload["creative"]["data_source"]["fallback_reason"] == (
+        "disapproved_removed_from_google"
+    )
+    assert telemetry[0]["error_type"] == "disapproved_removed_from_google"

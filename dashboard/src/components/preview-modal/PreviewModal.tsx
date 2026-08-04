@@ -120,7 +120,7 @@ export function PreviewModal({
     setIsRefetchingLive(true);
     try {
       const resp = await getCreativeLive(initialCreative.id, {
-        allowCacheFallback: false,
+        allowCacheFallback: true,
         refreshCache: true,
         days: 7,
       });
@@ -197,6 +197,11 @@ export function PreviewModal({
   const hasTrackingParams = Object.keys(trackingParams).length > 0;
   const effectiveSource = (creative.data_source?.source || previewSource || "cache") as "live" | "cache";
   const isStaleCache = effectiveSource === "cache" && !!creative.data_source?.is_stale;
+  const fallbackReason = creative.data_source?.fallback_reason || null;
+  const isDisapprovedRemovedFromGoogle = fallbackReason === "disapproved_removed_from_google";
+  const sourceNotice = isDisapprovedRemovedFromGoogle
+    ? t.previewModal.disapprovedRemovedFromGoogle
+    : previewMessage;
   const staleHours = creative.data_source?.stale_age_hours;
   const staleThreshold = creative.data_source?.stale_threshold_hours;
   const cachedRowCreatedAt = creative.first_seen_at || creative.created_at;
@@ -353,10 +358,12 @@ export function PreviewModal({
               </div>
             )}
           </div>
-          {(previewSource || previewMessage || isStaleCache) && (
+          {(previewSource || previewMessage || isStaleCache || isDisapprovedRemovedFromGoogle) && (
             <div className={cn(
               "px-4 py-2 text-xs border-b",
-              effectiveSource === "live"
+              isDisapprovedRemovedFromGoogle
+                ? "bg-red-50 text-red-700 border-red-100"
+                : effectiveSource === "live"
                 ? "bg-green-50 text-green-700 border-green-100"
                 : "bg-amber-50 text-amber-700 border-amber-100"
             )}>
@@ -369,7 +376,7 @@ export function PreviewModal({
                   {staleThreshold ? `, ${t.previewModal.thresholdLabel} ${staleThreshold}${t.previewModal.hoursAbbrev})` : staleHours ? ")" : ""}
                 </span>
               )}
-              {previewMessage ? ` ${previewMessage}` : ""}
+              {sourceNotice ? ` ${sourceNotice}` : ""}
               {effectiveSource === "cache" && (
                 <button
                   type="button"

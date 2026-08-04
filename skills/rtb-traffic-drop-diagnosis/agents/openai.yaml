@@ -1,0 +1,4 @@
+interface:
+  display_name: "RTB Traffic Drop Diagnosis"
+  short_description: "Trace traffic drops to approval loss"
+  default_prompt: "Use $rtb-traffic-drop-diagnosis to investigate a CTV traffic drop by comparing before/after traffic, spend, bid filtering, and creative approvals."

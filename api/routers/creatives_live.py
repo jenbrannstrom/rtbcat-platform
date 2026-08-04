@@ -34,6 +34,23 @@ def _error_type_from_exception(exc: Exception) -> str:
     return "exception"
 
 
+def _classify_cache_fallback(error_type: str, creative) -> str:
+    """Return the product-facing fallback reason for a cached creative."""
+    approval_status = (getattr(creative, "approval_status", "") or "").upper()
+    if error_type == "not_found" and approval_status == "DISAPPROVED":
+        return "disapproved_removed_from_google"
+    return error_type
+
+
+def _cache_fallback_message(fallback_reason: str) -> str:
+    if fallback_reason == "disapproved_removed_from_google":
+        return (
+            "Creative is disapproved and no longer returned by Google live API. "
+            "Showing cached snapshot."
+        )
+    return "Live fetch failed; showing cached snapshot."
+
+
 @router.get("/creatives/live/{creative_id:path}", response_model=CreativeLiveResponse)
 @router.get("/creatives/{creative_id:path}/live", response_model=CreativeLiveResponse)
 async def get_creative_live(
@@ -102,11 +119,13 @@ async def get_creative_live(
         if not allow_cache_fallback:
             raise
         error_type = _error_type_from_exception(exc)
+        fallback_reason = _classify_cache_fallback(error_type, creative)
+        fallback_message = _cache_fallback_message(fallback_reason)
         try:
             await telemetry_service.record_fallback(
                 creative_id=creative_id,
                 buyer_id=creative.buyer_id,
-                error_type=error_type,
+                error_type=fallback_reason,
                 error_message=exc.detail if isinstance(exc.detail, str) else str(exc.detail),
             )
         except Exception as telemetry_error:
@@ -121,11 +140,11 @@ async def get_creative_live(
                 seat_name_override=creative.seat_name,
                 source="cache",
                 fetched_at=now,
-                fallback_reason=error_type,
+                fallback_reason=fallback_reason,
             ),
             source="cache",
             fetched_at=now.isoformat(),
-            message="Live fetch failed; showing cached snapshot.",
+            message=fallback_message,
         )
     except Exception as e:
         logger.error(f"Live creative fetch failed for {creative_id}: {e}")

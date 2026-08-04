@@ -1946,6 +1946,7 @@ export interface Translations {
     sourceLiveApi: string;
     sourceCachedSnapshot: string;
     cacheIsStale: string;
+    disapprovedRemovedFromGoogle: string;
     hoursAbbrev: string;
     oldLabel: string;
     thresholdLabel: string;
@@ -2020,6 +2021,8 @@ export interface Translations {
     source: string;
     checkingGeoCompatibility: string;
     noVideoUrlAvailable: string;
+    videoPlaybackFailed: string;
+    videoPlaybackFailedHelp: string;
     clickToOpenDestination: string;
     creativeIframeTitle: string;
     scaledToPercent: string;

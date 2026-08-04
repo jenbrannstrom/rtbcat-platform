@@ -2,8 +2,8 @@
 
 /* eslint-disable @next/next/no-img-element -- Preview renderers display arbitrary creative assets and intentionally bypass Next image optimization. */
 
-import { useMemo, useRef } from "react";
-import { Play } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Loader2, Play } from "lucide-react";
 import { useTranslation } from "@/contexts/i18n-context";
 import type { Creative } from "@/types/api";
 import { cn } from "@/lib/utils";
@@ -19,6 +19,27 @@ function extractVideoUrlFromVast(vastXml: string): string | null {
     return mediaFile.textContent?.trim() || null;
   }
   return null;
+}
+
+export function looksLikeDirectVideoUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return /\.(mp4|m4v|mov|webm|ogv|ogg)(?:$|[?#])/i.test(parsed.pathname);
+  } catch {
+    return /\.(mp4|m4v|mov|webm|ogv|ogg)(?:$|[?#])/i.test(url);
+  }
+}
+
+export function looksLikeVastUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return (
+      parsed.pathname.toLowerCase().includes("vast") ||
+      parsed.search.toLowerCase().includes("vast")
+    );
+  } catch {
+    return /vast/i.test(url);
+  }
 }
 
 const URL_ATTRS = new Set([
@@ -138,11 +159,68 @@ function buildPreviewDocument({
 export function VideoPreviewPlayer({ creative }: { creative: Creative }) {
   const { t } = useTranslation();
   const videoRef = useRef<HTMLVideoElement>(null);
+  const [playbackFailed, setPlaybackFailed] = useState(false);
+  const rawVideoUrl = creative.video?.video_url || null;
+  const [resolvedVideoUrl, setResolvedVideoUrl] = useState<string | null>(null);
+  const [isResolvingVast, setIsResolvingVast] = useState(false);
 
-  let videoUrl = creative.video?.video_url;
-  if (!videoUrl && creative.video?.vast_xml) {
-    videoUrl = extractVideoUrlFromVast(creative.video.vast_xml);
-  }
+  useEffect(() => {
+    let cancelled = false;
+    setPlaybackFailed(false);
+
+    const vastXml = creative.video?.vast_xml || null;
+    if (vastXml) {
+      setResolvedVideoUrl(extractVideoUrlFromVast(vastXml));
+      setIsResolvingVast(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    if (!rawVideoUrl) {
+      setResolvedVideoUrl(null);
+      setIsResolvingVast(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    if (looksLikeDirectVideoUrl(rawVideoUrl)) {
+      setResolvedVideoUrl(rawVideoUrl);
+      setIsResolvingVast(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    if (!looksLikeVastUrl(rawVideoUrl)) {
+      setResolvedVideoUrl(rawVideoUrl);
+      setIsResolvingVast(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setResolvedVideoUrl(null);
+    setIsResolvingVast(true);
+    fetch(rawVideoUrl)
+      .then((response) => response.text())
+      .then((vastText) => {
+        if (cancelled) return;
+        setResolvedVideoUrl(extractVideoUrlFromVast(vastText));
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setResolvedVideoUrl(rawVideoUrl);
+      })
+      .finally(() => {
+        if (!cancelled) setIsResolvingVast(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [creative.video?.vast_xml, rawVideoUrl]);
 
   const creativeWidth = creative.width || 640;
   const creativeHeight = creative.height || 360;
@@ -152,7 +230,16 @@ export function VideoPreviewPlayer({ creative }: { creative: Creative }) {
   const displayWidth = Math.round(creativeWidth * scale);
   const displayHeight = Math.round(creativeHeight * scale);
 
-  if (!videoUrl) {
+  if (isResolvingVast) {
+    return (
+      <div className="flex flex-col items-center justify-center h-48 bg-gray-900 text-gray-400">
+        <Loader2 className="h-8 w-8 animate-spin mb-2 opacity-70" />
+        <p>{t.common.loading}</p>
+      </div>
+    );
+  }
+
+  if (!resolvedVideoUrl) {
     return (
       <div className="flex flex-col items-center justify-center h-48 bg-gray-900 text-gray-400">
         <Play className="h-10 w-10 mx-auto mb-2 opacity-50" />
@@ -165,12 +252,20 @@ export function VideoPreviewPlayer({ creative }: { creative: Creative }) {
     <div className="bg-black flex flex-col items-center justify-center p-4">
       <video
         ref={videoRef}
-        src={videoUrl}
+        src={resolvedVideoUrl}
         controls
         width={displayWidth}
         height={displayHeight}
         className="bg-black"
+        onError={() => setPlaybackFailed(true)}
+        onLoadedData={() => setPlaybackFailed(false)}
       />
+      {playbackFailed && (
+        <div className="mt-3 max-w-xl rounded border border-amber-700 bg-amber-950/70 px-3 py-2 text-xs text-amber-100">
+          <div className="font-medium">{t.previewModal.videoPlaybackFailed}</div>
+          <div className="mt-1 text-amber-100/80">{t.previewModal.videoPlaybackFailedHelp}</div>
+        </div>
+      )}
       {creative.width && creative.height && (
         <div className="mt-2 text-xs text-gray-400">
           {creative.width} × {creative.height}
