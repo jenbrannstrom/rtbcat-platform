@@ -182,6 +182,7 @@ upsert_http_scheduler() {
   local headers="$4"
   local description="$5"
   local max_retry_attempts="${6:-3}"
+  local attempt_deadline="${7:-1800s}"
 
   if gcloud scheduler jobs describe "$job_name" \
     --project="$PROJECT" \
@@ -195,7 +196,7 @@ upsert_http_scheduler() {
       --time-zone="$TIME_ZONE" \
       --uri="$uri" \
       --http-method=POST \
-      --attempt-deadline=1800s \
+      --attempt-deadline="$attempt_deadline" \
       --max-retry-attempts="$max_retry_attempts" \
       --min-backoff=60s \
       --max-backoff=600s \
@@ -211,7 +212,7 @@ upsert_http_scheduler() {
       --time-zone="$TIME_ZONE" \
       --uri="$uri" \
       --http-method=POST \
-      --attempt-deadline=1800s \
+      --attempt-deadline="$attempt_deadline" \
       --max-retry-attempts="$max_retry_attempts" \
       --min-backoff=60s \
       --max-backoff=600s \
@@ -305,18 +306,19 @@ upsert_http_scheduler \
   "X-Gmail-Import-Secret=${GMAIL_IMPORT_SECRET_VALUE}" \
   "Daily Gmail report import"
 
-# Retries stay disabled until every serving deployment enqueues this refresh
-# asynchronously (precompute_jobs queue, migration 073). Until then a retry
-# after the edge 504 launches a duplicate multi-hour refresh. Once the async
-# endpoint is verified in production, retries can be re-enabled because
-# enqueueing is idempotent per scheduled execution.
+# This endpoint enqueues to the precompute_jobs queue (migration 073) and
+# returns 202 within seconds, so retries are safe: a retry of one scheduled
+# execution collapses onto the same job. The short deadline only needs to
+# cover the enqueue, not the multi-hour refresh; completion is monitored via
+# /precompute/health, not scheduler status.
 upsert_http_scheduler \
   precompute-refresh \
   "$PRECOMPUTE_SCHEDULE" \
   "$PRECOMPUTE_REFRESH_URL" \
   "X-Precompute-Refresh-Secret=${PRECOMPUTE_REFRESH_SECRET_VALUE}" \
   "Daily precompute refresh after Gmail import" \
-  0
+  3 \
+  180s
 
 upsert_http_scheduler \
   creative-cache-refresh \
