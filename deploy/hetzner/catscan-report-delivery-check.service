@@ -1,0 +1,11 @@
+[Unit]
+Description=Check Authorized Buyers report delivery completeness (RCA-mobyoung-daily-spend-2026-07-13)
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/catscan-report-delivery-alert
+# Exit 1 = alerts found and posted to Matrix — not a unit failure.
+# Exit 2 = the checker itself broke; the unit fails and the wrapper posts that too.
+SuccessExitStatus=0 1
