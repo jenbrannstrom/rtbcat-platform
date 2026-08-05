@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily report-delivery watchdog (restored 2026-08-05 after Hetzner migration dropped it)
+
+[Timer]
+OnCalendar=*-*-* 13:45:00 UTC
+OnCalendar=*-*-* 19:15:00 UTC
+Persistent=true
+Unit=catscan-report-delivery-check.service
+
+[Install]
+WantedBy=timers.target

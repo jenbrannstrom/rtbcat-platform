@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+# Run the report-delivery watchdog; post any alert to the Dept-3 Matrix room.
+# Alert text carries dates/seat ids only — never monetary values or secrets.
+#
+# Install on the app host (see catscan-report-delivery-check.service):
+#   /usr/local/bin/catscan-report-delivery-alert   (mode 755)
+#   /etc/catscan-alerts.env                        (mode 600, root)
+#     MATRIX_BASE_URL=..., MATRIX_ROOM_ID=..., MATRIX_ACCESS_TOKEN=...
+#
+# Optional args (e.g. --date YYYY-MM-DD) pass through to the checker.
+set -u
+. /etc/catscan-alerts.env
+
+out=$(/usr/bin/docker exec -w /app -e PYTHONPATH=/app \
+  -e CATSCAN_GMAIL_SEAT_IDS=6574658621,6634662463,1487810529,7942355670,8087233591 \
+  rtbcat-api python3 scripts/check_report_delivery.py \
+  --json-out /home/rtbcat/.catscan/report_delivery_status.json "$@" 2>&1)
+rc=$?
+echo "$out"
+
+if [ "$rc" -eq 0 ]; then exit 0; fi
+if [ "$rc" -eq 1 ]; then
+  alerts=$(echo "$out" | sed -n '/^ALERTS:/,$p')
+  body="RTBcat report delivery ALERT (scan.rtb.cat):
+$alerts"
+else
+  body="RTBcat report-delivery watchdog FAILED to run (exit $rc) on rtbcat-production-app — check journalctl -u catscan-report-delivery-check"
+fi
+txn="delivery-$(date -u +%s)"
+room_enc=$(python3 - "$MATRIX_ROOM_ID" <<'PY'
+import sys, urllib.parse
+print(urllib.parse.quote(sys.argv[1], safe=""))
+PY
+)
+payload=$(python3 - "$body" <<'PY'
+import sys, json
+print(json.dumps({"msgtype": "m.text", "body": sys.argv[1]}))
+PY
+)
+curl -sf -X PUT \
+  -H "Authorization: Bearer $MATRIX_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "$payload" \
+  "$MATRIX_BASE_URL/_matrix/client/v3/rooms/$room_enc/send/m.room.message/$txn" >/dev/null \
+  || echo "matrix post failed" >&2
+exit "$rc"
