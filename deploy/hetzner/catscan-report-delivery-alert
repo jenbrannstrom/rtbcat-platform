@@ -20,11 +20,21 @@ echo "$out"
 
 if [ "$rc" -eq 0 ]; then exit 0; fi
 if [ "$rc" -eq 1 ]; then
-  alerts=$(echo "$out" | sed -n '/^ALERTS:/,$p')
-  body="RTBcat report delivery ALERT (scan.rtb.cat):
+  # Plain English + customer names instead of seat ids.
+  alerts=$(echo "$out" | sed -n '/^ALERTS:/,$p' | tail -n +2 | sed \
+    -e 's/6574658621/Moboost/g' \
+    -e 's/6634662463/MobYoung/g' \
+    -e 's/1487810529/FrontClick/g' \
+    -e 's/7942355670/STARTI/g' \
+    -e 's/8087233591/Uplivo/g' \
+    -e 's/CANONICAL-SPEND email did not arrive on its normal day/the money report email from Google did not arrive on its normal day/' \
+    -e 's/report email did not arrive on its normal day/a report email from Google did not arrive on its normal day/' \
+    -e 's/no canonical spend rows in BigQuery for metric/no spend numbers on record for/' \
+    -e 's/ — may still arrive late; spend-lane status is the ground truth//')
+  body="Google did not send all of yesterday's report emails. If a customer's MONEY report is missing, their sheet cannot update until it is re-sent (re-run the saved report in the Authorized Buyers console, delivered by email).
 $alerts"
 else
-  body="RTBcat report-delivery watchdog FAILED to run (exit $rc) on rtbcat-production-app — check journalctl -u catscan-report-delivery-check"
+  body="The report-delivery check itself failed to run (exit $rc) on the RTBcat server — check journalctl -u catscan-report-delivery-check"
 fi
 txn="delivery-$(date -u +%s)"
 room_enc=$(python3 - "$MATRIX_ROOM_ID" <<'PY'
