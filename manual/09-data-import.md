@@ -15,6 +15,27 @@ your data is stale, your decisions are based on old information.
 
 ## Two ways data arrives
 
+> **DANGER — only use the emailed CSV for money data, never the grid's
+> "Download CSV" button.** There are two different CSV files behind the
+> Authorized Buyers UI, and they do **not** contain the same money:
+>
+> 1. **The emailed report.** When Google runs a scheduled report and delivers
+>    it by email, it attaches a machine-made CSV with full precision
+>    (6 decimal places). This is the file Cat-Scan swallows every morning.
+>    This is the file you want.
+> 2. **The "Download CSV" button on the Query Tool results page.** That
+>    exports *what's shown on your screen*, rounded to 2 decimal places. Ad
+>    spend comes in thousands of rows worth fractions of a cent each — like
+>    $0.0004 — and rounding shows those as $0.00, so they vanish from the
+>    file. When we tested this in July 2026, the downloaded file was missing
+>    about **$1,950 out of an $18,500 day. Same report, same day, ~10% less
+>    money** — and the shortfall never corrects itself; it surfaces weeks
+>    later as a phantom discrepancy against Google's month-end invoice.
+>
+> If you ever need to re-deliver a missed day, re-run the saved report in the
+> Query Tool for that date **with email delivery** and let the normal import
+> pick it up.
+
 ### 1. Manual CSV upload (`/import`)
 
 Drag and drop a CSV file exported from Google Authorized Buyers.
