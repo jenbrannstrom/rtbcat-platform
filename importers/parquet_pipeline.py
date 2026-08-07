@@ -6,7 +6,7 @@ import importlib.util
 import logging
 import os
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, Optional
 
@@ -105,6 +105,7 @@ def _parquet_schema_for_table(table_name: str) -> "pa.Schema":
                 ("measurable_impressions", pa.int64()),
                 ("bidder_id", pa.string()),
                 ("report_type", pa.string()),
+                ("created_at", pa.timestamp("us", tz="UTC")),
                 ("row_hash", pa.string()),
                 ("import_batch_id", pa.string()),
             ]
@@ -132,6 +133,7 @@ def _parquet_schema_for_table(table_name: str) -> "pa.Schema":
                 ("clicks", pa.int64()),
                 ("bidder_id", pa.string()),
                 ("report_type", pa.string()),
+                ("created_at", pa.timestamp("us", tz="UTC")),
                 ("row_hash", pa.string()),
                 ("import_batch_id", pa.string()),
             ]
@@ -149,6 +151,7 @@ def _parquet_schema_for_table(table_name: str) -> "pa.Schema":
                 ("opportunity_cost_micros", pa.int64()),
                 ("bidder_id", pa.string()),
                 ("report_type", pa.string()),
+                ("created_at", pa.timestamp("us", tz="UTC")),
                 ("row_hash", pa.string()),
                 ("import_batch_id", pa.string()),
             ]
@@ -171,6 +174,7 @@ def _parquet_schema_for_table(table_name: str) -> "pa.Schema":
                 ("viewability_pct", pa.float64()),
                 ("bidder_id", pa.string()),
                 ("report_type", pa.string()),
+                ("created_at", pa.timestamp("us", tz="UTC")),
                 ("row_hash", pa.string()),
                 ("import_batch_id", pa.string()),
             ]
@@ -209,6 +213,7 @@ def _bq_schema_for_table(table_name: str) -> list["bigquery.SchemaField"]:
             bigquery.SchemaField("measurable_impressions", "INT64"),
             bigquery.SchemaField("bidder_id", "STRING"),
             bigquery.SchemaField("report_type", "STRING"),
+            bigquery.SchemaField("created_at", "TIMESTAMP"),
             bigquery.SchemaField("row_hash", "STRING"),
             bigquery.SchemaField("import_batch_id", "STRING"),
         ]
@@ -234,6 +239,7 @@ def _bq_schema_for_table(table_name: str) -> list["bigquery.SchemaField"]:
             bigquery.SchemaField("clicks", "INT64"),
             bigquery.SchemaField("bidder_id", "STRING"),
             bigquery.SchemaField("report_type", "STRING"),
+            bigquery.SchemaField("created_at", "TIMESTAMP"),
             bigquery.SchemaField("row_hash", "STRING"),
             bigquery.SchemaField("import_batch_id", "STRING"),
         ]
@@ -249,6 +255,7 @@ def _bq_schema_for_table(table_name: str) -> list["bigquery.SchemaField"]:
             bigquery.SchemaField("opportunity_cost_micros", "INT64"),
             bigquery.SchemaField("bidder_id", "STRING"),
             bigquery.SchemaField("report_type", "STRING"),
+            bigquery.SchemaField("created_at", "TIMESTAMP"),
             bigquery.SchemaField("row_hash", "STRING"),
             bigquery.SchemaField("import_batch_id", "STRING"),
         ]
@@ -269,6 +276,7 @@ def _bq_schema_for_table(table_name: str) -> list["bigquery.SchemaField"]:
             bigquery.SchemaField("viewability_pct", "FLOAT64"),
             bigquery.SchemaField("bidder_id", "STRING"),
             bigquery.SchemaField("report_type", "STRING"),
+            bigquery.SchemaField("created_at", "TIMESTAMP"),
             bigquery.SchemaField("row_hash", "STRING"),
             bigquery.SchemaField("import_batch_id", "STRING"),
         ]
@@ -305,6 +313,10 @@ def _normalize_value(value: Any, field_type: "pa.DataType") -> Any:
         if isinstance(value, (int, float)):
             return float(value)
         return float(_clean_numeric_string(value))
+    if pa.types.is_timestamp(field_type):
+        if isinstance(value, datetime):
+            return value
+        return datetime.fromisoformat(str(value))
     if pa.types.is_string(field_type):
         return str(value)
     return value
@@ -320,6 +332,11 @@ class ParquetExportManager:
         default_factory=lambda: Path(
             os.getenv("CATSCAN_PARQUET_DIR", "~/.catscan/parquet")
         ).expanduser()
+    )
+    # One timestamp per batch: readers order competing import batches for the
+    # same (report_type, buyer, metric_date) by this value, newest wins.
+    created_at: datetime = field(
+        default_factory=lambda: datetime.now(timezone.utc)
     )
     _buffers: Dict[str, list[Dict[str, Any]]] = field(default_factory=dict, init=False)
     _writers: Dict[str, "pq.ParquetWriter"] = field(default_factory=dict, init=False)
@@ -346,7 +363,7 @@ class ParquetExportManager:
         if not day:
             return
         buffer = self._buffers.setdefault(day, [])
-        buffer.append(row)
+        buffer.append({**row, "created_at": row.get("created_at") or self.created_at})
         if len(buffer) >= PARQUET_BATCH_SIZE:
             self._flush_day(day)
 

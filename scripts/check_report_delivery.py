@@ -16,7 +16,10 @@ yesterday UTC) it checks:
     kinds this seat normally receives (learned from a lookback window, so
     per-seat schedule differences don't need hardcoding);
   - BigQuery rtb_daily: canonical spend lane (report_type='buyer_spend')
-    has exactly ONE import batch for (seat, D).
+    batches for (seat, D) agree with each other. Multiple batches per day are
+    normal since the batch-aware readers landed (redundant schedules,
+    re-deliveries) — the readers serve only the newest batch; an alert fires
+    only when batches carry DIFFERING totals (a restatement to confirm).
 
 Runs inside the catscan-api container (uses the worker's Gmail token and the
 container's BigQuery credentials). Read-only; writes only the --json-out file.
@@ -87,18 +90,22 @@ def gmail_deliveries(svc, start: date, end: date) -> dict[date, dict[str, set[st
 
 def spend_lane_batches(
     project: str, dataset: str, metric_date: date, window_days: int = 14
-) -> dict[tuple[str, str], int]:
-    """Map (seat, iso date) -> distinct import batch count in the canonical spend
-    lane over a trailing window, so a duplicate ingested into an OLDER day (e.g.
-    a mis-scheduled report re-run) is caught, not just yesterday's."""
+) -> dict[tuple[str, str], list[dict]]:
+    """Map (seat, iso date) -> per-batch spend summaries in the canonical spend
+    lane over a trailing window, winner first (the readers' ordering: newest
+    created_at, batch id as tiebreak). Since the batch-aware readers landed,
+    multiple batches per day are NORMAL (redundant schedules, re-deliveries);
+    what matters is whether the batches agree and which one the readers serve."""
     from google.cloud import bigquery
 
     client = bigquery.Client(project=project)
     sql = f"""
-        SELECT buyer_account_id, metric_date, COUNT(DISTINCT import_batch_id) AS batches
+        SELECT buyer_account_id, metric_date, import_batch_id,
+               SUM(spend_micros) AS spend_micros,
+               MAX(created_at) AS batch_created_at
         FROM `{project}.{dataset}.rtb_daily`
         WHERE report_type = 'buyer_spend' AND metric_date BETWEEN @s AND @d
-        GROUP BY buyer_account_id, metric_date
+        GROUP BY buyer_account_id, metric_date, import_batch_id
     """
     job = client.query(
         sql,
@@ -109,7 +116,48 @@ def spend_lane_batches(
             ]
         ),
     )
-    return {(row.buyer_account_id, row.metric_date.isoformat()): row.batches for row in job.result()}
+    out: dict[tuple[str, str], list[dict]] = defaultdict(list)
+    for row in job.result():
+        out[(row.buyer_account_id, row.metric_date.isoformat())].append(
+            {
+                "batch_id": row.import_batch_id or "",
+                "spend_micros": int(row.spend_micros or 0),
+                "created_at": row.batch_created_at,
+            }
+        )
+    for summaries in out.values():
+        summaries.sort(
+            key=lambda b: (
+                b["created_at"] or datetime(1970, 1, 1, tzinfo=timezone.utc),
+                b["batch_id"],
+            ),
+            reverse=True,
+        )
+    return dict(out)
+
+
+def evaluate_spend_lane(summaries: list[dict], day: str, seat: str) -> tuple[str, str | None]:
+    """Classify one (seat, day)'s spend-lane batches under winner semantics.
+
+    Returns (status_label, alert_or_None). Identical duplicate batches are fine
+    — the batch-aware readers serve exactly one. Differing totals mean the day
+    was restated: the newest batch serves, but flag it so a human knows the
+    number changed and can confirm the day was re-materialized afterwards.
+    """
+    if not summaries:
+        return "missing", None
+    if len(summaries) == 1:
+        return "ok", None
+    totals = {b["spend_micros"] for b in summaries}
+    if len(totals) == 1:
+        return f"ok ({len(summaries)} identical batches; newest serves)", None
+    winner = summaries[0]
+    return (
+        f"RESTATED({len(summaries)} batches)",
+        f"{seat}: metric {day} has {len(summaries)} spend-lane batches with "
+        f"DIFFERING totals — the newest (batch {winner['batch_id']}) is the one "
+        f"served; confirm the day was re-materialized after it arrived",
+    )
 
 
 def main() -> int:
@@ -172,13 +220,8 @@ def main() -> int:
         # A late-but-recovered day shows up here as missing email + spend lane ok.
         arrived = deliveries.get(delivery_d, {}).get(seat, set())
         missing = sorted(expected.get(seat, set()) - arrived)
-        n_batches = batches.get((seat, metric_d.isoformat()), 0)
-        if n_batches == 0:
-            spend_lane = "missing"
-        elif n_batches == 1:
-            spend_lane = "ok"
-        else:
-            spend_lane = f"DUPLICATE({n_batches} batches)"
+        summaries = batches.get((seat, metric_d.isoformat()), [])
+        spend_lane, lane_alert = evaluate_spend_lane(summaries, metric_d.isoformat(), seat)
         result["seats"][seat] = {
             "expected_kinds": sorted(expected.get(seat, set())),
             "arrived_kinds": sorted(arrived),
@@ -193,23 +236,22 @@ def main() -> int:
                 f"status is the ground truth"
             )
         if spend_lane == "missing" and (
-            CANONICAL_KIND in expected.get(seat, set()) or seat in batches
+            CANONICAL_KIND in expected.get(seat, set()) or (seat, metric_d.isoformat()) in batches
         ):
             alerts.append(f"{seat}: no canonical spend rows in BigQuery for metric {metric_d}")
-        if n_batches > 1:
-            alerts.append(
-                f"{seat}: metric {metric_d} ingested {n_batches}x in spend lane — "
-                f"published value is multiplied; dedupe before any refresh"
-            )
+        if lane_alert:
+            alerts.append(lane_alert)
 
-    # Trailing-window duplicate sweep: a mis-scheduled re-run lands on an OLD
-    # metric date and the inline publisher multiplies it the same day.
-    for (seat, day), n_batches in sorted(batches.items()):
-        if n_batches > 1 and day != metric_d.isoformat():
-            alerts.append(
-                f"{seat}: metric {day} has {n_batches} spend-lane batches — "
-                f"published value is multiplied; dedupe and re-publish"
-            )
+    # Trailing-window restatement sweep: a re-delivery landing on an OLD metric
+    # date is served immediately by the batch-aware readers; surface it only
+    # when the batches disagree (a genuine restatement someone should confirm).
+    seat_set = set(seats)
+    for (seat, day), summaries in sorted(batches.items()):
+        if day == metric_d.isoformat() and seat in seat_set:
+            continue  # already evaluated above
+        _, lane_alert = evaluate_spend_lane(summaries, day, seat)
+        if lane_alert:
+            alerts.append(lane_alert)
 
     result["alerts"] = alerts
     result["ok"] = not alerts
