@@ -1,6 +1,16 @@
 # Engineering brief — make the parquet→BigQuery spend lane idempotent
 
-**Status:** option A implemented locally 2026-07-22 (not deployed); durable option C remains open
+**Status:** option A merged and deployed (PR #112, release `10c45949` accepted on
+the Hetzner host). Option C implemented 2026-08-07 (`fix/replay-safe-spend-ingest`):
+exports stamp a per-batch `created_at`; every raw-table read in
+`refresh_rtb_summaries` goes through `winning_batch_source()` (newest batch per
+report_type/buyer/day wins, batch id as tiebreak for legacy NULL rows); the
+delivery watchdog treats identical duplicate batches as normal and alerts only
+on differing totals. Residual (out of scope here): the Postgres import lane
+dedups by row_hash, so a *restated* day adds rows beside the old ones in PG
+`rtb_daily` — affects PG-reading analytics only, not the BQ→serving billing
+lane. Redundant "last 7 days" report schedules must stay OFF until this change
+is deployed.
 **Owner:** unassigned — this brief is the starting point for whoever picks it up
 **Background reading:** `investigations/RCA-mobyoung-daily-spend-2026-07-13.md`,
 `investigations/RCA-mobyoung-0705-multiplied-2026-07-21.md`

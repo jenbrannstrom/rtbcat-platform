@@ -166,6 +166,31 @@ RTB_TABLES_SQL = [
 ]
 
 
+def winning_batch_source(table_ref: str, *, buyer_clause: str = "") -> str:
+    """Return a subquery over ``table_ref`` keeping only the winning import
+    batch per (report_type, buyer, metric_date).
+
+    The raw tables are append-only: a re-delivered or restated report lands as
+    a NEW import_batch_id for the same day (docs/BRIEF_PARQUET_BQ_IDEMPOTENCY.md).
+    Summing across batches multiplied published spend three times in July 2026,
+    so readers must treat exactly one batch as a day's truth: the newest by the
+    export-stamped ``created_at``, with ``import_batch_id`` as a deterministic
+    tiebreak for legacy rows loaded before the stamp existed (their
+    ``created_at`` is NULL and sorts as the epoch).
+
+    RANK() (not ROW_NUMBER) keeps every row of the winning batch: all rows of
+    one batch share the same (created_at, import_batch_id) ordering key.
+    """
+    return (
+        "(SELECT * FROM `" + table_ref + "` "
+        "WHERE metric_date BETWEEN @start_date AND @end_date" + buyer_clause + " "
+        "QUALIFY RANK() OVER ("
+        "PARTITION BY report_type, COALESCE(buyer_account_id, ''), metric_date "
+        "ORDER BY COALESCE(created_at, TIMESTAMP '1970-01-01 00:00:00+00') DESC, "
+        "COALESCE(import_batch_id, '') DESC) = 1)"
+    )
+
+
 async def refresh_rtb_summaries(
     start_date: str,
     end_date: str,
@@ -191,6 +216,8 @@ async def refresh_rtb_summaries(
     buyer_clause = (
         " AND buyer_account_id = @buyer_account_id" if buyer_account_id else ""
     )
+    rtb_daily_src = winning_batch_source(rtb_daily_table, buyer_clause=buyer_clause)
+    bidstream_src = winning_batch_source(bidstream_table, buyer_clause=buyer_clause)
     start_date_value = date.fromisoformat(start_date)
     end_date_value = date.fromisoformat(end_date)
     query_timeout_seconds = float(
@@ -226,7 +253,7 @@ async def refresh_rtb_summaries(
                 SUM(successful_responses) AS successful_responses,
                 SUM(bid_requests) AS bid_requests,
                 SUM(auctions_won) AS auctions_won
-            FROM `{bidstream_table}`
+            FROM {bidstream_src}
             WHERE metric_date BETWEEN @start_date AND @end_date{buyer_clause}
             GROUP BY metric_date, COALESCE(buyer_account_id, '')
         """,
@@ -256,7 +283,7 @@ async def refresh_rtb_summaries(
                 SUM(impressions) AS impressions,
                 SUM(clicks) AS clicks,
                 SUM(spend_micros) AS spend_micros
-            FROM `{rtb_daily_table}`
+            FROM {rtb_daily_src}
             WHERE metric_date BETWEEN @start_date AND @end_date
               AND report_type = 'buyer_spend'{buyer_clause}
             GROUP BY metric_date, COALESCE(buyer_account_id, '')
@@ -285,7 +312,7 @@ async def refresh_rtb_summaries(
                 SUM(impressions) AS impressions,
                 SUM(clicks) AS clicks,
                 SUM(spend_micros) AS spend_micros
-            FROM `{rtb_daily_table}`
+            FROM {rtb_daily_src}
             WHERE metric_date BETWEEN @start_date AND @end_date
               AND report_type = 'buyer_spend'
               AND platform IS NOT NULL
@@ -319,7 +346,7 @@ async def refresh_rtb_summaries(
                 SUM(successful_responses) AS successful_responses,
                 SUM(bid_requests) AS bid_requests,
                 SUM(auctions_won) AS auctions_won
-            FROM `{bidstream_table}`
+            FROM {bidstream_src}
             WHERE metric_date BETWEEN @start_date AND @end_date
               AND publisher_id IS NOT NULL
               AND publisher_id != ''{buyer_clause}
@@ -351,7 +378,7 @@ async def refresh_rtb_summaries(
                 SUM(successful_responses) AS successful_responses,
                 SUM(bid_requests) AS bid_requests,
                 SUM(auctions_won) AS auctions_won
-            FROM `{bidstream_table}`
+            FROM {bidstream_src}
             WHERE metric_date BETWEEN @start_date AND @end_date
               AND country IS NOT NULL
               AND country != ''{buyer_clause}
@@ -383,7 +410,7 @@ async def refresh_rtb_summaries(
                 SUM(impressions) AS impressions,
                 SUM(clicks) AS clicks,
                 SUM(spend_micros) AS spend_micros
-            FROM `{rtb_daily_table}`
+            FROM {rtb_daily_src}
             WHERE metric_date BETWEEN @start_date AND @end_date
               AND app_name IS NOT NULL
               AND app_name != ''{buyer_clause}
@@ -417,7 +444,7 @@ async def refresh_rtb_summaries(
                 SUM(impressions) AS impressions,
                 SUM(clicks) AS clicks,
                 SUM(spend_micros) AS spend_micros
-            FROM `{rtb_daily_table}`
+            FROM {rtb_daily_src}
             WHERE metric_date BETWEEN @start_date AND @end_date
               AND app_name IS NOT NULL
               AND app_name != ''
@@ -453,7 +480,7 @@ async def refresh_rtb_summaries(
                 SUM(impressions) AS impressions,
                 SUM(clicks) AS clicks,
                 SUM(spend_micros) AS spend_micros
-            FROM `{rtb_daily_table}`
+            FROM {rtb_daily_src}
             WHERE metric_date BETWEEN @start_date AND @end_date
               AND app_name IS NOT NULL
               AND app_name != ''
@@ -490,7 +517,7 @@ async def refresh_rtb_summaries(
                 SUM(impressions) AS impressions,
                 SUM(clicks) AS clicks,
                 SUM(spend_micros) AS spend_micros
-            FROM `{rtb_daily_table}`
+            FROM {rtb_daily_src}
             WHERE metric_date BETWEEN @start_date AND @end_date
               AND app_name IS NOT NULL
               AND app_name != ''
