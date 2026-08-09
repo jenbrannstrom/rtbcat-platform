@@ -14,8 +14,16 @@ Outside agents use revocable app tokens:
 - plaintext is returned only once when the token is created
 - each token is bound to a normal Cat-Scan user
 - buyer isolation comes from `user_buyer_seat_permissions`
-- each token is hard-scoped to one `buyer_id`
-- current scope: `agent:stats:read`
+- a token is hard-scoped to one `buyer_id`, or minted with
+  `all_granted_buyers=true` (non-sudo users only) to cover every seat the
+  user is granted — the seat grants then bound every request
+- tokens for sudo users always require a single-buyer hard scope
+- supported scopes:
+  - `agent:stats:read` — stats summary and daily spend
+  - `agent:creatives:read` — creative search and detail (planned endpoints)
+  - `agent:creative-performance:read` — batch creative performance (planned)
+  - `agent:assets:read` — creative asset retrieval (planned)
+- each read route enforces its own scope; `/me` accepts any valid token
 
 Do not give outside agents the legacy `CATSCAN_API_KEY`. That key authenticates
 as a sudo automation user and is for trusted internal operations only.
@@ -63,24 +71,34 @@ the `Authorization` header.
 ```bash
 curl -u "agent:${CATSCAN_AGENT_BASIC_PASSWORD}" \
   -H "X-CatScan-Agent-Token: ${CATSCAN_AGENT_TOKEN}" \
-  "https://YOUR_HOST/api/agent/v1/stats-summary?buyer_id=1487810529"
+  "https://YOUR_HOST/api/agent/v1/stats-summary?buyer_id=1111111111"
 ```
 
 ## Provision
 
 Create or reuse a read-only app user with buyer-seat grants, then mint an agent
-token.
+token. The API (`POST /api/agent/v1/tokens`, sudo session) is the supported
+path — it validates the target, enforces scope and buyer rules, and writes an
+audit event.
 
-Via the provisioning script:
+For a multi-buyer research identity, grant the app user one seat permission
+per allowed buyer and mint the token with `"all_granted_buyers": true`
+(omit `buyer_id`). The token then stores no buyer hard-scope and every
+request is bounded by the user's seat grants; each request must still name
+one `buyer_id` explicitly.
+
+Via the provisioning script (**deprecated** for token minting —
+`--create-api-token` inserts directly into `agent_api_tokens`, bypassing API
+validation and auditing; it now prints a deprecation warning):
 
 ```bash
 POSTGRES_DSN='postgresql://...' \
 python scripts/provision_creative_audit_agent.py \
   --skip-db-role \
-  --app-email creative-audit-agent-1487810529@example.com \
-  --buyer-id 1487810529 \
+  --app-email creative-audit-agent-1111111111@example.com \
+  --buyer-id 1111111111 \
   --create-api-token \
-  --api-token-name 'Daily summary agent - 1487810529'
+  --api-token-name 'Daily summary agent - 1111111111'
 ```
 
 The script prints `Agent API token: cat_agent_...` once. Store it in Secret
@@ -93,9 +111,9 @@ curl -X POST https://YOUR_HOST/api/agent/v1/tokens \
   -H 'Content-Type: application/json' \
   -H 'Cookie: rtbcat_session=<sudo-session>' \
   -d '{
-    "name": "Daily summary agent - 1487810529",
+    "name": "Daily summary agent - 1111111111",
     "user_id": "AGENT_USER_ID",
-    "buyer_id": "1487810529",
+    "buyer_id": "1111111111",
     "scopes": ["agent:stats:read"],
     "expires_in_days": 90
   }'
@@ -121,7 +139,7 @@ curl -u "agent:${CATSCAN_AGENT_BASIC_PASSWORD}" \
 Pull a summary payload:
 
 ```bash
-curl "https://YOUR_HOST/api/agent/v1/stats-summary?buyer_id=1487810529&days=7&top_limit=10" \
+curl "https://YOUR_HOST/api/agent/v1/stats-summary?buyer_id=1111111111&days=7&top_limit=10" \
   -H "Authorization: Bearer ${CATSCAN_AGENT_TOKEN}"
 ```
 
@@ -130,7 +148,7 @@ With NGINX Basic Auth enabled:
 ```bash
 curl -u "agent:${CATSCAN_AGENT_BASIC_PASSWORD}" \
   -H "X-CatScan-Agent-Token: ${CATSCAN_AGENT_TOKEN}" \
-  "https://YOUR_HOST/api/agent/v1/stats-summary?buyer_id=1487810529&days=7&top_limit=10"
+  "https://YOUR_HOST/api/agent/v1/stats-summary?buyer_id=1111111111&days=7&top_limit=10"
 ```
 
 For a one-buyer agent user, `buyer_id` may be omitted. Sudo or multi-buyer
@@ -139,7 +157,7 @@ agents must pass `buyer_id` explicitly.
 Pull date-explicit spend rows:
 
 ```bash
-curl "https://YOUR_HOST/api/agent/v1/daily-spend?buyer_id=8087233591&start_date=2026-07-01&end_date=2026-07-13" \
+curl "https://YOUR_HOST/api/agent/v1/daily-spend?buyer_id=2222222222&start_date=2026-07-01&end_date=2026-07-13" \
   -H "Authorization: Bearer ${CATSCAN_AGENT_TOKEN}"
 ```
 
@@ -174,12 +192,12 @@ Money fields use the buyer account's configured ISO-4217 currency:
 - Email summaries prefix monetary amounts with the ISO code, for example
   `EUR 4,159.98`, and never add a dollar sign to non-USD spend.
 
-Example currency portion for Uplivo / Tuky Internet (`8087233591`):
+Example currency portion for a EUR-configured seat (`2222222222`):
 
 ```json
 {
   "buyer": {
-    "buyer_id": "8087233591",
+    "buyer_id": "2222222222",
     "currency": "EUR"
   },
   "totals": {
@@ -207,15 +225,17 @@ currency code is seat metadata. If a seat is not configured,
 `buyer.currency` and `data_source.currency` are `null`; consumers must not
 guess.
 
-The endpoint reads only precomputed tables:
+Both endpoints read only precomputed tables and never raw report tables:
 
-- `home_seat_daily`
-- `home_publisher_daily`
-- `home_geo_daily`
-- `home_config_daily`
-- `rtb_app_daily`
+- `GET /api/agent/v1/daily-spend` reads `rtb_buyer_spend_daily` (canonical
+  buyer-grain spend/impressions/clicks; the response self-declares this in
+  `data_source.table`) plus `rtb_app_daily` for the app/billing dimension
+  counts.
+- `GET /api/agent/v1/stats-summary` reads `home_seat_daily`,
+  `home_publisher_daily`, `home_geo_daily`, `home_config_daily`,
+  `rtb_buyer_spend_daily`, and `rtb_app_daily`.
 
-It does not read raw report tables and does not mutate state.
+Neither endpoint mutates report state.
 
 ## Manage Tokens
 
@@ -241,16 +261,16 @@ Seat admins and sudo users can set or correct the currency independently of an
 agent token:
 
 ```bash
-curl -X PATCH https://YOUR_HOST/api/seats/8087233591 \
+curl -X PATCH https://YOUR_HOST/api/seats/2222222222 \
   -H 'Content-Type: application/json' \
   -H 'Cookie: rtbcat_session=<seat-admin-session>' \
   -d '{"currency":"EUR"}'
 ```
 
 The value is normalized to uppercase and must be a three-letter ISO-4217 code.
-Migration `071_buyer_seat_currency.sql` backfills all currently known seats:
-Uplivo / Tuky Internet (`8087233591`) as EUR and the other known seats as USD.
-New or unknown seats remain unconfigured until an operator sets their currency.
+Migration `071_buyer_seat_currency.sql` backfills the seats known at the time
+it shipped with their configured currencies. New or unknown seats remain
+unconfigured until an operator sets their currency.
 
 ## Operational Notes
 

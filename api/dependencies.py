@@ -423,8 +423,10 @@ async def get_allowed_buyer_ids(
 
     Returns None for sudo users to signal "all buyers".
 
-    Policy: non-sudo users must be single-seat scoped. If multiple explicit
-    seat permissions exist, only the first seat is used for visibility/routing.
+    Non-sudo users see every buyer seat they hold an explicit grant for.
+    Endpoints that need exactly one buyer (``resolve_buyer_id``) require an
+    explicit ``buyer_id`` parameter when a user holds multiple grants —
+    grants are never silently narrowed to the first seat.
     """
     if is_sudo(user):
         return None
@@ -432,19 +434,7 @@ async def get_allowed_buyer_ids(
     auth_svc = get_auth_service()
     # Enforce assigned-seat-only access for non-sudo roles.
     buyer_ids = await auth_svc.get_user_buyer_seat_ids(user.id)
-    deduped_ids = list(dict.fromkeys(buyer_ids))
-
-    if len(deduped_ids) > 1:
-        primary_buyer_id = deduped_ids[0]
-        logger.warning(
-            "User %s has %d explicit buyer seats; enforcing single-seat scope to buyer_id=%s",
-            user.id,
-            len(deduped_ids),
-            primary_buyer_id,
-        )
-        return [primary_buyer_id]
-
-    return deduped_ids
+    return list(dict.fromkeys(buyer_ids))
 
 
 async def get_allowed_bidder_ids(

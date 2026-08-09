@@ -57,6 +57,10 @@ jobs:
             tests/test_temp_public_ingress_guards.py \
             tests/test_source_logical_replication_setup.py \
             tests/test_writable_activation_guards.py \
+            tests/test_agent_api.py \
+            tests/test_agent_token_service.py \
+            tests/test_agent_scope_and_seat_enforcement.py \
+            tests/test_admin_user_seat_permissions.py \
             -q
 
   build:

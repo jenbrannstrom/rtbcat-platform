@@ -14,6 +14,7 @@ from api.dependencies import get_store, require_admin, resolve_buyer_id
 from services.agent_stats_service import AgentStatsService
 from services.agent_token_service import (
     AGENT_STATS_READ_SCOPE,
+    AGENT_TOKEN_SCOPES,
     AgentAuthContext,
     AgentTokenRecord,
     AgentTokenService,
@@ -33,6 +34,15 @@ class AgentTokenCreateRequest(BaseModel):
     buyer_id: str | None = Field(
         None,
         description="Optional buyer hard-scope for this token.",
+    )
+    all_granted_buyers: bool = Field(
+        False,
+        description=(
+            "Mint a token covering every buyer seat granted to the target user "
+            "(non-sudo users only). Mutually exclusive with buyer_id. The token "
+            "stores no buyer hard-scope; the user's seat grants bound every "
+            "request instead."
+        ),
     )
     scopes: list[str] = Field(default_factory=lambda: [AGENT_STATS_READ_SCOPE])
     expires_in_days: int = Field(90, ge=1, le=366)
@@ -113,26 +123,42 @@ def _token_response(record: AgentTokenRecord) -> AgentTokenResponse:
     )
 
 
-async def require_agent_context(request: Request) -> AgentAuthContext:
-    context = getattr(request.state, "agent_auth_context", None)
-    if not context:
-        context = await AgentTokenService().authenticate_request(
-            request,
-            required_scope=AGENT_STATS_READ_SCOPE,
-        )
-        if context:
-            request.state.user = context.user
-            request.state.agent_auth_context = context
-            request.state.agent_token_authenticated = True
-        else:
-            raise HTTPException(
-                status_code=401,
-                detail="Agent bearer token required.",
-                headers={"WWW-Authenticate": "Bearer"},
+def require_agent_scope(required_scope: str | None):
+    """Build a dependency that authenticates an agent token with one scope.
+
+    A ``None`` scope authenticates any valid token without a scope check
+    (identity-only endpoints such as ``/me``).
+    """
+
+    async def _require_agent_context(request: Request) -> AgentAuthContext:
+        context = getattr(request.state, "agent_auth_context", None)
+        if not context:
+            context = await AgentTokenService().authenticate_request(
+                request,
+                required_scope=required_scope,
             )
-    if AGENT_STATS_READ_SCOPE not in context.token.scopes:
-        raise HTTPException(status_code=403, detail="Agent token lacks stats read scope.")
-    return context
+            if context:
+                request.state.user = context.user
+                request.state.agent_auth_context = context
+                request.state.agent_token_authenticated = True
+            else:
+                raise HTTPException(
+                    status_code=401,
+                    detail="Agent bearer token required.",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+        if required_scope and required_scope not in context.token.scopes:
+            raise HTTPException(
+                status_code=403,
+                detail=f"Agent token lacks required scope: {required_scope}.",
+            )
+        return context
+
+    return _require_agent_context
+
+
+require_agent_identity = require_agent_scope(None)
+require_agent_context = require_agent_scope(AGENT_STATS_READ_SCOPE)
 
 
 async def require_token_admin(request: Request, user: User = Depends(require_admin)) -> User:
@@ -153,14 +179,36 @@ async def _validate_token_target(
     *,
     payload: AgentTokenCreateRequest,
     auth_service: AuthService,
-) -> str:
+) -> str | None:
+    """Validate the token target and return the buyer hard-scope to store.
+
+    Returns ``None`` only for the sanctioned multi-buyer research shape
+    (``all_granted_buyers=true`` on a non-sudo user with seat grants): the
+    token then carries no hard-scope and the user's seat grants bound every
+    request. Sudo users can never hold an unscoped token.
+    """
     target_user = await auth_service.get_user_by_id(payload.user_id)
     if not target_user:
         raise HTTPException(status_code=404, detail="Agent user not found.")
     if not target_user.is_active:
         raise HTTPException(status_code=400, detail="Agent user is inactive.")
 
+    if payload.all_granted_buyers and payload.buyer_id:
+        raise HTTPException(
+            status_code=400,
+            detail="all_granted_buyers and buyer_id are mutually exclusive.",
+        )
+
     if target_user.role == "sudo":
+        if payload.all_granted_buyers:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "all_granted_buyers is not allowed for sudo users: an "
+                    "unscoped sudo token would grant unrestricted buyer access. "
+                    "Use a non-sudo user with explicit seat grants."
+                ),
+            )
         if not payload.buyer_id:
             raise HTTPException(
                 status_code=400,
@@ -169,6 +217,15 @@ async def _validate_token_target(
         return payload.buyer_id
 
     buyer_ids = await auth_service.get_user_buyer_seat_ids(target_user.id)
+    if not buyer_ids:
+        raise HTTPException(
+            status_code=400,
+            detail="Agent user has no buyer read grants.",
+        )
+
+    if payload.all_granted_buyers:
+        return None
+
     if payload.buyer_id:
         if payload.buyer_id not in buyer_ids:
             raise HTTPException(
@@ -180,14 +237,12 @@ async def _validate_token_target(
     if len(buyer_ids) == 1:
         return buyer_ids[0]
 
-    if not buyer_ids:
-        raise HTTPException(
-            status_code=400,
-            detail="Agent user has no buyer read grants.",
-        )
     raise HTTPException(
         status_code=400,
-        detail="buyer_id is required when agent user has multiple buyer grants.",
+        detail=(
+            "buyer_id is required when agent user has multiple buyer grants "
+            "(or pass all_granted_buyers=true for a token covering all grants)."
+        ),
     )
 
 
@@ -215,7 +270,7 @@ async def _audit_agent_read(
 
 
 @router.get("/me", response_model=AgentMeResponse)
-async def agent_me(context: AgentAuthContext = Depends(require_agent_context)) -> AgentMeResponse:
+async def agent_me(context: AgentAuthContext = Depends(require_agent_identity)) -> AgentMeResponse:
     """Validate an outside-agent bearer token and report its effective identity."""
     return AgentMeResponse(
         authenticated=True,
@@ -318,9 +373,8 @@ async def create_agent_token(
     auth_service: AuthService = Depends(get_auth_service),
 ) -> AgentTokenCreateResponse:
     """Create a revocable bearer token for a buyer-scoped agent user."""
-    allowed_scopes = {AGENT_STATS_READ_SCOPE}
     requested_scopes = set(payload.scopes or [AGENT_STATS_READ_SCOPE])
-    if not requested_scopes.issubset(allowed_scopes):
+    if not requested_scopes.issubset(AGENT_TOKEN_SCOPES):
         raise HTTPException(status_code=400, detail="Unsupported agent token scope.")
 
     token_buyer_id = await _validate_token_target(payload=payload, auth_service=auth_service)
@@ -338,7 +392,11 @@ async def create_agent_token(
         user_id=admin_user.id,
         resource_type="agent_api_token",
         resource_id=created.record.id,
-        details=f"user_id={payload.user_id}; buyer_id={token_buyer_id}; scopes={','.join(created.record.scopes)}",
+        details=(
+            f"user_id={payload.user_id}; "
+            f"buyer_id={token_buyer_id or 'all-granted-buyers'}; "
+            f"scopes={','.join(created.record.scopes)}"
+        ),
     )
     return AgentTokenCreateResponse(
         token=created.token,
