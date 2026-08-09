@@ -165,6 +165,45 @@ curl "https://YOUR_HOST/api/agent/v1/daily-spend?buyer_id=2222222222&start_date=
 date so a missing source row cannot be mistaken for a genuine zero-spend day.
 The maximum range per request is 90 days.
 
+## List Visible Buyers
+
+```bash
+curl https://YOUR_HOST/api/agent/v1/buyers \
+  -H "Authorization: Bearer ${CATSCAN_AGENT_TOKEN}"
+```
+
+Returns the buyer seats this identity can query, with metadata (display
+name, bidder, active flag, currency). `scope.source` reports how visibility
+was derived: `token_hard_scope` (single-buyer token), `seat_grants`
+(all-granted-buyers token), or `sudo_unscoped_token` (legacy tokens only).
+
+## Check Data Quality
+
+```bash
+curl "https://YOUR_HOST/api/agent/v1/data-quality?buyer_id=1111111111&start_date=2026-07-01&end_date=2026-07-31" \
+  -H "Authorization: Bearer ${CATSCAN_AGENT_TOKEN}"
+```
+
+Compares canonical buyer spend (`rtb_buyer_spend_daily`) with
+creative-allocated spend (`config_creative_daily`) per day and in total.
+The two lanes have different grains, so creative-level dollar figures are
+trustworthy only when `allocation.allocation_status` is `reconciled` for
+the same buyer and window; otherwise treat creative spend as a relative
+ranking signal. `tolerance_pct` (default 1.0) controls the reconciliation
+threshold. The response carries per-day rows, totals, warnings, and a
+`provenance` block.
+
+## Metric Provenance
+
+Every metrics response includes a `provenance` block:
+
+- `metric_source`: the precomputed table behind the numbers
+- `is_canonical`: true for the buyer-grain spend lane
+- `buyer_scope`, `latest_complete_date`, `latest_source_date`,
+  `missing_source_dates`
+- `allocation`: reconciliation status plus canonical/allocated/difference
+  micros (`not_applicable` when only one lane is involved)
+
 ## Response Contract
 
 `GET /api/agent/v1/stats-summary` returns:
@@ -283,3 +322,5 @@ unconfigured until an operator sets their currency.
   - `agent_token_revoke`
   - `agent_stats_summary_read`
   - `agent_daily_spend_read`
+  - `agent_buyers_read`
+  - `agent_data_quality_read`

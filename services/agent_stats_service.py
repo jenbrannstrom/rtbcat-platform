@@ -8,6 +8,7 @@ from typing import Any
 
 from fastapi import HTTPException
 
+from api.schemas.agent_provenance import build_provenance
 from storage.postgres_database import pg_query_one, pg_query_with_timeout
 
 
@@ -68,6 +69,32 @@ class AgentStatsRepository:
             WHERE buyer_id = %s
             """,
             (buyer_id,),
+        )
+
+    async def get_buyers_by_ids(self, buyer_ids: list[str]) -> list[dict[str, Any]]:
+        if not buyer_ids:
+            return []
+        return await pg_query_with_timeout(
+            """
+            SELECT buyer_id, bidder_id, display_name, active, last_synced, currency_code
+            FROM buyer_seats
+            WHERE buyer_id = ANY(%s)
+            ORDER BY buyer_id
+            """,
+            (buyer_ids,),
+            statement_timeout_ms=self.statement_timeout_ms,
+        )
+
+    async def list_active_buyers(self) -> list[dict[str, Any]]:
+        return await pg_query_with_timeout(
+            """
+            SELECT buyer_id, bidder_id, display_name, active, last_synced, currency_code
+            FROM buyer_seats
+            WHERE COALESCE(active, true) = true
+            ORDER BY buyer_id
+            """,
+            (),
+            statement_timeout_ms=self.statement_timeout_ms,
         )
 
     async def get_funnel_totals(self, buyer_id: str, days: int) -> dict[str, Any] | None:
@@ -279,6 +306,38 @@ class AgentStatsService:
     def __init__(self, repo: AgentStatsRepository | None = None) -> None:
         self._repo = repo or AgentStatsRepository()
 
+    async def list_buyers(
+        self,
+        *,
+        buyer_ids: list[str] | None,
+        scope_source: str,
+    ) -> dict[str, Any]:
+        """List buyer seats visible to an agent identity.
+
+        ``buyer_ids=None`` means unrestricted (sudo identity without a token
+        hard-scope) and returns every active seat.
+        """
+        if buyer_ids is None:
+            rows = await self._repo.list_active_buyers()
+        else:
+            rows = await self._repo.get_buyers_by_ids(buyer_ids)
+        buyers = [
+            {
+                "buyer_id": str(row["buyer_id"]),
+                "bidder_id": row.get("bidder_id"),
+                "display_name": row.get("display_name"),
+                "active": bool(row.get("active", True)),
+                "currency": _currency_code(row.get("currency_code")),
+                "last_synced": str(row.get("last_synced")) if row.get("last_synced") else None,
+            }
+            for row in rows
+        ]
+        return {
+            "api_version": "agent.v1",
+            "scope": {"source": scope_source, "buyer_count": len(buyers)},
+            "buyers": buyers,
+        }
+
     async def get_stats_summary(
         self,
         *,
@@ -398,6 +457,8 @@ class AgentStatsService:
             if row["source_status"] != "present":
                 break
             latest_complete_date = row["metric_date"]
+        present_dates = [row["metric_date"] for row in rows if row["source_status"] == "present"]
+        latest_source_date = max(present_dates) if present_dates else None
         if not include_empty:
             rows = [row for row in rows if row["source_status"] == "present"]
 
@@ -437,6 +498,14 @@ class AgentStatsService:
                 f"No RTBcat spend source rows found for {missing_date}."
                 for missing_date in missing_dates
             ],
+            "provenance": build_provenance(
+                metric_source="rtb_buyer_spend_daily",
+                is_canonical=True,
+                buyer_scope=str(buyer["buyer_id"]),
+                latest_complete_date=latest_complete_date,
+                latest_source_date=latest_source_date,
+                missing_source_dates=missing_dates,
+            ),
         }
 
     def _daily_spend_payload(self, row: dict[str, Any], buyer_id: str) -> dict[str, Any]:
