@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from api.dependencies import get_store, require_admin, resolve_buyer_id
+from services.agent_data_quality_service import AgentDataQualityService
 from services.agent_stats_service import AgentStatsService
 from services.agent_token_service import (
     AGENT_STATS_READ_SCOPE,
@@ -99,6 +100,10 @@ def get_agent_token_service() -> AgentTokenService:
 
 def get_agent_stats_service() -> AgentStatsService:
     return AgentStatsService()
+
+
+def get_agent_data_quality_service() -> AgentDataQualityService:
+    return AgentDataQualityService()
 
 
 def get_auth_service() -> AuthService:
@@ -246,6 +251,15 @@ async def _validate_token_target(
     )
 
 
+def _enforce_token_buyer(context: AgentAuthContext, resolved_buyer_id: str) -> None:
+    """Reject a request outside the token's buyer hard-scope."""
+    if context.token.buyer_id and context.token.buyer_id != resolved_buyer_id:
+        raise HTTPException(
+            status_code=403,
+            detail="Agent token is not scoped to this buyer.",
+        )
+
+
 async def _audit_agent_read(
     *,
     request: Request,
@@ -299,11 +313,7 @@ async def get_agent_stats_summary(
     resolved_buyer_id = await resolve_buyer_id(buyer_id, store=store, user=context.user)
     if not resolved_buyer_id:
         raise HTTPException(status_code=400, detail="buyer_id is required.")
-    if context.token.buyer_id and context.token.buyer_id != resolved_buyer_id:
-        raise HTTPException(
-            status_code=403,
-            detail="Agent token is not scoped to this buyer.",
-        )
+    _enforce_token_buyer(context, resolved_buyer_id)
 
     payload = await stats_service.get_stats_summary(
         buyer_id=resolved_buyer_id,
@@ -337,11 +347,7 @@ async def get_agent_daily_spend(
     resolved_buyer_id = await resolve_buyer_id(buyer_id, store=store, user=context.user)
     if not resolved_buyer_id:
         raise HTTPException(status_code=400, detail="buyer_id is required.")
-    if context.token.buyer_id and context.token.buyer_id != resolved_buyer_id:
-        raise HTTPException(
-            status_code=403,
-            detail="Agent token is not scoped to this buyer.",
-        )
+    _enforce_token_buyer(context, resolved_buyer_id)
 
     payload = await stats_service.get_daily_spend(
         buyer_id=resolved_buyer_id,
@@ -359,6 +365,90 @@ async def get_agent_daily_spend(
             f"token_id={context.token.id}; buyer_id={resolved_buyer_id}; "
             f"start_date={start_date.isoformat()}; end_date={end_date.isoformat()}; "
             f"include_empty={include_empty}"
+        ),
+        ip_address=request.client.host if request.client else None,
+    )
+    return payload
+
+
+@router.get("/buyers")
+async def list_agent_buyers(
+    request: Request,
+    context: AgentAuthContext = Depends(require_agent_context),
+    stats_service: AgentStatsService = Depends(get_agent_stats_service),
+    auth_service: AuthService = Depends(get_auth_service),
+) -> dict[str, Any]:
+    """List the buyer seats visible to this agent identity."""
+    if context.token.buyer_id:
+        buyer_ids: list[str] | None = [context.token.buyer_id]
+        scope_source = "token_hard_scope"
+    elif context.user.role == "sudo":
+        # Legacy unscoped sudo tokens (pre-dating the API's sudo hard-scope
+        # rule) see every active seat; report that honestly.
+        buyer_ids = None
+        scope_source = "sudo_unscoped_token"
+    else:
+        buyer_ids = list(dict.fromkeys(await auth_service.get_user_buyer_seat_ids(context.user.id)))
+        scope_source = "seat_grants"
+
+    payload = await stats_service.list_buyers(buyer_ids=buyer_ids, scope_source=scope_source)
+    await auth_service.log_audit(
+        audit_id=str(uuid.uuid4()),
+        action="agent_buyers_read",
+        user_id=context.user.id,
+        resource_type="agent_api",
+        resource_id=context.token.buyer_id or "all-granted",
+        details=f"token_id={context.token.id}; scope_source={scope_source}; "
+        f"buyer_count={payload['scope']['buyer_count']}",
+        ip_address=request.client.host if request.client else None,
+    )
+    return payload
+
+
+@router.get("/data-quality")
+async def get_agent_data_quality(
+    request: Request,
+    start_date: date = Query(..., description="Inclusive start metric date (YYYY-MM-DD)."),
+    end_date: date = Query(..., description="Inclusive end metric date (YYYY-MM-DD)."),
+    buyer_id: str | None = Query(None, description="Buyer seat ID. Optional for one-buyer agent users."),
+    tolerance_pct: float = Query(
+        1.0,
+        ge=0,
+        le=100,
+        description="Reconciliation tolerance as a percentage of canonical spend.",
+    ),
+    store=Depends(get_store),
+    context: AgentAuthContext = Depends(require_agent_context),
+    quality_service: AgentDataQualityService = Depends(get_agent_data_quality_service),
+    auth_service: AuthService = Depends(get_auth_service),
+) -> dict[str, Any]:
+    """Compare canonical buyer spend with creative-allocated spend.
+
+    Creative-level dollar figures are trustworthy only when this endpoint
+    reports ``allocation_status: reconciled`` for the same buyer and window.
+    """
+    resolved_buyer_id = await resolve_buyer_id(buyer_id, store=store, user=context.user)
+    if not resolved_buyer_id:
+        raise HTTPException(status_code=400, detail="buyer_id is required.")
+    _enforce_token_buyer(context, resolved_buyer_id)
+
+    payload = await quality_service.get_data_quality(
+        buyer_id=resolved_buyer_id,
+        start_date=start_date,
+        end_date=end_date,
+        tolerance_pct=tolerance_pct,
+    )
+    await auth_service.log_audit(
+        audit_id=str(uuid.uuid4()),
+        action="agent_data_quality_read",
+        user_id=context.user.id,
+        resource_type="agent_api",
+        resource_id=resolved_buyer_id,
+        details=(
+            f"token_id={context.token.id}; buyer_id={resolved_buyer_id}; "
+            f"start_date={start_date.isoformat()}; end_date={end_date.isoformat()}; "
+            f"tolerance_pct={tolerance_pct}; "
+            f"allocation_status={payload['allocation']['allocation_status']}"
         ),
         ip_address=request.client.host if request.client else None,
     )
