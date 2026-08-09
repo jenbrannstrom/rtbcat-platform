@@ -461,6 +461,15 @@ def main() -> int:
             if app_buyer_ids:
                 _grant_buyer_read(conn, user_id=app_user_id, buyer_ids=app_buyer_ids)
             if args.create_api_token:
+                print(
+                    "DEPRECATED: --create-api-token inserts directly into "
+                    "agent_api_tokens, bypassing the validation and audit trail of "
+                    "the supported path. Mint tokens via POST /agent/v1/tokens "
+                    "instead (use all_granted_buyers=true for a multi-buyer "
+                    "research token). This flag will be removed once existing "
+                    "automation has migrated.",
+                    file=sys.stderr,
+                )
                 hard_scope_buyer_id = args.api_token_buyer_id
                 if not hard_scope_buyer_id and len(app_buyer_ids) == 1:
                     hard_scope_buyer_id = app_buyer_ids[0]

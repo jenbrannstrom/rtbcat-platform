@@ -264,7 +264,9 @@ def test_create_token_requires_buyer_id_for_multi_buyer_user() -> None:
     )
 
     assert response.status_code == 400
-    assert response.json()["detail"] == "buyer_id is required when agent user has multiple buyer grants."
+    assert response.json()["detail"].startswith(
+        "buyer_id is required when agent user has multiple buyer grants"
+    )
 
 
 def test_global_api_key_context_cannot_manage_agent_tokens() -> None:

@@ -21,6 +21,7 @@ from api.dependencies import (
     get_config,
     get_current_user,
     require_admin,
+    require_buyer_access,
     require_seat_admin_or_sudo,
     resolve_buyer_id,
 )
@@ -484,9 +485,16 @@ async def health_check(
 @router.get("/thumbnails/{creative_id}.jpg", tags=["Thumbnails"])
 async def get_thumbnail(
     creative_id: str,
-    _user: User = Depends(get_current_user),
+    store=Depends(get_store),
+    user: User = Depends(get_current_user),
 ) -> FileResponse:
-    """Serve locally-generated video thumbnail."""
+    """Serve a locally-generated video thumbnail (buyer-scoped)."""
+    creative = await store.get_creative(creative_id)
+    if not creative:
+        raise HTTPException(status_code=404, detail="Thumbnail not found")
+    # A NULL buyer_id passes for sudo only; non-sudo users get 403.
+    await require_buyer_access(creative.buyer_id, store=store, user=user)
+
     thumb_path = Path.home() / ".catscan" / "thumbnails" / f"{creative_id}.jpg"
     if not thumb_path.exists():
         raise HTTPException(status_code=404, detail="Thumbnail not found")

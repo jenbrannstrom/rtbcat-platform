@@ -16,6 +16,17 @@ from storage.postgres_repositories.agent_tokens_repo import AgentTokensRepositor
 
 AGENT_TOKEN_PREFIX = "cat_agent_"
 AGENT_STATS_READ_SCOPE = "agent:stats:read"
+AGENT_CREATIVES_READ_SCOPE = "agent:creatives:read"
+AGENT_CREATIVE_PERFORMANCE_READ_SCOPE = "agent:creative-performance:read"
+AGENT_ASSETS_READ_SCOPE = "agent:assets:read"
+AGENT_TOKEN_SCOPES = frozenset(
+    {
+        AGENT_STATS_READ_SCOPE,
+        AGENT_CREATIVES_READ_SCOPE,
+        AGENT_CREATIVE_PERFORMANCE_READ_SCOPE,
+        AGENT_ASSETS_READ_SCOPE,
+    }
+)
 AGENT_TOKEN_HEADER = "X-CatScan-Agent-Token"
 
 

@@ -103,9 +103,16 @@ async def test_get_allowed_buyer_ids_no_longer_falls_back_to_legacy_service_acco
 
 
 @pytest.mark.asyncio
-async def test_get_allowed_buyer_ids_enforces_single_seat_scope_for_non_sudo(monkeypatch):
+async def test_get_allowed_buyer_ids_returns_every_granted_seat_for_non_sudo(monkeypatch):
+    """Multi-seat grants are no longer truncated to the first seat.
+
+    Endpoints needing exactly one buyer require an explicit buyer_id via
+    resolve_buyer_id instead (see docs/MCP_READONLY_SERVER_PLAN.md, defect D2).
+    """
     auth = MagicMock()
-    auth.get_user_buyer_seat_ids = AsyncMock(return_value=["1111111111", "2222222222"])
+    auth.get_user_buyer_seat_ids = AsyncMock(
+        return_value=["1111111111", "2222222222", "1111111111"]
+    )
     auth.get_user_service_account_ids = AsyncMock(return_value=["sa-1"])
 
     monkeypatch.setattr(dependencies, "get_auth_service", lambda: auth)
@@ -114,4 +121,4 @@ async def test_get_allowed_buyer_ids_enforces_single_seat_scope_for_non_sudo(mon
     user = User(id="user-1", email="user@example.com", role="admin")
     allowed = await dependencies.get_allowed_buyer_ids(store=store, user=user)
 
-    assert allowed == ["1111111111"]
+    assert allowed == ["1111111111", "2222222222"]
