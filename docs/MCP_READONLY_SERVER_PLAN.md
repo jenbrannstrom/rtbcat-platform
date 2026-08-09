@@ -1,12 +1,83 @@
 # RTBcat Read-Only MCP Server — Delivery Plan
 
-> **Status:** Proposed — 2026-08-08
+> **Status:** In delivery — see §0 for exact resume state (last updated
+> 2026-08-09).
 > **Scope:** A read-only, buyer-scoped remote MCP server for RTBcat, developed
 > and open-sourced inside this repository and deployed beside the production
 > API on Hetzner.
 > This document is public-safe. The incident write-up that motivated it lives
 > in `docs/internal/` (gitignored) and must never be committed: it contains
 > customer identifiers.
+
+## 0. Status — resume here
+
+Everything below is on `main` and pushed; CI (Security Checks, v1 Regression
+Gate, Schema Compatibility) was green on every listed commit.
+
+**Done:**
+
+| When | Commit | What |
+|---|---|---|
+| 2026-08-08 | `666dc589` | This plan committed (Phase 0; root scratch notes moved to gitignored `docs/internal/MCP-INCIDENT-BASELINE-2026-08-08.md`) |
+| 2026-08-09 | `563a94f7` | Unrelated but load-bearing: dependency-scan CI on `main` fixed (aiohttp/cryptography/postcss bumps) — Security Checks is trustworthy again |
+| 2026-08-09 | `b778891d` | **Phase 1 complete** — four scopes + `require_agent_scope` factory; `get_allowed_buyer_ids` returns all seat grants (D2); `all_granted_buyers=true` token shape (D3); thumbnail route buyer-checked (D4); provisioning-script token path deprecated; agent auth suites added to the release-gating list |
+| 2026-08-09 | `409b96ee` | **Phase 2 slice 1 complete** — `MetricProvenance` envelope (`api/schemas/agent_provenance.py`) attached to daily-spend; `GET /agent/v1/buyers`; `GET /agent/v1/data-quality` (canonical vs allocated reconciliation, `services/agent_data_quality_service.py`) |
+
+**Next up (start here): Phase 2 slice 2** — the creative read contracts, all
+under `/agent/v1`, all precompute-only:
+
+1. `GET /agent/v1/creatives` — buyer-scoped search (filters: date window,
+   domain, format, approval, activity, text; spend-ranked sort from
+   `config_creative_daily` only; **no clicks sort**; cursor pagination).
+   Enforce scope `agent:creatives:read` via `require_agent_scope(...)` —
+   the constant already exists in `services/agent_token_service.py`.
+2. `GET /agent/v1/creatives/{id}` — detail + destination diagnostics
+   (reuse `services/creatives_service.py` analysis; buyer check).
+3. `GET /agent/v1/creatives/{id}/assets` — scope `agent:assets:read`;
+   thumbnail/image/HTML references via the preview builder
+   (`services/creative_preview_service.py`); the thumbnail byte route is
+   already buyer-checked.
+4. `POST /agent/v1/creative-performance/batch` — scope
+   `agent:creative-performance:read`; `config_creative_daily` /
+   `performance_metrics` **only** — creatives missing from precompute return
+   `metric_source: "unavailable"`, never an `rtb_daily` fallback (defect D5
+   applies to the dashboard endpoint; do not copy it); `clicks_available:
+   false` (D7); attach the provenance envelope with the `allocation` block
+   fed by `AgentDataQualityService` semantics.
+
+Patterns to follow are all in `api/routers/agent.py` (buyer resolution +
+`_enforce_token_buyer` + `_audit_agent_read`-style audits) and
+`tests/test_agent_data_quality.py` (stub-repo service tests + router tests
+via `SyncASGIClient`). Add each new test file to the gating list in
+`.github/workflows/build-and-push-ghcr.yml`.
+
+**Open items not owned by code:**
+
+- `REDACTION_DENYLIST` org secret still needs the incident's customer
+  identifiers (names, emails) and ideally the real buyer seat IDs — secret
+  owner action, cannot be done from the repo.
+- Real buyer seat IDs still appear in `.github/workflows/live-major-smoke.yml`
+  (default input) and migration `071_buyer_seat_currency.sql`; the docs were
+  scrubbed in `b778891d`.
+- Behavior change to watch: non-sudo multi-seat users must now pass an
+  explicit `buyer_id` (no more silent first-seat selection). No complaints
+  yet; revisit if a dashboard user hits it.
+- Legacy unscoped sudo tokens (minted by the old provisioning script) still
+  work; `GET /agent/v1/buyers` reports them as
+  `scope.source: "sudo_unscoped_token"`. Consider inventorying
+  (`GET /agent/v1/tokens`) and revoking them once the research identity is
+  migrated to an `all_granted_buyers` token.
+
+**To verify state on reopen:**
+
+```bash
+git log --oneline -6                     # expect 409b96ee at or near HEAD
+venv/bin/python -m pytest \
+  tests/test_agent_api.py tests/test_agent_token_service.py \
+  tests/test_agent_scope_and_seat_enforcement.py \
+  tests/test_agent_data_quality.py -q    # 62 tests, all green
+gh run list --branch main --limit 3      # CI conclusions for recent pushes
+```
 
 ## 1. Summary
 
@@ -83,18 +154,18 @@ that date.
 
 **Known defects the plan must fix (not work around):**
 
-| # | Defect | Where |
-|---|--------|-------|
-| D1 | Only one scope exists and `require_agent_context` hardcodes it for all reads | `agent.py`, `agent_token_service.py` |
-| D2 | Non-sudo users with >1 buyer seat are silently truncated to one seat | `api/dependencies.py` (`get_allowed_buyer_ids`) |
-| D3 | All-buyer tokens exist only via a provisioning script that bypasses API validation | `scripts/provision_creative_audit_agent.py` |
-| D4 | Thumbnail route serves creative bytes with no buyer authorization | `api/routers/system.py` (`/thumbnails/{id}.jpg`) |
-| D5 | Batch performance falls back to `rtb_daily` for creatives missing from precompute; `sort_by=clicks` batch-queries `rtb_daily` | `creative_performance_repo.py`, `postgres_store.py` |
-| D6 | Three spend lanes with different grains and no reconciliation: `rtb_buyer_spend_daily` (canonical, buyer grain), `config_creative_daily` (allocated, creative×config grain — double-counts across configs), `rtb_app_daily` (app lane) | services + repos |
-| D7 | Clicks exist only in `rtb_daily`; precompute lane returns `clicks_available=false` | `creative_performance_repo.py` |
-| D8 | No rate limiting anywhere except `/auth/bootstrap` | — |
-| D9 | Every `pg_query` opens a fresh psycopg connection (no pooling) | `storage/postgres_database.py` |
-| D10 | `docs/AGENT_API.md` documents the wrong source tables for `daily-spend` | docs |
+| # | Defect | Where | Status |
+|---|--------|-------|--------|
+| D1 | Only one scope exists and `require_agent_context` hardcodes it for all reads | `agent.py`, `agent_token_service.py` | **Fixed** `b778891d` |
+| D2 | Non-sudo users with >1 buyer seat are silently truncated to one seat | `api/dependencies.py` (`get_allowed_buyer_ids`) | **Fixed** `b778891d` (explicit `buyer_id` now required when multi-seat) |
+| D3 | All-buyer tokens exist only via a provisioning script that bypasses API validation | `scripts/provision_creative_audit_agent.py` | **Fixed** `b778891d` (`all_granted_buyers` API shape; script path deprecated, legacy tokens still to be revoked) |
+| D4 | Thumbnail route serves creative bytes with no buyer authorization | `api/routers/system.py` (`/thumbnails/{id}.jpg`) | **Fixed** `b778891d` |
+| D5 | Batch performance falls back to `rtb_daily` for creatives missing from precompute; `sort_by=clicks` batch-queries `rtb_daily` | `creative_performance_repo.py`, `postgres_store.py` | Open (dashboard endpoints); the new `/agent/v1` batch endpoint must not copy it |
+| D6 | Three spend lanes with different grains and no reconciliation: `rtb_buyer_spend_daily` (canonical, buyer grain), `config_creative_daily` (allocated, creative×config grain — double-counts across configs), `rtb_app_daily` (app lane) | services + repos | **Exposed** `409b96ee` (`/agent/v1/data-quality` reports it; the ETL gap itself remains) |
+| D7 | Clicks exist only in `rtb_daily`; precompute lane returns `clicks_available=false` | `creative_performance_repo.py` | Open by design — slice 2 must return `clicks_available: false` honestly |
+| D8 | No rate limiting anywhere except `/auth/bootstrap` | — | Open (planned in the MCP server, Phase 3) |
+| D9 | Every `pg_query` opens a fresh psycopg connection (no pooling) | `storage/postgres_database.py` | Open (independent platform fix, see R1) |
+| D10 | `docs/AGENT_API.md` documents the wrong source tables for `daily-spend` | docs | **Fixed** `b778891d` |
 
 ## 4. Target architecture
 
@@ -154,10 +225,10 @@ services / repositories → precompute tables only
 - [ ] Add the incident's customer identifiers (names, personal email
       addresses) to the `REDACTION_DENYLIST` org secret so the CI redaction
       boundary catches any future reintroduction. (Secret owner action —
-      cannot be done from the repo.)
-- [ ] Commit this plan to `main`.
+      cannot be done from the repo. **Still open as of 2026-08-09.**)
+- [x] Commit this plan to `main` (`666dc589`).
 
-### Phase 1 — Authorization foundation (fixes D1–D4)
+### Phase 1 — Authorization foundation (fixes D1–D4) — SHIPPED `b778891d`
 
 All changes in existing files; no new service yet.
 
@@ -189,19 +260,23 @@ All changes in existing files; no new service yet.
 
 ### Phase 2 — Agent API contract repair (fixes D5–D7 at the contract level)
 
+**Slice 1 SHIPPED `409b96ee`** (buyers, daily-spend envelope, data-quality).
+**Slice 2 is the next work item** — the four creative rows below; the spec
+in §0 is authoritative for it.
+
 New buyer-scoped read endpoints in `api/routers/agent.py` (or a sibling
 `agent_creatives.py` router with the same prefix), each service-backed per
 the router→service→repository convention:
 
-| Endpoint | Backing | Notes |
-|---|---|---|
-| `GET /agent/v1/buyers` | `buyer_seats` via seat grants | identity's visible buyers only |
-| `GET /agent/v1/creatives` | `creatives` + `config_creative_daily` | filters: buyer, date window, domain, format, approval, activity, text; spend-ranked sort from precompute only; **no clicks sort**; cursor pagination |
-| `GET /agent/v1/creatives/{id}` | `creatives` | detail + destination diagnostics |
-| `GET /agent/v1/creatives/{id}/assets` | preview builder + thumbnail store | image / video-thumbnail / HTML-snippet references; buyer-checked |
-| `POST /agent/v1/creative-performance/batch` | `config_creative_daily` / `performance_metrics` **only** | no `rtb_daily` fallback: creatives missing from precompute return `metric_source: "unavailable"` rather than a silent lane switch; `clicks_available: false` |
-| `GET /agent/v1/daily-spend` | exists (`rtb_buyer_spend_daily`) | extend with the provenance envelope |
-| `GET /agent/v1/data-quality` | new reconciliation service | compares canonical buyer spend vs summed creative allocation for a buyer+window; returns `allocation_status` + deltas |
+| Endpoint | Backing | Notes | Status |
+|---|---|---|---|
+| `GET /agent/v1/buyers` | `buyer_seats` via seat grants | identity's visible buyers only | ✅ `409b96ee` |
+| `GET /agent/v1/creatives` | `creatives` + `config_creative_daily` | filters: buyer, date window, domain, format, approval, activity, text; spend-ranked sort from precompute only; **no clicks sort**; cursor pagination | slice 2 |
+| `GET /agent/v1/creatives/{id}` | `creatives` | detail + destination diagnostics | slice 2 |
+| `GET /agent/v1/creatives/{id}/assets` | preview builder + thumbnail store | image / video-thumbnail / HTML-snippet references; buyer-checked | slice 2 |
+| `POST /agent/v1/creative-performance/batch` | `config_creative_daily` / `performance_metrics` **only** | no `rtb_daily` fallback: creatives missing from precompute return `metric_source: "unavailable"` rather than a silent lane switch; `clicks_available: false` | slice 2 |
+| `GET /agent/v1/daily-spend` | exists (`rtb_buyer_spend_daily`) | extend with the provenance envelope | ✅ `409b96ee` |
+| `GET /agent/v1/data-quality` | new reconciliation service | compares canonical buyer spend vs summed creative allocation for a buyer+window; returns `allocation_status` + deltas | ✅ `409b96ee` |
 
 Cross-cutting:
 
