@@ -138,6 +138,12 @@ export function Sidebar() {
     releaseVersion && releaseVersion !== "unknown"
       ? `v${releaseVersion} (${buildVersion})`
       : buildVersion;
+  const versionTitle =
+    process.env.NEXT_PUBLIC_GIT_SHA && process.env.NEXT_PUBLIC_GIT_SHA !== "unknown"
+      ? `Release: ${
+          releaseVersion && releaseVersion !== "unknown" ? `v${releaseVersion}` : "unknown"
+        } | Build: ${process.env.NEXT_PUBLIC_GIT_SHA}`
+      : versionLabel;
 
   // Load collapsed and expanded states from localStorage
   useEffect(() => {
@@ -285,7 +291,7 @@ export function Sidebar() {
 
   return (
     <div className={cn(
-      "flex flex-col bg-white border-r border-gray-200 transition-all duration-300",
+      "flex min-h-0 flex-shrink-0 flex-col overflow-hidden bg-white border-r border-gray-200 transition-all duration-300",
       collapsed ? "w-16" : "w-64"
     )}>
       {/* Header with logo */}
@@ -459,7 +465,7 @@ export function Sidebar() {
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 px-2 py-4 space-y-1 overflow-y-auto">
+      <nav className="min-h-0 min-w-0 flex-1 px-2 py-4 space-y-1 overflow-x-hidden overflow-y-auto">
         {/* QPS Section */}
         <div className="pt-1">
           {!collapsed && (
@@ -821,36 +827,29 @@ export function Sidebar() {
       </nav>
 
       {/* Footer with user info and collapse */}
-      <div className="px-2 py-3 border-t border-gray-200">
+      <div className="flex-shrink-0 overflow-hidden px-2 py-3 border-t border-gray-200">
         {/* User info, version, docs, and collapse toggle in a clean row */}
         {!collapsed ? (
-          <div className="flex items-center justify-between px-2">
+          <div className="flex min-w-0 items-center gap-1 px-2">
             <div className="flex-1 min-w-0">
               {user && (
                 <p className="text-xs text-gray-500 truncate" title={user.email}>
                   {user.display_name || user.email}
                 </p>
               )}
-              <div className="flex items-center gap-2 text-xs text-gray-400">
+              <div className="flex min-w-0 items-center gap-2 text-xs text-gray-400">
                 <span
-                  title={
-                    process.env.NEXT_PUBLIC_GIT_SHA && process.env.NEXT_PUBLIC_GIT_SHA !== "unknown"
-                      ? `Release: ${
-                          releaseVersion && releaseVersion !== "unknown"
-                            ? `v${releaseVersion}`
-                            : "unknown"
-                        } | Build: ${process.env.NEXT_PUBLIC_GIT_SHA}`
-                      : undefined
-                  }
+                  className="min-w-0 flex-1 truncate"
+                  title={versionTitle}
                 >
                   {versionLabel}
                 </span>
-                <span>·</span>
+                <span className="flex-shrink-0" aria-hidden="true">·</span>
                 <a
                   href={getDocsHomeUrl()}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="hover:text-primary-600 transition-colors"
+                  className="flex-shrink-0 whitespace-nowrap hover:text-primary-600 transition-colors"
                 >
                   {t.navigation.docs}
                 </a>
