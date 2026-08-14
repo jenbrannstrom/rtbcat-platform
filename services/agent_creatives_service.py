@@ -18,6 +18,7 @@ from services.creative_destination_resolver import (
     build_creative_destination_diagnostics,
     resolve_creative_destination_url,
 )
+from services.creative_preview_service import CreativePreviewService
 from storage.postgres_database import pg_query_with_timeout
 
 MAX_CREATIVE_RANGE_DAYS = 90
@@ -225,8 +226,13 @@ class AgentCreativesRepository:
 class AgentCreativesService:
     """Build compact creative evidence without raw-table fallbacks."""
 
-    def __init__(self, repo: AgentCreativesRepository | None = None) -> None:
+    def __init__(
+        self,
+        repo: AgentCreativesRepository | None = None,
+        preview_service: CreativePreviewService | None = None,
+    ) -> None:
         self._repo = repo or AgentCreativesRepository()
+        self._preview = preview_service or CreativePreviewService()
 
     async def list_creatives(
         self,
@@ -338,6 +344,42 @@ class AgentCreativesService:
             "assets_reference": (
                 f"/api/agent/v1/creatives/{quote(creative_id, safe='')}/assets"
             ),
+        }
+
+    async def get_creative_assets(self, creative_id: str) -> dict[str, Any]:
+        row = await self._repo.get_creative(creative_id)
+        if not row:
+            raise HTTPException(status_code=404, detail="Creative not found.")
+        creative = SimpleNamespace(**row)
+        thumbnail_reference = (
+            f"/api/thumbnails/{quote(creative_id, safe='')}.jpg"
+        )
+        preview = self._preview.build_preview(
+            creative,
+            slim=True,
+            html_thumbnail_url=thumbnail_reference,
+        )
+        video = preview.get("video") or {}
+        html = preview.get("html") or {}
+        native = preview.get("native") or {}
+        return {
+            "api_version": "agent.v1",
+            "source_table": "creatives",
+            "creative_id": str(row["creative_id"]),
+            "buyer_id": str(row["buyer_id"]),
+            "format": str(row.get("format") or "UNKNOWN"),
+            "references_only": True,
+            "assets": {
+                "thumbnail_reference": thumbnail_reference,
+                "video_reference": video.get("video_url"),
+                "video_thumbnail_reference": (
+                    video.get("thumbnail_url")
+                    or (thumbnail_reference if video else None)
+                ),
+                "html_thumbnail_reference": html.get("thumbnail_url"),
+                "native_image_reference": native.get("image"),
+                "native_logo_reference": native.get("logo"),
+            },
         }
 
     def _list_row(

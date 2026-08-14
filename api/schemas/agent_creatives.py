@@ -102,3 +102,26 @@ class AgentCreativeDetailResponse(BaseModel):
     updated_at: str | None = None
     destination_diagnostics: AgentCreativeDestinationDiagnostics
     assets_reference: str
+
+
+class AgentCreativeAssetReferences(BaseModel):
+    """URL/object references only; this model never carries asset bytes."""
+
+    thumbnail_reference: str
+    video_reference: str | None = None
+    video_thumbnail_reference: str | None = None
+    html_thumbnail_reference: str | None = None
+    native_image_reference: Any | None = None
+    native_logo_reference: Any | None = None
+
+
+class AgentCreativeAssetsResponse(BaseModel):
+    """Buyer-scoped references extracted by the creative preview builder."""
+
+    api_version: Literal["agent.v1"]
+    source_table: Literal["creatives"]
+    creative_id: str
+    buyer_id: str
+    format: str
+    references_only: Literal[True]
+    assets: AgentCreativeAssetReferences

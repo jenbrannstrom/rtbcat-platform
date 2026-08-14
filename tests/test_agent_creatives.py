@@ -1,4 +1,4 @@
-"""Tests for Agent API creative search and detail contracts."""
+"""Tests for Agent API creative search, detail, and asset contracts."""
 
 from __future__ import annotations
 
@@ -11,6 +11,7 @@ from fastapi import FastAPI
 from api.routers import agent_creatives as agent_creatives_router
 from services.agent_creatives_service import AgentCreativesService, _encode_cursor
 from services.agent_token_service import (
+    AGENT_ASSETS_READ_SCOPE,
     AGENT_CREATIVES_READ_SCOPE,
     AGENT_STATS_READ_SCOPE,
     AgentAuthContext,
@@ -125,6 +126,9 @@ def _router_client(
     else:
         app.dependency_overrides[
             agent_creatives_router.require_agent_creatives_context
+        ] = lambda: context
+        app.dependency_overrides[
+            agent_creatives_router.require_agent_assets_context
         ] = lambda: context
     service = AgentCreativesService(repo=repo)
     app.dependency_overrides[
@@ -527,3 +531,103 @@ def test_creative_detail_router_returns_full_schema_and_audits() -> None:
     assert auth.audit_calls[0]["action"] == "agent_creatives_read"
     assert auth.audit_calls[0]["resource_id"] == "creative-a"
     assert "read=detail" in auth.audit_calls[0]["details"]
+
+
+def _expected_assets(*, buyer_id: str = "buyer-1") -> dict:
+    return {
+        "api_version": "agent.v1",
+        "source_table": "creatives",
+        "creative_id": "creative-a",
+        "buyer_id": buyer_id,
+        "format": "HTML",
+        "references_only": True,
+        "assets": {
+            "thumbnail_reference": "/api/thumbnails/creative-a.jpg",
+            "video_reference": None,
+            "video_thumbnail_reference": None,
+            "html_thumbnail_reference": "/api/thumbnails/creative-a.jpg",
+            "native_image_reference": None,
+            "native_logo_reference": None,
+        },
+    }
+
+
+@pytest.mark.asyncio
+async def test_creative_assets_full_reference_only_schema() -> None:
+    repo = _StubCreativesRepo(detail=_detail_row())
+    service = AgentCreativesService(repo=repo)
+
+    payload = await service.get_creative_assets("creative-a")
+
+    assert payload == _expected_assets()
+    assert "snippet" not in str(payload)
+    assert repo.calls == [{"creative_id": "creative-a"}]
+
+
+def test_creative_assets_outside_buyer_matches_missing_shape() -> None:
+    outside_client = _router_client(
+        context=_context(
+            buyer_id="buyer-1",
+            scopes=[AGENT_ASSETS_READ_SCOPE],
+        ),
+        repo=_StubCreativesRepo(detail=_detail_row(buyer_id="buyer-2")),
+        auth=_StubAuthService(),
+    )
+    missing_client = _router_client(
+        context=_context(
+            buyer_id="buyer-1",
+            scopes=[AGENT_ASSETS_READ_SCOPE],
+        ),
+        repo=_StubCreativesRepo(detail=None),
+        auth=_StubAuthService(),
+    )
+
+    outside_response = outside_client.get(
+        "/api/agent/v1/creatives/creative-a/assets"
+    )
+    missing_response = missing_client.get(
+        "/api/agent/v1/creatives/creative-a/assets"
+    )
+
+    assert outside_response.status_code == 404
+    assert missing_response.status_code == 404
+    assert outside_response.json() == missing_response.json() == {
+        "detail": "Creative not found."
+    }
+
+
+def test_creative_assets_rejects_stats_only_scope() -> None:
+    client = _router_client(
+        context=_context(scopes=[AGENT_STATS_READ_SCOPE]),
+        repo=_StubCreativesRepo(detail=_detail_row()),
+        auth=_StubAuthService(),
+        enforce_real_scope=True,
+    )
+
+    response = client.get(
+        "/api/agent/v1/creatives/creative-a/assets"
+    )
+
+    assert response.status_code == 403
+    assert response.json() == {
+        "detail": "Agent token lacks required scope: agent:assets:read."
+    }
+
+
+def test_creative_assets_router_returns_full_schema_and_audits() -> None:
+    auth = _StubAuthService()
+    client = _router_client(
+        context=_context(scopes=[AGENT_ASSETS_READ_SCOPE]),
+        repo=_StubCreativesRepo(detail=_detail_row()),
+        auth=auth,
+    )
+
+    response = client.get(
+        "/api/agent/v1/creatives/creative-a/assets"
+    )
+
+    assert response.status_code == 200
+    assert response.json() == _expected_assets()
+    assert auth.audit_calls[0]["action"] == "agent_asset_read"
+    assert auth.audit_calls[0]["resource_id"] == "creative-a"
+    assert "read=asset_references" in auth.audit_calls[0]["details"]
