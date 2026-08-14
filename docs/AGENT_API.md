@@ -1,7 +1,7 @@
 # Outside Agent API
 
-Use this API when an external agent needs to pull buyer-scoped precomputed stats
-and write an email summary.
+Use this API when an external agent needs buyer-scoped, precomputed evidence
+for summaries, creative review, or creative performance analysis.
 
 ## Auth Model
 
@@ -20,9 +20,9 @@ Outside agents use revocable app tokens:
 - tokens for sudo users always require a single-buyer hard scope
 - supported scopes:
   - `agent:stats:read` — stats summary and daily spend
-  - `agent:creatives:read` — creative search and detail (planned endpoints)
-  - `agent:creative-performance:read` — batch creative performance (planned)
-  - `agent:assets:read` — creative asset retrieval (planned)
+  - `agent:creatives:read` — creative search and detail
+  - `agent:creative-performance:read` — batch creative performance
+  - `agent:assets:read` — creative asset references
 - each read route enforces its own scope; `/me` accepts any valid token
 
 Do not give outside agents the legacy `CATSCAN_API_KEY`. That key authenticates
@@ -193,6 +193,83 @@ ranking signal. `tolerance_pct` (default 1.0) controls the reconciliation
 threshold. The response carries per-day rows, totals, warnings, and a
 `provenance` block.
 
+## Search Creatives
+
+```bash
+curl "https://YOUR_HOST/api/agent/v1/creatives?buyer_id=buyer-1&start_date=2026-07-01&end_date=2026-07-31&limit=50" \
+  -H "Authorization: Bearer ${CATSCAN_AGENT_TOKEN}"
+```
+
+`GET /api/agent/v1/creatives` searches one buyer's creatives. It accepts an
+inclusive date window of up to 90 days and optional `domain`, `format`,
+`approval_filter`, `activity`, and `search` filters. `domain` matches the
+stored final or display URL host, including subdomains. `activity=active`
+means the creative has positive precomputed spend or impressions in the
+requested window. Free text searches creative ID, name, advertiser, and UTM
+campaign.
+
+Results are ordered by spend descending and creative ID ascending. `sort_by`
+accepts only `spend`; clicks are not present in this precompute. Pages contain
+at most 100 creatives. Pass the opaque `next_cursor` unchanged to resume this
+stable ordering.
+
+Each compact result includes destination and resolved-destination evidence,
+an asset-reference URL, spend rank, and metric provenance. The endpoint reads
+`creatives` and `config_creative_daily` only.
+
+## Read Creative Detail
+
+```bash
+curl "https://YOUR_HOST/api/agent/v1/creatives/creative-1" \
+  -H "Authorization: Bearer ${CATSCAN_AGENT_TOKEN}"
+```
+
+`GET /api/agent/v1/creatives/{creative_id}` returns stored creative detail and
+destination diagnostics. A creative outside the token's buyer access returns
+the same not-found response as a nonexistent creative. The endpoint reads
+`creatives` only.
+
+## Read Creative Asset References
+
+```bash
+curl "https://YOUR_HOST/api/agent/v1/creatives/creative-1/assets" \
+  -H "Authorization: Bearer ${CATSCAN_AGENT_TOKEN}"
+```
+
+`GET /api/agent/v1/creatives/{creative_id}/assets` returns thumbnail, video,
+HTML, and native image references produced by the preview builder. The payload
+contains references only, never asset bytes. A creative outside the token's
+buyer access uses the same not-found response as a nonexistent creative. The
+endpoint reads `creatives` only; preview construction performs no database
+query.
+
+## Batch Creative Performance
+
+```bash
+curl -X POST "https://YOUR_HOST/api/agent/v1/creative-performance/batch" \
+  -H "Authorization: Bearer ${CATSCAN_AGENT_TOKEN}" \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "buyer_id": "buyer-1",
+    "creative_ids": ["creative-1", "creative-2"],
+    "start_date": "2026-07-01",
+    "end_date": "2026-07-31"
+  }'
+```
+
+`POST /api/agent/v1/creative-performance/batch` accepts 1–100 creative IDs for
+one buyer and an inclusive date window of up to 90 days. Input order is
+preserved after duplicate IDs are removed. The endpoint reads creative
+ownership from `creatives`, then metrics from `config_creative_daily` and
+`performance_metrics`. A creative with no row in either metric precompute has
+`metric_source: "unavailable"`. `clicks_available` is always `false` and
+`total_clicks` is always `null`.
+
+Every row carries metric provenance and an allocation reconciliation block.
+That reconciliation uses the same data-quality contract and additionally
+reads `buyer_seats`, `rtb_buyer_spend_daily`, and `config_creative_daily` for
+the requested buyer and window.
+
 ## Metric Provenance
 
 Every metrics response includes a `provenance` block:
@@ -324,3 +401,6 @@ unconfigured until an operator sets their currency.
   - `agent_daily_spend_read`
   - `agent_buyers_read`
   - `agent_data_quality_read`
+  - `agent_creatives_read`
+  - `agent_asset_read`
+  - `agent_creative_performance_read`
