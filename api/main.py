@@ -100,6 +100,7 @@ from api.routers import (
     admin_router,
     seat_admin_router,
     agent_router,
+    agent_creatives_router,
     # Analytics sub-routers (refactored from monolithic analytics.py)
     waste_router,
     rtb_bidstream_router,
@@ -355,6 +356,7 @@ app.include_router(optimizer_workflows_router)
 app.include_router(precompute_router)
 app.include_router(troubleshooting_router)
 app.include_router(agent_router)
+app.include_router(agent_creatives_router)
 
 # Admin routes (user management, audit logs)
 app.include_router(admin_router)

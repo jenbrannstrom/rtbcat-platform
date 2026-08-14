@@ -61,6 +61,7 @@ jobs:
             tests/test_agent_token_service.py \
             tests/test_agent_scope_and_seat_enforcement.py \
             tests/test_agent_data_quality.py \
+            tests/test_agent_creatives.py \
             tests/test_admin_user_seat_permissions.py \
             -q
 
