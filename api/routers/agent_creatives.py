@@ -9,14 +9,20 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from api.dependencies import get_store, resolve_buyer_id
 from api.routers.agent import _enforce_token_buyer, get_auth_service, require_agent_scope
+from api.schemas.agent_creative_performance import (
+    AgentCreativePerformanceBatchRequest,
+    AgentCreativePerformanceBatchResponse,
+)
 from api.schemas.agent_creatives import (
     AgentCreativeAssetsResponse,
     AgentCreativeDetailResponse,
     AgentCreativeListResponse,
 )
+from services.agent_creative_performance_service import AgentCreativePerformanceService
 from services.agent_creatives_service import AgentCreativesService
 from services.agent_token_service import (
     AGENT_ASSETS_READ_SCOPE,
+    AGENT_CREATIVE_PERFORMANCE_READ_SCOPE,
     AGENT_CREATIVES_READ_SCOPE,
     AgentAuthContext,
 )
@@ -26,10 +32,17 @@ router = APIRouter(prefix="/agent/v1", tags=["Agent API"])
 
 require_agent_creatives_context = require_agent_scope(AGENT_CREATIVES_READ_SCOPE)
 require_agent_assets_context = require_agent_scope(AGENT_ASSETS_READ_SCOPE)
+require_agent_creative_performance_context = require_agent_scope(
+    AGENT_CREATIVE_PERFORMANCE_READ_SCOPE
+)
+
 
 def get_agent_creatives_service() -> AgentCreativesService:
     return AgentCreativesService()
 
+
+def get_agent_creative_performance_service() -> AgentCreativePerformanceService:
+    return AgentCreativePerformanceService()
 
 
 async def _audit_creative_read(
@@ -202,3 +215,52 @@ async def get_agent_creative_assets(
         ),
     )
     return AgentCreativeAssetsResponse(**payload)
+
+
+@router.post(
+    "/creative-performance/batch",
+    response_model=AgentCreativePerformanceBatchResponse,
+)
+async def get_agent_creative_performance_batch(
+    payload: AgentCreativePerformanceBatchRequest,
+    request: Request,
+    store=Depends(get_store),
+    context: AgentAuthContext = Depends(
+        require_agent_creative_performance_context
+    ),
+    performance_service: AgentCreativePerformanceService = Depends(
+        get_agent_creative_performance_service
+    ),
+    auth_service: AuthService = Depends(get_auth_service),
+) -> AgentCreativePerformanceBatchResponse:
+    """Return buyer-scoped precomputed evidence for a creative batch."""
+    resolved_buyer_id = await resolve_buyer_id(
+        payload.buyer_id,
+        store=store,
+        user=context.user,
+    )
+    if not resolved_buyer_id:
+        raise HTTPException(status_code=400, detail="buyer_id is required.")
+    _enforce_token_buyer(context, resolved_buyer_id)
+
+    response = await performance_service.get_batch(
+        buyer_id=resolved_buyer_id,
+        creative_ids=payload.creative_ids,
+        start_date=payload.start_date,
+        end_date=payload.end_date,
+        tolerance_pct=payload.tolerance_pct,
+    )
+    await _audit_creative_read(
+        request=request,
+        context=context,
+        auth_service=auth_service,
+        action="agent_creative_performance_read",
+        resource_id=resolved_buyer_id,
+        details=(
+            f"buyer_id={resolved_buyer_id}; "
+            f"start_date={payload.start_date.isoformat()}; "
+            f"end_date={payload.end_date.isoformat()}; "
+            f"creative_count={response['count']}"
+        ),
+    )
+    return AgentCreativePerformanceBatchResponse(**response)
