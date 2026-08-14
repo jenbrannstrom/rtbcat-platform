@@ -1,0 +1,111 @@
+"""Buyer-scoped creative reads for outside agents."""
+
+from __future__ import annotations
+
+import uuid
+from datetime import date
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+
+from api.dependencies import get_store, resolve_buyer_id
+from api.routers.agent import _enforce_token_buyer, get_auth_service, require_agent_scope
+from api.schemas.agent_creatives import AgentCreativeListResponse
+from services.agent_creatives_service import AgentCreativesService
+from services.agent_token_service import AGENT_CREATIVES_READ_SCOPE, AgentAuthContext
+
+router = APIRouter(prefix="/agent/v1", tags=["Agent API"])
+
+require_agent_creatives_context = require_agent_scope(AGENT_CREATIVES_READ_SCOPE)
+
+def get_agent_creatives_service() -> AgentCreativesService:
+    return AgentCreativesService()
+
+
+
+async def _audit_creative_read(
+    *,
+    request: Request,
+    context: AgentAuthContext,
+    auth_service: AuthService,
+    action: str,
+    resource_id: str,
+    details: str,
+) -> None:
+    await auth_service.log_audit(
+        audit_id=str(uuid.uuid4()),
+        action=action,
+        user_id=context.user.id,
+        resource_type="agent_api",
+        resource_id=resource_id,
+        details=f"token_id={context.token.id}; {details}",
+        ip_address=request.client.host if request.client else None,
+    )
+
+
+
+@router.get("/creatives", response_model=AgentCreativeListResponse)
+async def list_agent_creatives(
+    request: Request,
+    start_date: date = Query(
+        ..., description="Inclusive start metric date (YYYY-MM-DD)."
+    ),
+    end_date: date = Query(
+        ..., description="Inclusive end metric date (YYYY-MM-DD)."
+    ),
+    buyer_id: str | None = Query(
+        None, description="Buyer seat ID. Optional for one-buyer agent users."
+    ),
+    domain: str | None = Query(
+        None, description="Final/display destination host, including subdomains."
+    ),
+    format: str | None = Query(
+        None, description="Exact creative format, case-insensitive."
+    ),
+    approval_filter: str = Query(
+        "all", pattern="^(all|approved|not_approved)$"
+    ),
+    activity: str = Query("all", pattern="^(all|active|inactive)$"),
+    search: str | None = Query(
+        None, description="Search ID, name, advertiser, or UTM campaign."
+    ),
+    sort_by: str = Query("spend", pattern="^spend$"),
+    cursor: str | None = Query(None),
+    limit: int = Query(50, ge=1, le=100),
+    store=Depends(get_store),
+    context: AgentAuthContext = Depends(require_agent_creatives_context),
+    creatives_service: AgentCreativesService = Depends(get_agent_creatives_service),
+    auth_service: AuthService = Depends(get_auth_service),
+) -> AgentCreativeListResponse:
+    """Search a buyer's creatives using precomputed spend-ranked evidence."""
+    resolved_buyer_id = await resolve_buyer_id(
+        buyer_id, store=store, user=context.user
+    )
+    if not resolved_buyer_id:
+        raise HTTPException(status_code=400, detail="buyer_id is required.")
+    _enforce_token_buyer(context, resolved_buyer_id)
+
+    payload = await creatives_service.list_creatives(
+        buyer_id=resolved_buyer_id,
+        start_date=start_date,
+        end_date=end_date,
+        domain=domain,
+        creative_format=format,
+        approval_filter=approval_filter,
+        activity=activity,
+        search=search,
+        cursor=cursor,
+        limit=limit,
+    )
+    await _audit_creative_read(
+        request=request,
+        context=context,
+        auth_service=auth_service,
+        action="agent_creatives_read",
+        resource_id=resolved_buyer_id,
+        details=(
+            f"buyer_id={resolved_buyer_id}; start_date={start_date.isoformat()}; "
+            f"end_date={end_date.isoformat()}; returned={len(payload['creatives'])}; "
+            f"has_more={payload['has_more']}"
+        ),
+    )
+    return AgentCreativeListResponse(**payload)

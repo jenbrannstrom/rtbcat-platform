@@ -37,6 +37,7 @@ _ROUTER_EXPORTS = {
     "admin_router": ("api.routers.admin", "router"),
     "seat_admin_router": ("api.routers.seat_admin", "router"),
     "agent_router": ("api.routers.agent", "router"),
+    "agent_creatives_router": ("api.routers.agent_creatives", "router"),
     "waste_router": ("api.routers.analytics.waste", "router"),
     "rtb_bidstream_router": ("api.routers.analytics.rtb_bidstream", "router"),
     "analytics_qps_router": ("api.routers.analytics.qps", "router"),
