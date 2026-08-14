@@ -1,4 +1,4 @@
-"""Tests for the Agent API creative-search contract."""
+"""Tests for Agent API creative search and detail contracts."""
 
 from __future__ import annotations
 
@@ -44,8 +44,13 @@ def _creative_row(
 
 
 class _StubCreativesRepo:
-    def __init__(self, rows: list[dict] | None = None) -> None:
+    def __init__(
+        self,
+        rows: list[dict] | None = None,
+        detail: dict | None = None,
+    ) -> None:
         self.rows = rows or []
+        self.detail = detail
         self.calls: list[dict] = []
 
     async def list_creatives(self, **kwargs):
@@ -66,6 +71,10 @@ class _StubCreativesRepo:
                 )
             ]
         return rows[: kwargs["limit"]]
+
+    async def get_creative(self, creative_id: str):
+        self.calls.append({"creative_id": creative_id})
+        return self.detail
 
 
 class _StubAuthService:
@@ -353,3 +362,168 @@ def test_creatives_list_rejects_clicks_sort() -> None:
 
     assert response.status_code == 422
     assert repo.calls == []
+
+def _detail_row(*, buyer_id: str = "buyer-1") -> dict:
+    return {
+        "creative_id": "creative-a",
+        "buyer_id": buyer_id,
+        "name": "Creative creative-a",
+        "format": "HTML",
+        "approval_status": "APPROVED",
+        "width": 300,
+        "height": 250,
+        "canonical_size": "300x250",
+        "final_url": "https://ads.example/landing",
+        "display_url": "ads.example",
+        "advertiser_name": "Synthetic Advertiser",
+        "campaign_id": "campaign-1",
+        "app_id": None,
+        "app_name": None,
+        "app_store": None,
+        "disapproval_reasons": [],
+        "serving_restrictions": ["US"],
+        "first_seen_at": None,
+        "created_at": None,
+        "updated_at": None,
+        "raw_data": {
+            "declaredClickThroughUrls": ["https://ads.example/landing"],
+            "html": {"snippet": "<a href='https://ads.example/landing'>Ad</a>"},
+        },
+    }
+
+
+def _expected_detail(*, buyer_id: str = "buyer-1") -> dict:
+    return {
+        "api_version": "agent.v1",
+        "source_table": "creatives",
+        "creative_id": "creative-a",
+        "buyer_id": buyer_id,
+        "name": "Creative creative-a",
+        "format": "HTML",
+        "approval_status": "APPROVED",
+        "width": 300,
+        "height": 250,
+        "canonical_size": "300x250",
+        "final_url": "https://ads.example/landing",
+        "display_url": "ads.example",
+        "advertiser_name": "Synthetic Advertiser",
+        "campaign_id": "campaign-1",
+        "app_id": None,
+        "app_name": None,
+        "app_store": None,
+        "disapproval_reasons": [],
+        "serving_restrictions": ["US"],
+        "first_seen_at": None,
+        "created_at": None,
+        "updated_at": None,
+        "destination_diagnostics": {
+            "resolved_destination_url": "https://ads.example/landing",
+            "candidate_count": 4,
+            "eligible_count": 1,
+            "candidates": [
+                {
+                    "source": "final_url",
+                    "url": "https://ads.example/landing",
+                    "eligible": True,
+                    "reason": None,
+                },
+                {
+                    "source": "display_url",
+                    "url": "ads.example",
+                    "eligible": False,
+                    "reason": "unsupported_scheme",
+                },
+                {
+                    "source": "declared_click_through_url",
+                    "url": "https://ads.example/landing",
+                    "eligible": False,
+                    "reason": "duplicate",
+                },
+                {
+                    "source": "html_snippet",
+                    "url": "https://ads.example/landing",
+                    "eligible": False,
+                    "reason": "duplicate",
+                },
+            ],
+            "has_any_macro": False,
+            "has_click_macro": False,
+            "macro_tokens": [],
+            "click_macro_tokens": [],
+            "has_payload_click_macro": False,
+            "has_payload_only_click_macro": False,
+            "payload_click_macro_tokens": [],
+        },
+        "assets_reference": "/api/agent/v1/creatives/creative-a/assets",
+    }
+
+
+@pytest.mark.asyncio
+async def test_creative_detail_full_schema_with_destination_diagnostics() -> None:
+    repo = _StubCreativesRepo(detail=_detail_row())
+    service = AgentCreativesService(repo=repo)
+
+    payload = await service.get_creative_detail("creative-a")
+
+    assert payload == _expected_detail()
+    assert repo.calls == [{"creative_id": "creative-a"}]
+
+
+def test_creative_detail_outside_buyer_matches_missing_shape() -> None:
+    outside_repo = _StubCreativesRepo(detail=_detail_row(buyer_id="buyer-2"))
+    outside_client = _router_client(
+        context=_context(buyer_id="buyer-1"),
+        repo=outside_repo,
+        auth=_StubAuthService(),
+    )
+    missing_client = _router_client(
+        context=_context(buyer_id="buyer-1"),
+        repo=_StubCreativesRepo(detail=None),
+        auth=_StubAuthService(),
+    )
+
+    outside_response = outside_client.get(
+        "/api/agent/v1/creatives/creative-a"
+    )
+    missing_response = missing_client.get(
+        "/api/agent/v1/creatives/creative-a"
+    )
+
+    assert outside_response.status_code == 404
+    assert missing_response.status_code == 404
+    assert outside_response.json() == missing_response.json() == {
+        "detail": "Creative not found."
+    }
+
+
+def test_creative_detail_rejects_stats_only_scope() -> None:
+    client = _router_client(
+        context=_context(scopes=[AGENT_STATS_READ_SCOPE]),
+        repo=_StubCreativesRepo(detail=_detail_row()),
+        auth=_StubAuthService(),
+        enforce_real_scope=True,
+    )
+
+    response = client.get("/api/agent/v1/creatives/creative-a")
+
+    assert response.status_code == 403
+    assert response.json() == {
+        "detail": "Agent token lacks required scope: agent:creatives:read."
+    }
+
+
+def test_creative_detail_router_returns_full_schema_and_audits() -> None:
+    auth = _StubAuthService()
+    client = _router_client(
+        context=_context(),
+        repo=_StubCreativesRepo(detail=_detail_row()),
+        auth=auth,
+    )
+
+    response = client.get("/api/agent/v1/creatives/creative-a")
+
+    assert response.status_code == 200
+    assert response.json() == _expected_detail()
+    assert auth.audit_calls[0]["action"] == "agent_creatives_read"
+    assert auth.audit_calls[0]["resource_id"] == "creative-a"
+    assert "read=detail" in auth.audit_calls[0]["details"]

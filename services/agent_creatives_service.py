@@ -14,7 +14,10 @@ from urllib.parse import quote, urlparse
 from fastapi import HTTPException
 
 from api.schemas.agent_provenance import build_provenance
-from services.creative_destination_resolver import resolve_creative_destination_url
+from services.creative_destination_resolver import (
+    build_creative_destination_diagnostics,
+    resolve_creative_destination_url,
+)
 from storage.postgres_database import pg_query_with_timeout
 
 MAX_CREATIVE_RANGE_DAYS = 90
@@ -186,6 +189,38 @@ class AgentCreativesRepository:
             statement_timeout_ms=self.statement_timeout_ms,
         )
 
+    async def get_creative(self, creative_id: str) -> dict[str, Any] | None:
+        rows = await pg_query_with_timeout(
+            """
+            SELECT id AS creative_id,
+                   buyer_id,
+                   name,
+                   format,
+                   approval_status,
+                   width,
+                   height,
+                   canonical_size,
+                   final_url,
+                   display_url,
+                   advertiser_name,
+                   campaign_id,
+                   app_id,
+                   app_name,
+                   app_store,
+                   disapproval_reasons,
+                   serving_restrictions,
+                   first_seen_at,
+                   created_at,
+                   updated_at,
+                   raw_data
+            FROM creatives
+            WHERE id = %s
+            """,
+            (creative_id,),
+            statement_timeout_ms=self.statement_timeout_ms,
+        )
+        return rows[0] if rows else None
+
 
 class AgentCreativesService:
     """Build compact creative evidence without raw-table fallbacks."""
@@ -262,6 +297,47 @@ class AgentCreativesService:
             "creatives": creatives,
             "next_cursor": next_cursor,
             "has_more": has_more,
+        }
+
+    async def get_creative_detail(self, creative_id: str) -> dict[str, Any]:
+        row = await self._repo.get_creative(creative_id)
+        if not row:
+            raise HTTPException(status_code=404, detail="Creative not found.")
+        creative = SimpleNamespace(**row)
+
+        def timestamp(name: str) -> str | None:
+            value = row.get(name)
+            return str(value) if value is not None else None
+
+        return {
+            "api_version": "agent.v1",
+            "source_table": "creatives",
+            "creative_id": str(row["creative_id"]),
+            "buyer_id": str(row["buyer_id"]),
+            "name": str(row.get("name") or row["creative_id"]),
+            "format": str(row.get("format") or "UNKNOWN"),
+            "approval_status": row.get("approval_status"),
+            "width": row.get("width"),
+            "height": row.get("height"),
+            "canonical_size": row.get("canonical_size"),
+            "final_url": row.get("final_url"),
+            "display_url": row.get("display_url"),
+            "advertiser_name": row.get("advertiser_name"),
+            "campaign_id": row.get("campaign_id"),
+            "app_id": row.get("app_id"),
+            "app_name": row.get("app_name"),
+            "app_store": row.get("app_store"),
+            "disapproval_reasons": row.get("disapproval_reasons") or [],
+            "serving_restrictions": row.get("serving_restrictions") or [],
+            "first_seen_at": timestamp("first_seen_at"),
+            "created_at": timestamp("created_at"),
+            "updated_at": timestamp("updated_at"),
+            "destination_diagnostics": build_creative_destination_diagnostics(
+                creative
+            ),
+            "assets_reference": (
+                f"/api/agent/v1/creatives/{quote(creative_id, safe='')}/assets"
+            ),
         }
 
     def _list_row(

@@ -9,9 +9,16 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from api.dependencies import get_store, resolve_buyer_id
 from api.routers.agent import _enforce_token_buyer, get_auth_service, require_agent_scope
-from api.schemas.agent_creatives import AgentCreativeListResponse
+from api.schemas.agent_creatives import (
+    AgentCreativeDetailResponse,
+    AgentCreativeListResponse,
+)
 from services.agent_creatives_service import AgentCreativesService
-from services.agent_token_service import AGENT_CREATIVES_READ_SCOPE, AgentAuthContext
+from services.agent_token_service import (
+    AGENT_CREATIVES_READ_SCOPE,
+    AgentAuthContext,
+)
+from services.auth_service import AuthService
 
 router = APIRouter(prefix="/agent/v1", tags=["Agent API"])
 
@@ -41,6 +48,29 @@ async def _audit_creative_read(
         ip_address=request.client.host if request.client else None,
     )
 
+
+def _creative_not_found() -> HTTPException:
+    return HTTPException(status_code=404, detail="Creative not found.")
+
+
+async def _enforce_creative_buyer_access(
+    *,
+    context: AgentAuthContext,
+    buyer_id: str,
+    auth_service: AuthService,
+) -> None:
+    try:
+        _enforce_token_buyer(context, buyer_id)
+    except HTTPException:
+        raise _creative_not_found() from None
+
+    if context.user.role == "sudo":
+        return
+    allowed_buyer_ids = await auth_service.get_user_buyer_seat_ids(
+        context.user.id
+    )
+    if buyer_id not in allowed_buyer_ids:
+        raise _creative_not_found()
 
 
 @router.get("/creatives", response_model=AgentCreativeListResponse)
@@ -109,3 +139,32 @@ async def list_agent_creatives(
         ),
     )
     return AgentCreativeListResponse(**payload)
+
+
+@router.get("/creatives/{creative_id}", response_model=AgentCreativeDetailResponse)
+async def get_agent_creative(
+    creative_id: str,
+    request: Request,
+    context: AgentAuthContext = Depends(require_agent_creatives_context),
+    creatives_service: AgentCreativesService = Depends(get_agent_creatives_service),
+    auth_service: AuthService = Depends(get_auth_service),
+) -> AgentCreativeDetailResponse:
+    """Return creative detail and click-destination diagnostics."""
+    payload = await creatives_service.get_creative_detail(creative_id)
+    await _enforce_creative_buyer_access(
+        context=context,
+        buyer_id=payload["buyer_id"],
+        auth_service=auth_service,
+    )
+    await _audit_creative_read(
+        request=request,
+        context=context,
+        auth_service=auth_service,
+        action="agent_creatives_read",
+        resource_id=creative_id,
+        details=(
+            f"buyer_id={payload['buyer_id']}; creative_id={creative_id}; "
+            "read=detail"
+        ),
+    )
+    return AgentCreativeDetailResponse(**payload)
