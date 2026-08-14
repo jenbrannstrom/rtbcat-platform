@@ -10,11 +10,13 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from api.dependencies import get_store, resolve_buyer_id
 from api.routers.agent import _enforce_token_buyer, get_auth_service, require_agent_scope
 from api.schemas.agent_creatives import (
+    AgentCreativeAssetsResponse,
     AgentCreativeDetailResponse,
     AgentCreativeListResponse,
 )
 from services.agent_creatives_service import AgentCreativesService
 from services.agent_token_service import (
+    AGENT_ASSETS_READ_SCOPE,
     AGENT_CREATIVES_READ_SCOPE,
     AgentAuthContext,
 )
@@ -23,6 +25,7 @@ from services.auth_service import AuthService
 router = APIRouter(prefix="/agent/v1", tags=["Agent API"])
 
 require_agent_creatives_context = require_agent_scope(AGENT_CREATIVES_READ_SCOPE)
+require_agent_assets_context = require_agent_scope(AGENT_ASSETS_READ_SCOPE)
 
 def get_agent_creatives_service() -> AgentCreativesService:
     return AgentCreativesService()
@@ -168,3 +171,34 @@ async def get_agent_creative(
         ),
     )
     return AgentCreativeDetailResponse(**payload)
+
+@router.get(
+    "/creatives/{creative_id}/assets",
+    response_model=AgentCreativeAssetsResponse,
+)
+async def get_agent_creative_assets(
+    creative_id: str,
+    request: Request,
+    context: AgentAuthContext = Depends(require_agent_assets_context),
+    creatives_service: AgentCreativesService = Depends(get_agent_creatives_service),
+    auth_service: AuthService = Depends(get_auth_service),
+) -> AgentCreativeAssetsResponse:
+    """Return preview-derived asset references without serving bytes."""
+    payload = await creatives_service.get_creative_assets(creative_id)
+    await _enforce_creative_buyer_access(
+        context=context,
+        buyer_id=payload["buyer_id"],
+        auth_service=auth_service,
+    )
+    await _audit_creative_read(
+        request=request,
+        context=context,
+        auth_service=auth_service,
+        action="agent_asset_read",
+        resource_id=creative_id,
+        details=(
+            f"buyer_id={payload['buyer_id']}; creative_id={creative_id}; "
+            "read=asset_references"
+        ),
+    )
+    return AgentCreativeAssetsResponse(**payload)
