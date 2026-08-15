@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 import json
+import sys
 from pathlib import Path
 
 import httpx
@@ -222,6 +223,49 @@ def test_mcp_package_has_no_repo_package_imports() -> None:
                     )
 
     assert violations == []
+
+
+def test_mcp_package_uses_only_isolated_runtime_dependencies() -> None:
+    package_root = REPO_ROOT / "mcp_server"
+    allowed_third_party = {"httpx", "mcp", "uvicorn"}
+    unexpected_imports: list[str] = []
+    combined_source = ""
+
+    for source_path in sorted(package_root.rglob("*.py")):
+        source = source_path.read_text()
+        combined_source += source.lower()
+        tree = ast.parse(
+            source,
+            filename=str(source_path),
+            feature_version=(3, 11),
+        )
+        for node in ast.walk(tree):
+            roots: list[str] = []
+            if isinstance(node, ast.Import):
+                roots = [alias.name.split(".", 1)[0] for alias in node.names]
+            elif isinstance(node, ast.ImportFrom) and node.level == 0:
+                roots = [(node.module or "").split(".", 1)[0]]
+            for root in roots:
+                if (
+                    root
+                    and root not in sys.stdlib_module_names
+                    and root not in allowed_third_party
+                ):
+                    unexpected_imports.append(
+                        f"{source_path.relative_to(package_root)}:{node.lineno}: {root}"
+                    )
+
+    assert unexpected_imports == []
+    for forbidden_text in (
+        "postgresql://",
+        "postgres_dsn",
+        "select * from",
+        "insert into",
+        "delete from",
+        "import logging",
+        "from logging",
+    ):
+        assert forbidden_text not in combined_source
 
 
 def test_mcp_runtime_requirements_are_minimal_and_pinned() -> None:
