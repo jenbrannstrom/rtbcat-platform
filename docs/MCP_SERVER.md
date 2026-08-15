@@ -76,7 +76,9 @@ spend comes directly from the canonical buyer-grain lane.
 
 ## Client configuration
 
-The production endpoint is `https://mcp.rtb.cat/mcp` using Streamable HTTP.
+The production endpoint will be `https://mcp.rtb.cat/mcp` using Streamable
+HTTP. It is not deployed yet: the server package ships ahead of its container
+wiring, and this endpoint does not serve until the deployment phase lands.
 Replace the placeholder with the per-identity value returned once by the token
 endpoint, preferably through the client's supported secret substitution:
 
