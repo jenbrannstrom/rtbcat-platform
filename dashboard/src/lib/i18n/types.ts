@@ -85,6 +85,7 @@ export interface Translations {
 
   adminNav: {
     users: string;
+    agentTokens: string;
     configuration: string;
     auditLog: string;
   };
@@ -1164,6 +1165,7 @@ export interface Translations {
     adminUsers: string;
     userManagement: string;
     manageUsersLink: string;
+    manageAgentTokens: string;
     createNewUser: string;
     viewAuditLog: string;
     systemSettings: string;
