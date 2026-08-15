@@ -19,6 +19,9 @@ from tests.mcp_server_test_support import (
 )
 
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
+
+
 @pytest.mark.asyncio
 async def test_missing_bearer_is_mcp_auth_error_without_api_call() -> None:
     async with MCPHarness() as harness:
@@ -200,7 +203,7 @@ def test_mcp_package_has_no_repo_package_imports() -> None:
         "utils",
     }
     violations: list[str] = []
-    package_root = Path(__file__).resolve().parents[1] / "mcp_server"
+    package_root = REPO_ROOT / "mcp_server"
 
     for source_path in sorted(package_root.rglob("*.py")):
         tree = ast.parse(source_path.read_text(), filename=str(source_path))
@@ -219,3 +222,70 @@ def test_mcp_package_has_no_repo_package_imports() -> None:
                     )
 
     assert violations == []
+
+
+def test_mcp_runtime_requirements_are_minimal_and_pinned() -> None:
+    requirements = (REPO_ROOT / "requirements-mcp.txt").read_text().splitlines()
+    assert requirements == [
+        "mcp==2.0.0",
+        "httpx==0.28.1",
+        "uvicorn==0.41.0",
+    ]
+
+
+def test_mcp_dockerfile_is_minimal_non_root_and_health_checked() -> None:
+    dockerfile = (REPO_ROOT / "Dockerfile.mcp").read_text()
+    assert dockerfile.count("FROM python:3.11-slim-bookworm") == 2
+    assert "--uid 10001" in dockerfile
+    assert "USER 10001:10001" in dockerfile
+    assert "COPY --chown=rtbcat:rtbcat mcp_server/ ./mcp_server/" in dockerfile
+    assert "COPY --chown=rtbcat:rtbcat . ." not in dockerfile
+    assert 'LABEL org.opencontainers.image.revision="${GIT_SHA}"' in dockerfile
+    assert "HEALTHCHECK" in dockerfile
+    assert "urllib.request.urlopen" in dockerfile
+    assert "curl" not in dockerfile
+    assert "EXPOSE 8010" in dockerfile
+    assert "--host 0.0.0.0" in dockerfile
+    assert "${CATSCAN_MCP_PORT:-8010}" in dockerfile
+
+
+def test_mcp_package_and_workflows_are_wired() -> None:
+    pyproject = (REPO_ROOT / "pyproject.toml").read_text()
+    security = (REPO_ROOT / ".github/workflows/security.yml").read_text()
+    build = (
+        REPO_ROOT / ".github/workflows/build-and-push-ghcr.yml"
+    ).read_text()
+
+    assert '"mcp_server"' in pyproject
+    assert '"mcp_server.tools"' in pyproject
+    assert "requirements-mcp.txt" in security
+    assert "tests/test_mcp_server_tools.py" in build
+    assert "tests/test_mcp_server_auth_and_limits.py" in build
+
+
+def test_public_mcp_docs_cover_shipped_contract() -> None:
+    docs = (REPO_ROOT / "docs/MCP_SERVER.md").read_text()
+    tool_names = {
+        "rtbcat_list_buyers",
+        "rtbcat_search_creatives",
+        "rtbcat_get_creative",
+        "rtbcat_get_creative_asset",
+        "rtbcat_get_daily_spend",
+        "rtbcat_get_creative_performance",
+        "rtbcat_check_data_quality",
+    }
+    for tool_name in tool_names:
+        assert tool_name in docs
+    assert "https://mcp.rtb.cat/mcp" in docs
+    assert "Streamable HTTP" in docs
+    assert "Authorization" in docs
+    assert "POST /agent/v1/tokens" in docs
+    assert "DELETE /agent/v1/tokens/{id}" in docs
+    assert "spend_figures_withheld" in docs
+    for variable in (
+        "CATSCAN_MCP_ENABLED",
+        "RTBCAT_API_BASE_URL",
+        "CATSCAN_MCP_PORT",
+        "CATSCAN_MCP_RATE_LIMIT_PER_MINUTE",
+    ):
+        assert variable in docs

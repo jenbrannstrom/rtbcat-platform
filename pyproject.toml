@@ -7,4 +7,4 @@ license = {file = "LICENSE"}
 requires-python = ">=3.11"
 
 [tool.setuptools]
-packages = ["analytics", "api", "collectors", "config", "importers", "services", "storage", "utils"]
+packages = ["analytics", "api", "collectors", "config", "importers", "mcp_server", "mcp_server.tools", "services", "storage", "utils"]
