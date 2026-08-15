@@ -1,8 +1,7 @@
-"""Creative asset-reference MCP tool and resource template."""
+"""Creative asset-reference MCP tool."""
 
 from __future__ import annotations
 
-import json
 from typing import Any
 
 from mcp.server import MCPServer
@@ -28,23 +27,3 @@ def register_asset_tools(server: MCPServer, runtime: ToolRuntime) -> None:
             "GET",
             f"/agent/v1/creatives/{creative_id}/assets",
         )
-
-    @server.resource(
-        "rtbcat://creatives/{creative_id}/assets",
-        name="rtbcat_creative_assets",
-        description=(
-            "Authenticated reference-only asset manifest for one token-scoped "
-            "creative; no image, video, or HTML bytes are fetched."
-        ),
-        mime_type="application/json",
-    )
-    async def creative_asset_resource(
-        creative_id: str,
-        context: Context,
-    ) -> str:
-        payload = await runtime.request(
-            context,
-            "GET",
-            f"/agent/v1/creatives/{creative_id}/assets",
-        )
-        return json.dumps(payload, separators=(",", ":"))
