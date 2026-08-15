@@ -63,6 +63,8 @@ jobs:
             tests/test_agent_data_quality.py \
             tests/test_agent_creatives.py \
             tests/test_agent_creative_performance.py \
+            tests/test_mcp_server_tools.py \
+            tests/test_mcp_server_auth_and_limits.py \
             tests/test_admin_user_seat_permissions.py \
             -q
 

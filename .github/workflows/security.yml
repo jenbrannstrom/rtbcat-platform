@@ -87,7 +87,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install pip-audit
           audit_fail=0
-          for req in requirements.txt requirements-ai.txt requirements-dev.txt; do
+          for req in requirements.txt requirements-ai.txt requirements-dev.txt requirements-mcp.txt; do
             pip-audit -r "$req" || audit_fail=1
           done
           echo "PIP_AUDIT_FAILED=$audit_fail" >> "$GITHUB_ENV"
