@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Users, Shield, Activity, Settings } from "lucide-react";
+import { Users, Shield, Activity, Settings, KeyRound } from "lucide-react";
 import Link from "next/link";
 import { getAdminStats, getSystemSettings } from "@/lib/api";
 import { useAuth, withAdminAuth } from "@/contexts/auth-context";
@@ -177,6 +177,16 @@ function AdminDashboard() {
                 <span className="text-primary-700">{t.admin.createNewUser}</span>
               </div>
               <span className="text-primary-400">&rarr;</span>
+            </Link>
+            <Link
+              href="/admin/agent-tokens"
+              className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+            >
+              <div className="flex items-center">
+                <KeyRound className="h-5 w-5 text-gray-500 mr-3" />
+                <span className="text-gray-700">{t.admin.manageAgentTokens}</span>
+              </div>
+              <span className="text-gray-400">&rarr;</span>
             </Link>
             <Link
               href="/admin/audit-log"
