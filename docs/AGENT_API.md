@@ -76,10 +76,10 @@ curl -u "agent:${CATSCAN_AGENT_BASIC_PASSWORD}" \
 
 ## Provision
 
-Create or reuse a read-only app user with buyer-seat grants, then mint an agent
-token. The API (`POST /api/agent/v1/tokens`, sudo session) is the supported
-path — it validates the target, enforces scope and buyer rules, and writes an
-audit event.
+Create or reuse a read-only app user with buyer-seat grants, then sign in as a
+sudo user and open `https://YOUR_HOST/admin/agent-tokens`. The dashboard page
+is the preferred issuance path: it validates the target, enforces scope and
+buyer rules, writes an audit event, and reveals the plaintext token once.
 
 For a multi-buyer research identity, grant the app user one seat permission
 per allowed buyer and mint the token with `"all_granted_buyers": true`
@@ -104,7 +104,7 @@ python scripts/provision_creative_audit_agent.py \
 The script prints `Agent API token: cat_agent_...` once. Store it in Secret
 Manager or the external agent platform's secret store.
 
-Via API as a sudo user:
+Alternatively, mint via the API as a sudo user:
 
 ```bash
 curl -X POST https://YOUR_HOST/api/agent/v1/tokens \
