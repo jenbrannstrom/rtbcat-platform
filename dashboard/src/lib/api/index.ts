@@ -21,6 +21,7 @@
  *   - uploads.ts: upload tracking, import history, new creatives
  *   - snapshots.ts: pretargeting snapshots
  *   - conversions.ts: conversion health and ingestion telemetry
+ *   - agent-tokens.ts: outside-agent token management
  */
 
 // Re-export from modular files
@@ -37,3 +38,4 @@ export * from "./settings";
 export * from "./uploads";
 export * from "./optimizer";
 export * from "./conversions";
+export * from "./agent-tokens";
