@@ -28,6 +28,7 @@ import {
   Map,
   BarChart3,
   Globe,
+  KeyRound,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getSeats, syncAllData } from "@/lib/api";
@@ -77,6 +78,7 @@ const settingsItems = [
 // Admin sub-navigation
 const adminItems = [
   { key: "users" as const, href: "/admin/users", icon: Users },
+  { key: "agentTokens" as const, href: "/admin/agent-tokens", icon: KeyRound },
   { key: "configuration" as const, href: "/admin/configuration", icon: Wrench },
   { key: "auditLog" as const, href: "/admin/audit-log", icon: FileText },
 ];

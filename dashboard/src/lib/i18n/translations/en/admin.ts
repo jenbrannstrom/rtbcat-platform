@@ -8,6 +8,7 @@ const value: Translations['admin'] = {
     adminUsers: 'Sudo Users',
     userManagement: 'User Management',
     manageUsersLink: 'Manage Users',
+    manageAgentTokens: 'Manage Agent Tokens',
     createNewUser: 'Create New User',
     viewAuditLog: 'View Audit Log',
     systemSettings: 'System Settings',
