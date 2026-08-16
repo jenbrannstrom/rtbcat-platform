@@ -1,7 +1,7 @@
 # RTBcat Read-Only MCP Server — Delivery Plan
 
 > **Status:** In delivery — see §0 for exact resume state (last updated
-> 2026-08-15).
+> 2026-08-16).
 > **Scope:** A read-only, buyer-scoped remote MCP server for RTBcat, developed
 > and open-sourced inside this repository and deployed beside the production
 > API on Hetzner.
@@ -23,15 +23,14 @@ Gate, Schema Compatibility) was green on every listed commit.
 | 2026-08-09 | `b778891d` | **Phase 1 complete** — four scopes + `require_agent_scope` factory; `get_allowed_buyer_ids` returns all seat grants (D2); `all_granted_buyers=true` token shape (D3); thumbnail route buyer-checked (D4); provisioning-script token path deprecated; agent auth suites added to the release-gating list |
 | 2026-08-09 | `409b96ee` | **Phase 2 slice 1 complete** — `MetricProvenance` envelope (`api/schemas/agent_provenance.py`) attached to daily-spend; `GET /agent/v1/buyers`; `GET /agent/v1/data-quality` (canonical vs allocated reconciliation, `services/agent_data_quality_service.py`) |
 | 2026-08-15 | `39453e07..0fef58d8` (5 commits) | **Phase 2 slice 2 complete** — the four creative read contracts under `/agent/v1`: creatives search (cursor-paginated, spend-sort from `config_creative_daily` only), creative detail (destination diagnostics via `creative_destination_resolver`), asset references (no bytes), creative-performance batch (`metric_source: "unavailable"` for precompute misses, `clicks_available: false`, allocation block attached). New: `api/routers/agent_creatives.py`, `services/agent_creatives_service.py`, `services/agent_creative_performance_service.py`; 22 tests in two files, both on the release-gating list; `docs/AGENT_API.md` updated. A static-guard test asserts the new modules never reference the raw RTB table |
+| 2026-08-16 | `eb1cb6d6..da084634` (5 commits; merged `41b4873f`, released `1acb8bd8`) | **Phase 3 complete** — standalone stateless MCP adapter, seven read tools over `/agent/v1`, token forwarding, in-process rate limiting, kill switch, non-root container, public guide, 43 MCP tests on the release gate, and end-to-end behavior verification against the production Agent API. The endpoint remained undeployed. |
 
-**Next up (start here): Phase 3 — MCP server MVP** (§5 Phase 3 is the spec):
-the `mcp_server/` package as a thin Streamable-HTTP adapter over the now-
-complete `/agent/v1` read contracts, forwarding the caller's token, holding
-no SQL and no secrets. Slice-2 contract notes an MCP tool author needs:
-detail/assets return the same 404 for cross-buyer and nonexistent creatives
-(no existence oracle); the batch endpoint 403s the whole batch if any
-requested creative is outside the buyer scope; list/batch date windows are
-capped at 90 days; batch size is capped at 100.
+**Current delivery: Phase 4 — build and deploy wiring.** The repository now
+defines the third digest-pinned image, loopback-only Compose service,
+manifest/deploy/verify/rollback handling, and the fixed MCP ingress generator.
+This is code completion, not production rollout: publishing the image,
+installing host scripts, DNS, TLS, ingress application, and pilot enablement
+remain operator actions.
 
 **Open items not owned by code:**
 
@@ -316,7 +315,7 @@ Configuration (env, matching repo conventions): `CATSCAN_MCP_ENABLED`
 (compose-internal `http://api:8000`), `CATSCAN_MCP_PORT`,
 `CATSCAN_MCP_RATE_LIMIT_PER_MINUTE`.
 
-### Phase 4 — Build and deploy (the six-place checklist)
+### Phase 4 — Build and deploy (the six-place checklist) — CODE COMPLETE
 
 Adding a third image touches every one of these; missing any breaks the
 release path:
