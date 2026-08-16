@@ -147,7 +147,9 @@ def test_writable_activation_requires_all_cutover_and_recovery_gates() -> None:
     assert "export RTBCAT_DEPLOY_READ_ONLY_SHADOW=true" in activate
     assert "shadow_restored_after_failure" in activate
     assert "--mode writable-schedulers-off" in activate
-    assert "--mode shadow --with-google" in activate
+    assert "--mode shadow" in activate
+    assert "--mcp-enabled \"$MCP_ENABLED\"" in activate
+    assert "--with-google" in activate
 
 
 def test_verifier_distinguishes_all_three_postures() -> None:
