@@ -65,6 +65,8 @@ jobs:
             tests/test_agent_creative_performance.py \
             tests/test_mcp_server_tools.py \
             tests/test_mcp_server_auth_and_limits.py \
+            tests/test_mcp_deployment_wiring.py \
+            tests/test_mcp_ingress_guards.py \
             tests/test_admin_user_seat_permissions.py \
             -q
 
@@ -88,6 +90,7 @@ jobs:
           fi
           echo "api_image=ghcr.io/${owner}/catscan-api" >> "$GITHUB_OUTPUT"
           echo "dashboard_image=ghcr.io/${owner}/catscan-dashboard" >> "$GITHUB_OUTPUT"
+          echo "mcp_image=ghcr.io/${owner}/catscan-mcp" >> "$GITHUB_OUTPUT"
           echo "release_version=${release_version}" >> "$GITHUB_OUTPUT"
 
       - name: Log in to GHCR with the workflow token
@@ -147,6 +150,25 @@ jobs:
           provenance: mode=max
           sbom: true
 
+      - name: Build and publish MCP server
+        id: mcp
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.mcp
+          push: true
+          tags: ${{ steps.metadata.outputs.mcp_image }}:sha-${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ steps.metadata.outputs.release_version }}
+          build-args: |
+            GIT_SHA=${{ github.sha }}
+          cache-from: type=gha,scope=hetzner-catscan-mcp
+          cache-to: type=gha,mode=max,scope=hetzner-catscan-mcp
+          provenance: mode=max
+          sbom: true
+
       - name: Write digest-pinned Hetzner release manifest
         shell: bash
         env:
@@ -154,10 +176,12 @@ jobs:
           API_DIGEST: ${{ steps.api.outputs.digest }}
           DASHBOARD_IMAGE: ${{ steps.metadata.outputs.dashboard_image }}
           DASHBOARD_DIGEST: ${{ steps.dashboard.outputs.digest }}
+          MCP_IMAGE: ${{ steps.metadata.outputs.mcp_image }}
+          MCP_DIGEST: ${{ steps.mcp.outputs.digest }}
           RELEASE_VERSION: ${{ steps.metadata.outputs.release_version }}
         run: |
           set -euo pipefail
-          for digest in "$API_DIGEST" "$DASHBOARD_DIGEST"; do
+          for digest in "$API_DIGEST" "$DASHBOARD_DIGEST" "$MCP_DIGEST"; do
             if ! [[ "$digest" =~ ^sha256:[a-f0-9]{64}$ ]]; then
               echo "Build did not return an immutable sha256 digest." >&2
               exit 1
@@ -169,6 +193,7 @@ jobs:
             printf 'DEPLOY_COMPOSE_SHA256=%s\n' "$(sha256sum deploy/hetzner/compose.yml | awk '{print $1}')"
             printf 'API_IMAGE=%s@%s\n' "$API_IMAGE" "$API_DIGEST"
             printf 'DASHBOARD_IMAGE=%s@%s\n' "$DASHBOARD_IMAGE" "$DASHBOARD_DIGEST"
+            printf 'MCP_IMAGE=%s@%s\n' "$MCP_IMAGE" "$MCP_DIGEST"
           } > hetzner-release.env
           cp deploy/hetzner/compose.yml hetzner-compose.yml
 
