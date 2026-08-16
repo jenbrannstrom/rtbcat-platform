@@ -148,16 +148,31 @@ release_value() {
     '$1 == key {sub(/^[^=]*=/, ""); print; found=1; exit} END {if (!found) exit 1}' \
     "$RELEASE_FILE"
 }
+release_value_optional() {
+  local key="$1"
+  awk -F= -v key="$key" \
+    '$1 == key {sub(/^[^=]*=/, ""); print; exit}' \
+    "$RELEASE_FILE"
+}
 RELEASE_GIT_SHA="$(release_value RELEASE_GIT_SHA)"
 RELEASE_VERSION="$(release_value RELEASE_VERSION)"
 DEPLOY_COMPOSE_SHA256="$(release_value DEPLOY_COMPOSE_SHA256)"
 API_IMAGE="$(release_value API_IMAGE)"
 DASHBOARD_IMAGE="$(release_value DASHBOARD_IMAGE)"
+MCP_IMAGE="$(release_value_optional MCP_IMAGE)"
+HAS_MCP="false"
 if ! [[ "$RELEASE_GIT_SHA" =~ ^[a-f0-9]{40}$ ]] || \
    ! [[ "$RELEASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || \
    ! [[ "$DEPLOY_COMPOSE_SHA256" =~ ^[a-f0-9]{64}$ ]]; then
   echo "Release SHA, version or Compose checksum is malformed." >&2
   exit 1
+fi
+if [[ -n "$MCP_IMAGE" ]]; then
+  if ! [[ "$MCP_IMAGE" =~ ^ghcr\.io/[a-z0-9._-]+/catscan-mcp@sha256:[a-f0-9]{64}$ ]]; then
+    echo "Only the expected digest-pinned MCP image is accepted." >&2
+    exit 1
+  fi
+  HAS_MCP="true"
 fi
 if ! [[ "$API_IMAGE" =~ ^ghcr\.io/[a-z0-9._-]+/catscan-api@sha256:[a-f0-9]{64}$ ]] || \
    ! [[ "$DASHBOARD_IMAGE" =~ ^ghcr\.io/[a-z0-9._-]+/catscan-dashboard@sha256:[a-f0-9]{64}$ ]]; then
@@ -190,6 +205,11 @@ if [[ "${RTBCAT_DATABASE_NAME:-}" != "$EXPECTED_DATABASE" ]]; then
 fi
 
 export API_IMAGE DASHBOARD_IMAGE RELEASE_GIT_SHA RELEASE_VERSION
+if [[ "$HAS_MCP" == "true" ]]; then
+  export MCP_IMAGE
+else
+  unset MCP_IMAGE
+fi
 export RTBCAT_RUNTIME_ENV_FILE="$RUNTIME_ENV_FILE"
 export RTBCAT_POSTGRES_PASSWORD_FILE="$POSTGRES_PASSWORD_FILE"
 export RTBCAT_POSTGRES_CA_FILE="$POSTGRES_CA_FILE"
@@ -199,6 +219,7 @@ export RTBCAT_DATABASE_PRIVATE_IP RTBCAT_DATABASE_NAME RTBCAT_DATABASE_OWNER
 export RTBCAT_DEPLOY_GMAIL_SCHEDULER=false
 export RTBCAT_DEPLOY_PRECOMPUTE_SCHEDULER=false
 export RTBCAT_DEPLOY_CREATIVE_CACHE_SCHEDULER=false
+export RTBCAT_DEPLOY_MCP_ENABLED=false
 
 DB_HELPER="$(cat <<'PY'
 import json
@@ -322,6 +343,7 @@ verify_with_retry() {
     if "$VERIFY_SCRIPT" \
         --release-file "$RELEASE_FILE" \
         --mode "$mode" \
+        --mcp-enabled false \
         --with-google; then
       return 0
     fi
@@ -450,9 +472,18 @@ compose config --format json > "$rendered"
 if ! jq -e \
   --arg api "$API_IMAGE" \
   --arg dashboard "$DASHBOARD_IMAGE" \
+  --arg mcp "$MCP_IMAGE" \
+  --argjson has_mcp "$HAS_MCP" \
   '
     .services.api.image == $api
     and .services.dashboard.image == $dashboard
+    and (if $has_mcp then
+      .services.mcp.image == $mcp
+      and .services.mcp.environment.CATSCAN_MCP_ENABLED == "false"
+      and all(.services.mcp.ports[]; .host_ip == "127.0.0.1")
+    else
+      (.services | has("mcp") | not)
+    end)
     and .services.api.environment.CATSCAN_READ_ONLY_SHADOW == "false"
     and .services.api.environment.CATSCAN_ENABLE_GMAIL_IMPORT_SCHEDULER == "false"
     and .services.api.environment.CATSCAN_ENABLE_PRECOMPUTE_SCHEDULER == "false"

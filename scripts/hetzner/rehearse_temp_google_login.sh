@@ -100,6 +100,7 @@ if [[ "${RESTORE_ONLY}" != "true" && ! -f "${OVERRIDE_FILE}" ]]; then
 fi
 
 RELEASE_FILE="$(readlink -f "${RELEASE_FILE}")"
+unset MCP_IMAGE
 # shellcheck source=/dev/null
 source "${RELEASE_FILE}"
 # shellcheck source=/dev/null
@@ -119,6 +120,15 @@ for required_value in \
     exit 1
   fi
 done
+MCP_IMAGE="${MCP_IMAGE:-}"
+HAS_MCP="false"
+if [[ -n "${MCP_IMAGE}" ]]; then
+  if ! [[ "${MCP_IMAGE}" =~ ^ghcr\.io/[a-z0-9._-]+/catscan-mcp@sha256:[a-f0-9]{64}$ ]]; then
+    echo "Only the expected digest-pinned MCP image is accepted." >&2
+    exit 1
+  fi
+  HAS_MCP="true"
+fi
 if [[ "${RTBCAT_DATABASE_NAME}" != "${EXPECTED_DATABASE}" ]]; then
   echo "Temporary Google login is restricted to ${EXPECTED_DATABASE}." >&2
   exit 1
@@ -154,6 +164,11 @@ if ! grep -qx 'CATSCAN_READ_ONLY_SHADOW=true' "${RUNTIME_ENV_FILE}"; then
 fi
 
 export API_IMAGE DASHBOARD_IMAGE RELEASE_GIT_SHA RELEASE_VERSION
+if [[ "${HAS_MCP}" == "true" ]]; then
+  export MCP_IMAGE
+else
+  unset MCP_IMAGE
+fi
 export RTBCAT_RUNTIME_ENV_FILE="${RUNTIME_ENV_FILE}"
 export RTBCAT_POSTGRES_PASSWORD_FILE="${POSTGRES_PASSWORD_FILE}"
 export RTBCAT_POSTGRES_CA_FILE="${POSTGRES_CA_FILE}"
@@ -164,6 +179,7 @@ export RTBCAT_DEPLOY_READ_ONLY_SHADOW=true
 export RTBCAT_DEPLOY_GMAIL_SCHEDULER=false
 export RTBCAT_DEPLOY_PRECOMPUTE_SCHEDULER=false
 export RTBCAT_DEPLOY_CREATIVE_CACHE_SCHEDULER=false
+export RTBCAT_DEPLOY_MCP_ENABLED=false
 
 mapfile -t API_GATEWAYS < <(
   docker inspect \
@@ -233,7 +249,7 @@ assert_runtime_mode() {
   fi
   bad_listener="$(
     ss -ltnH |
-      awk '$4 ~ /:3000$/ || $4 ~ /:8000$/ {if ($4 !~ /^127\.0\.0\.1:/) print $4}'
+      awk '$4 ~ /:(3000|8000|8010)$/ {if ($4 !~ /^127\.0\.0\.1:/) print $4}'
   )"
   if [[ -n "${bad_listener}" ]]; then
     echo "Application container listener escaped loopback: ${bad_listener}." >&2
@@ -279,11 +295,20 @@ docker compose \
 if ! jq -e \
   --arg api "${API_IMAGE}" \
   --arg dashboard "${DASHBOARD_IMAGE}" \
+  --arg mcp "${MCP_IMAGE}" \
+  --argjson has_mcp "${HAS_MCP}" \
   --arg database "${EXPECTED_DATABASE}" \
   --arg trusted_proxy_ips "${RTBCAT_OAUTH2_PROXY_TRUSTED_IPS}" \
   '
     .services.api.image == $api
     and .services.dashboard.image == $dashboard
+    and (if $has_mcp then
+      .services.mcp.image == $mcp
+      and .services.mcp.environment.CATSCAN_MCP_ENABLED == "false"
+      and all(.services.mcp.ports[]; .host_ip == "127.0.0.1")
+    else
+      (.services | has("mcp") | not)
+    end)
     and (.services.api | has("build") | not)
     and (.services.dashboard | has("build") | not)
     and .services.api.environment.OAUTH2_PROXY_ENABLED == "true"

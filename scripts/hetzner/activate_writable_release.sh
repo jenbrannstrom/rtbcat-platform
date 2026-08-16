@@ -10,6 +10,7 @@ CUTOVER_EVIDENCE=""
 JSON_OUT=""
 CONFIRM=""
 CHECK_ONLY="false"
+MCP_ENABLED="false"
 RUNTIME_ENV_FILE="/etc/rtbcat/runtime.env"
 MARKER_FILE="/etc/rtbcat/app-host.env"
 RUNTIME_MARKER="/etc/rtbcat/app-runtime-installed.env"
@@ -27,6 +28,7 @@ Usage: sudo scripts/hetzner/activate_writable_release.sh \
   --release-file <accepted-digest-release.env> \
   [--compose-file <release-matched-compose.yml>] \
   [--runtime-env-file <path>] \
+  [--mcp-enabled true|false] \
   --cutover-evidence <mode-0600-json> \
   --json-out <mode-0600-receipt.json> \
   --confirm ACTIVATE_WRITABLE_SCHEDULERS_OFF_NO_DNS
@@ -53,6 +55,7 @@ while [[ $# -gt 0 ]]; do
     --release-file) RELEASE_FILE="${2:?missing release file}"; shift 2 ;;
     --compose-file) COMPOSE_FILE="${2:?missing Compose file}"; shift 2 ;;
     --runtime-env-file) RUNTIME_ENV_FILE="${2:?missing runtime env file}"; shift 2 ;;
+    --mcp-enabled) MCP_ENABLED="${2:?missing MCP enabled value}"; shift 2 ;;
     --cutover-evidence) CUTOVER_EVIDENCE="${2:?missing cutover evidence}"; shift 2 ;;
     --json-out) JSON_OUT="${2:?missing JSON output path}"; shift 2 ;;
     --confirm) CONFIRM="${2:?missing confirmation}"; shift 2 ;;
@@ -61,6 +64,11 @@ while [[ $# -gt 0 ]]; do
     *) echo "Unknown argument: $1" >&2; usage >&2; exit 2 ;;
   esac
 done
+
+if [[ "$MCP_ENABLED" != "true" && "$MCP_ENABLED" != "false" ]]; then
+  echo "--mcp-enabled must be true or false." >&2
+  exit 2
+fi
 
 if [[ "$CHECK_ONLY" == "true" ]]; then
   if [[ "$CONFIRM" != "REHEARSE_WRITABLE_SCHEDULERS_OFF_NO_DNS" ]]; then
@@ -130,15 +138,33 @@ release_value() {
     '$1 == key {sub(/^[^=]*=/, ""); print; found=1; exit} END {if (!found) exit 1}' \
     "$RELEASE_FILE"
 }
+release_value_optional() {
+  local key="$1"
+  awk -F= -v key="$key" \
+    '$1 == key {sub(/^[^=]*=/, ""); print; exit}' \
+    "$RELEASE_FILE"
+}
 RELEASE_GIT_SHA="$(release_value RELEASE_GIT_SHA)"
 RELEASE_VERSION="$(release_value RELEASE_VERSION)"
 DEPLOY_COMPOSE_SHA256="$(release_value DEPLOY_COMPOSE_SHA256)"
 API_IMAGE="$(release_value API_IMAGE)"
 DASHBOARD_IMAGE="$(release_value DASHBOARD_IMAGE)"
+MCP_IMAGE="$(release_value_optional MCP_IMAGE)"
+HAS_MCP="false"
 if ! [[ "$RELEASE_GIT_SHA" =~ ^[a-f0-9]{40}$ ]] || \
    ! [[ "$RELEASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || \
    ! [[ "$DEPLOY_COMPOSE_SHA256" =~ ^[a-f0-9]{64}$ ]]; then
   echo "Release SHA, version or Compose checksum is malformed." >&2
+  exit 1
+fi
+if [[ -n "$MCP_IMAGE" ]]; then
+  if ! [[ "$MCP_IMAGE" =~ ^ghcr\.io/[a-z0-9._-]+/catscan-mcp@sha256:[a-f0-9]{64}$ ]]; then
+    echo "Only the expected digest-pinned MCP image is accepted." >&2
+    exit 1
+  fi
+  HAS_MCP="true"
+elif [[ "$MCP_ENABLED" == "true" ]]; then
+  echo "A pre-MCP release cannot be activated with --mcp-enabled true." >&2
   exit 1
 fi
 if ! [[ "$API_IMAGE" =~ ^ghcr\.io/[a-z0-9._-]+/catscan-api@sha256:[a-f0-9]{64}$ ]] || \
@@ -219,6 +245,11 @@ else
 fi
 
 export API_IMAGE DASHBOARD_IMAGE RELEASE_GIT_SHA RELEASE_VERSION
+if [[ "$HAS_MCP" == "true" ]]; then
+  export MCP_IMAGE
+else
+  unset MCP_IMAGE
+fi
 export RTBCAT_RUNTIME_ENV_FILE="$RUNTIME_ENV_FILE"
 export RTBCAT_POSTGRES_PASSWORD_FILE="$POSTGRES_PASSWORD_FILE"
 export RTBCAT_POSTGRES_CA_FILE="$POSTGRES_CA_FILE"
@@ -229,6 +260,7 @@ export RTBCAT_DEPLOY_READ_ONLY_SHADOW=false
 export RTBCAT_DEPLOY_GMAIL_SCHEDULER=false
 export RTBCAT_DEPLOY_PRECOMPUTE_SCHEDULER=false
 export RTBCAT_DEPLOY_CREATIVE_CACHE_SCHEDULER=false
+export RTBCAT_DEPLOY_MCP_ENABLED="$MCP_ENABLED"
 
 rendered_config="$(mktemp)"
 receipt_tmp="$(mktemp)"
@@ -242,11 +274,21 @@ docker compose --project-name rtbcat-hetzner -f "$COMPOSE_FILE" \
 if ! jq -e \
   --arg api "$API_IMAGE" \
   --arg dashboard "$DASHBOARD_IMAGE" \
+  --arg mcp "$MCP_IMAGE" \
+  --argjson has_mcp "$HAS_MCP" \
+  --arg mcp_enabled "$MCP_ENABLED" \
   '
     .services.api.image == $api
     and .services.dashboard.image == $dashboard
     and (.services.api | has("build") | not)
     and (.services.dashboard | has("build") | not)
+    and (if $has_mcp then
+      .services.mcp.image == $mcp
+      and (.services.mcp | has("build") | not)
+      and .services.mcp.environment.CATSCAN_MCP_ENABLED == $mcp_enabled
+    else
+      (.services | has("mcp") | not)
+    end)
     and .services.api.environment.CATSCAN_READ_ONLY_SHADOW == "false"
     and .services.api.environment.CATSCAN_ENABLE_GMAIL_IMPORT_SCHEDULER == "false"
     and .services.api.environment.CATSCAN_ENABLE_PRECOMPUTE_SCHEDULER == "false"
@@ -261,6 +303,13 @@ if ! jq -e \
       .host_ip == "127.0.0.1"
       and (.target | tostring) == "3000"
       and (.published | tostring) == "3000")
+    and (if $has_mcp then
+      (.services.mcp.ports | length) == 1
+      and any(.services.mcp.ports[];
+        .host_ip == "127.0.0.1"
+        and (.target | tostring) == "8010"
+        and (.published | tostring) == "8010")
+    else true end)
   ' "$rendered_config" >/dev/null; then
   echo "Rendered writable Compose violates image, listener or scheduler guards." >&2
   exit 1
@@ -280,6 +329,8 @@ write_receipt() {
     --arg release_version "$RELEASE_VERSION" \
     --arg api_image "$API_IMAGE" \
     --arg dashboard_image "$DASHBOARD_IMAGE" \
+    --arg mcp_image "$MCP_IMAGE" \
+    --argjson mcp_enabled "$MCP_ENABLED" \
     --arg compose_sha256 "$DEPLOY_COMPOSE_SHA256" \
     --arg rendered_compose_sha256 "$rendered_compose_sha256" \
     --arg cutover_evidence_sha256 "$cutover_evidence_sha256" \
@@ -295,6 +346,8 @@ write_receipt() {
       release_version: $release_version,
       api_image: $api_image,
       dashboard_image: $dashboard_image,
+      mcp_image: (if $mcp_image == "" then null else $mcp_image end),
+      mcp_enabled: $mcp_enabled,
       compose_sha256: $compose_sha256,
       rendered_compose_sha256: $rendered_compose_sha256,
       cutover_evidence_sha256: $cutover_evidence_sha256,
@@ -307,7 +360,8 @@ write_receipt() {
       },
       listeners: {
         api: "127.0.0.1:8000",
-        dashboard: "127.0.0.1:3000"
+        dashboard: "127.0.0.1:3000",
+        mcp: (if $mcp_image == "" then null else "127.0.0.1:8010" end)
       },
       dns_changed: false,
       shadow_restored_after_failure: $shadow_restored
@@ -321,7 +375,11 @@ if [[ "$CHECK_ONLY" == "true" ]]; then
   exit 0
 fi
 
-"$VERIFY_SCRIPT" --release-file "$RELEASE_FILE" --mode shadow --with-google
+"$VERIFY_SCRIPT" \
+  --release-file "$RELEASE_FILE" \
+  --mode shadow \
+  --mcp-enabled "$MCP_ENABLED" \
+  --with-google
 if ! docker exec rtbcat-api python /app/scripts/check_gmail_import_idle.py; then
   echo "Current Gmail import is active or could not be proven idle." >&2
   exit 1
@@ -335,6 +393,7 @@ if ! docker compose --project-name rtbcat-hetzner -f "$COMPOSE_FILE" \
 elif ! "$VERIFY_SCRIPT" \
   --release-file "$RELEASE_FILE" \
   --mode writable-schedulers-off \
+  --mcp-enabled "$MCP_ENABLED" \
   --with-google; then
   activation_ok="false"
 fi
@@ -344,7 +403,11 @@ if [[ "$activation_ok" != "true" ]]; then
   shadow_restored="false"
   if docker compose --project-name rtbcat-hetzner -f "$COMPOSE_FILE" \
       up -d --no-build --remove-orphans && \
-     "$VERIFY_SCRIPT" --release-file "$RELEASE_FILE" --mode shadow --with-google; then
+     "$VERIFY_SCRIPT" \
+       --release-file "$RELEASE_FILE" \
+       --mode shadow \
+       --mcp-enabled "$MCP_ENABLED" \
+       --with-google; then
     shadow_restored="true"
   fi
   write_receipt failed false "$shadow_restored"

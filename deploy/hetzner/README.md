@@ -11,6 +11,7 @@ disables the GCP deployment.
 SSH/Tailscale acceptance tunnel
         │
         ├── 127.0.0.1:3000 ── dashboard@sha256
+        ├── 127.0.0.1:8010 ── MCP@sha256 (kill switch off by default)
         └── 127.0.0.1:8000 ── API@sha256
                                   ├── TLS verify-full ── 10.60.1.20:5432
                                   └── ADC ── retained GSM / BigQuery / GCS
@@ -32,7 +33,8 @@ Manually run `.github/workflows/build-and-push-ghcr.yml` at the intended frozen
 commit and enter `PUBLISH_HETZNER`. The workflow:
 
 - runs deployment-critical tests;
-- publishes API and dashboard images using the full Git SHA as a discovery tag;
+- publishes API, dashboard and MCP images using the full Git SHA as discovery
+  tags;
 - records each returned image digest;
 - attaches source, revision, SBOM and provenance metadata; and
 - emits a `hetzner-release-<full-sha>` artifact containing
@@ -42,7 +44,7 @@ The deployment uses the digests, never the discovery tags. The workflow uses
 its repository-scoped `GITHUB_TOKEN` with `packages: write`, as supported by
 [GitHub Container Registry](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry#authenticating-in-a-github-actions-workflow).
 
-If the two packages are public, the host can pull anonymously. For private
+If the three packages are public, the host can pull anonymously. For private
 packages, create a dedicated classic PAT with `read:packages` only, place it in
 a temporary mode-0600 file on the host, and run:
 
@@ -109,11 +111,13 @@ host, then run:
 ```bash
 sudo scripts/hetzner/deploy_app_release.sh \
   --release-file /secure/path/hetzner-release.env \
+  --mcp-enabled false \
   --confirm deploy-shadow-no-dns
 ```
 
-The command verifies the PostgreSQL certificate/private path, pulls both exact
-digests, checks their full revision labels and fixed runtime UID, confirms any
+The command verifies the PostgreSQL certificate/private path, pulls all exact
+digests, checks their full revision labels and fixed runtime UID where
+required, confirms any
 current Gmail import is idle, renders Compose, starts the shadow containers,
 hydrates the existing Gmail OAuth client/token and Authorized Buyers credential
 directly from Secret Manager into the protected app-data mount, and runs
@@ -129,7 +133,8 @@ The deployment is accepted only when:
 
 - health reports the exact full Git SHA and a working target database;
 - the running image references exactly match the approved digests;
-- API and dashboard listen only on loopback;
+- API, dashboard and MCP listen only on loopback;
+- MCP health reports the explicitly requested kill-switch state;
 - no local PostgreSQL listener exists on the app host;
 - all scheduler ownership flags remain false; and
 - retained Google services are reachable from the target identity.
@@ -276,6 +281,7 @@ sudo scripts/hetzner/rollback_app_release.sh --list
 
 sudo scripts/hetzner/rollback_app_release.sh \
   --to-sha FULL_40_CHARACTER_SHA \
+  --mcp-enabled false \
   --confirm rollback-immutable-release
 ```
 
@@ -283,3 +289,9 @@ Rollback re-runs the same digest, database, Google-access and scheduler gates.
 It is an application-image rollback only. Once target writers are enabled in a
 later part, database compatibility and the written rollback boundary govern
 whether an older application release remains safe.
+
+Each accepted manifest retains its checksum-matched Compose generation.
+Pre-MCP manifests have no `MCP_IMAGE` and re-render their archived two-service
+Compose file; `--remove-orphans` removes a running MCP container during that
+rollback. A with-MCP rollback can pass `--mcp-enabled true` only when retaining
+an already approved MCP pilot is intentional.

@@ -72,6 +72,40 @@ services:
     networks:
       - app
 
+  mcp:
+    image: ${MCP_IMAGE:?Set MCP_IMAGE to a GHCR sha256 digest reference}
+    pull_policy: never
+    container_name: rtbcat-mcp
+    init: true
+    ports:
+      - "127.0.0.1:8010:8010"
+    environment:
+      CATSCAN_MCP_ENABLED: ${RTBCAT_DEPLOY_MCP_ENABLED:-false}
+      RTBCAT_API_BASE_URL: http://api:8000
+      CATSCAN_MCP_PORT: "8010"
+      CATSCAN_MCP_RATE_LIMIT_PER_MINUTE: ${RTBCAT_MCP_RATE_LIMIT_PER_MINUTE:-60}
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8010/health', timeout=5)"]
+      interval: 20s
+      timeout: 10s
+      retries: 6
+      start_period: 10s
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    logging:
+      driver: json-file
+      options:
+        max-size: 20m
+        max-file: "5"
+    networks:
+      - app
+
   dashboard:
     image: ${DASHBOARD_IMAGE:?Set DASHBOARD_IMAGE to a GHCR sha256 digest reference}
     pull_policy: never
