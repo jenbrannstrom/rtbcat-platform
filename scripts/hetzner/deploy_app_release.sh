@@ -20,6 +20,7 @@ RELEASE_FILE=""
 COMPOSE_FILE=""
 CONFIRM=""
 MODE="shadow"
+MCP_ENABLED="false"
 DOCKER_CONFIG_DIR="/etc/rtbcat/docker"
 MARKER_FILE="/etc/rtbcat/app-host.env"
 RUNTIME_MARKER="/etc/rtbcat/app-runtime-installed.env"
@@ -40,12 +41,14 @@ Usage: sudo scripts/hetzner/deploy_app_release.sh \
   --release-file <hetzner-release.env> \
   [--compose-file <hetzner-compose.yml>] \
   [--mode shadow|production] \
+  [--mcp-enabled true|false] \
   --confirm <mode-specific confirmation>
 
   --mode shadow      (default) read-only, schedulers off
                      --confirm deploy-shadow-no-dns
   --mode production            writable, schedulers on
                      --confirm deploy-production-live
+  --mcp-enabled      defaults to false; set true only for an approved pilot
 
 The confirmation string differs per mode so a production deploy cannot be
 issued by reusing a shadow command line. By default, hetzner-compose.yml is
@@ -59,6 +62,7 @@ while [[ $# -gt 0 ]]; do
     --release-file) RELEASE_FILE="${2:?missing release file}"; shift 2 ;;
     --compose-file) COMPOSE_FILE="${2:?missing Compose file}"; shift 2 ;;
     --mode) MODE="${2:?missing mode}"; shift 2 ;;
+    --mcp-enabled) MCP_ENABLED="${2:?missing MCP enabled value}"; shift 2 ;;
     --confirm) CONFIRM="${2:?missing confirmation}"; shift 2 ;;
     --help|-h) usage; exit 0 ;;
     *) echo "Unknown argument: $1" >&2; usage >&2; exit 2 ;;
@@ -83,6 +87,11 @@ case "$MODE" in
     exit 2
     ;;
 esac
+
+if [[ "$MCP_ENABLED" != "true" && "$MCP_ENABLED" != "false" ]]; then
+  echo "--mcp-enabled must be true or false." >&2
+  exit 2
+fi
 
 if [[ ${EUID} -ne 0 ]]; then
   echo "Run this script as root on the Hetzner app host." >&2
@@ -146,11 +155,20 @@ release_value() {
   local key="$1"
   awk -F= -v key="$key" '$1 == key {sub(/^[^=]*=/, ""); print; found=1; exit} END {if (!found) exit 1}' "$RELEASE_FILE"
 }
+release_value_optional() {
+  local key="$1"
+  awk -F= -v key="$key" '$1 == key {sub(/^[^=]*=/, ""); print; exit}' "$RELEASE_FILE"
+}
 RELEASE_GIT_SHA="$(release_value RELEASE_GIT_SHA)"
 RELEASE_VERSION="$(release_value RELEASE_VERSION)"
 DEPLOY_COMPOSE_SHA256="$(release_value DEPLOY_COMPOSE_SHA256)"
 API_IMAGE="$(release_value API_IMAGE)"
 DASHBOARD_IMAGE="$(release_value DASHBOARD_IMAGE)"
+MCP_IMAGE="$(release_value_optional MCP_IMAGE)"
+HAS_MCP="false"
+# Compatibility boundary: every accepted manifest is archived with the exact
+# checksum-matched Compose file from its workflow artifact. Pre-Phase-4 pairs
+# therefore have neither MCP_IMAGE nor an mcp service; new pairs have both.
 if ! [[ "$RELEASE_GIT_SHA" =~ ^[a-f0-9]{40}$ ]] || \
    ! [[ "$RELEASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || \
    ! [[ "$DEPLOY_COMPOSE_SHA256" =~ ^[a-f0-9]{64}$ ]]; then
@@ -160,6 +178,16 @@ fi
 if ! [[ "$API_IMAGE" =~ ^ghcr\.io/[a-z0-9._-]+/catscan-api@sha256:[a-f0-9]{64}$ ]] || \
    ! [[ "$DASHBOARD_IMAGE" =~ ^ghcr\.io/[a-z0-9._-]+/catscan-dashboard@sha256:[a-f0-9]{64}$ ]]; then
   echo "Only the expected GHCR repositories with sha256 digests are accepted." >&2
+  exit 1
+fi
+if [[ -n "$MCP_IMAGE" ]]; then
+  if ! [[ "$MCP_IMAGE" =~ ^ghcr\.io/[a-z0-9._-]+/catscan-mcp@sha256:[a-f0-9]{64}$ ]]; then
+    echo "Only the expected MCP GHCR repository with a sha256 digest is accepted." >&2
+    exit 1
+  fi
+  HAS_MCP="true"
+elif [[ "$MCP_ENABLED" == "true" ]]; then
+  echo "A pre-MCP release cannot be deployed with --mcp-enabled true." >&2
   exit 1
 fi
 
@@ -220,8 +248,15 @@ if [[ -f "$DOCKER_CONFIG_DIR/config.json" ]]; then
 fi
 "${docker_pull[@]}" pull "$API_IMAGE"
 "${docker_pull[@]}" pull "$DASHBOARD_IMAGE"
+if [[ "$HAS_MCP" == "true" ]]; then
+  "${docker_pull[@]}" pull "$MCP_IMAGE"
+fi
 
-for image_ref in "$API_IMAGE" "$DASHBOARD_IMAGE"; do
+release_images=("$API_IMAGE" "$DASHBOARD_IMAGE")
+if [[ "$HAS_MCP" == "true" ]]; then
+  release_images+=("$MCP_IMAGE")
+fi
+for image_ref in "${release_images[@]}"; do
   revision="$(docker image inspect --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' "$image_ref")"
   if [[ "$revision" != "$RELEASE_GIT_SHA" ]]; then
     echo "Image revision label does not match the approved commit." >&2
@@ -234,12 +269,25 @@ if [[ "$image_uid" != "$CONTAINER_UID" || "$image_gid" != "$CONTAINER_GID" ]]; t
   echo "API image runtime identity is not ${CONTAINER_UID}:${CONTAINER_GID}." >&2
   exit 1
 fi
+if [[ "$HAS_MCP" == "true" ]]; then
+  mcp_image_uid="$(docker run --rm --pull=never --entrypoint /usr/bin/id "$MCP_IMAGE" -u)"
+  mcp_image_gid="$(docker run --rm --pull=never --entrypoint /usr/bin/id "$MCP_IMAGE" -g)"
+  if [[ "$mcp_image_uid" != "$CONTAINER_UID" || "$mcp_image_gid" != "$CONTAINER_GID" ]]; then
+    echo "MCP image runtime identity is not ${CONTAINER_UID}:${CONTAINER_GID}." >&2
+    exit 1
+  fi
+fi
 
 install -d -o "$CONTAINER_UID" -g "$CONTAINER_GID" -m 0750 "$DATA_DIR"
 if [[ "$(stat -c '%u:%g' "$DATA_DIR")" != "${CONTAINER_UID}:${CONTAINER_GID}" ]]; then
   chown -R "${CONTAINER_UID}:${CONTAINER_GID}" "$DATA_DIR"
 fi
 export API_IMAGE DASHBOARD_IMAGE RELEASE_GIT_SHA RELEASE_VERSION
+if [[ "$HAS_MCP" == "true" ]]; then
+  export MCP_IMAGE
+else
+  unset MCP_IMAGE
+fi
 export RTBCAT_RUNTIME_ENV_FILE="$RUNTIME_ENV_FILE"
 export RTBCAT_POSTGRES_PASSWORD_FILE="$POSTGRES_PASSWORD_FILE"
 export RTBCAT_POSTGRES_CA_FILE="$POSTGRES_CA_FILE"
@@ -254,11 +302,20 @@ export RTBCAT_DEPLOY_READ_ONLY_SHADOW="$EXPECTED_SHADOW"
 export RTBCAT_DEPLOY_GMAIL_SCHEDULER="$EXPECTED_SCHEDULERS"
 export RTBCAT_DEPLOY_PRECOMPUTE_SCHEDULER="$EXPECTED_SCHEDULERS"
 export RTBCAT_DEPLOY_CREATIVE_CACHE_SCHEDULER="$EXPECTED_SCHEDULERS"
+export RTBCAT_DEPLOY_MCP_ENABLED="$MCP_ENABLED"
 
 rendered_images="$(docker compose --project-name rtbcat-hetzner -f "$COMPOSE_FILE" config --images)"
 if ! grep -Fxq "$API_IMAGE" <<<"$rendered_images" || \
    ! grep -Fxq "$DASHBOARD_IMAGE" <<<"$rendered_images"; then
   echo "Rendered Compose images do not match the approved release." >&2
+  exit 1
+fi
+if [[ "$HAS_MCP" == "true" ]] && ! grep -Fxq "$MCP_IMAGE" <<<"$rendered_images"; then
+  echo "Rendered Compose does not contain the approved MCP image." >&2
+  exit 1
+fi
+if [[ "$HAS_MCP" != "true" ]] && grep -Fq 'catscan-mcp' <<<"$rendered_images"; then
+  echo "Pre-MCP release unexpectedly renders an MCP image." >&2
   exit 1
 fi
 
@@ -279,7 +336,11 @@ if ! docker exec rtbcat-api \
   exit 1
 fi
 
-if ! "$VERIFY_SCRIPT" --release-file "$approved_release" --mode "$VERIFY_MODE" --with-google; then
+if ! "$VERIFY_SCRIPT" \
+  --release-file "$approved_release" \
+  --mode "$VERIFY_MODE" \
+  --mcp-enabled "$MCP_ENABLED" \
+  --with-google; then
   echo "New release failed acceptance." >&2
   if [[ -n "$previous_release" ]]; then
     echo "Rollback candidate: ${previous_release}" >&2

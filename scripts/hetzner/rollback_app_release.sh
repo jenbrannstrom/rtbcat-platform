@@ -6,6 +6,7 @@ set -euo pipefail
 TARGET_SHA=""
 CONFIRM=""
 MODE="shadow"
+MCP_ENABLED="false"
 RELEASE_DIR="/var/lib/rtbcat/releases"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -15,11 +16,13 @@ Usage:
   sudo scripts/hetzner/rollback_app_release.sh --list
   sudo scripts/hetzner/rollback_app_release.sh \
     --to-sha <full-40-character-sha> [--mode shadow|production] \
+    [--mcp-enabled true|false] \
     --confirm rollback-immutable-release
 
 --mode must match the host's current posture; it is passed through to
 deploy_app_release.sh, which asserts it against the runtime env. Rolling back a
 live host requires --mode production, otherwise the deploy refuses.
+MCP defaults off. A pre-MCP release cannot be selected with MCP enabled.
 EOF
 }
 
@@ -33,6 +36,7 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --to-sha) TARGET_SHA="${2:?missing SHA}"; shift 2 ;;
     --mode) MODE="${2:?missing mode}"; shift 2 ;;
+    --mcp-enabled) MCP_ENABLED="${2:?missing MCP enabled value}"; shift 2 ;;
     --confirm) CONFIRM="${2:?missing confirmation}"; shift 2 ;;
     --help|-h) usage; exit 0 ;;
     *) echo "Unknown argument: $1" >&2; usage >&2; exit 2 ;;
@@ -60,8 +64,13 @@ case "$MODE" in
   production) deploy_confirm="deploy-production-live" ;;
   *) echo "Mode must be shadow or production." >&2; exit 2 ;;
 esac
+if [[ "$MCP_ENABLED" != "true" && "$MCP_ENABLED" != "false" ]]; then
+  echo "--mcp-enabled must be true or false." >&2
+  exit 2
+fi
 
 exec "$SCRIPT_DIR/deploy_app_release.sh" \
   --release-file "$target_release" \
   --mode "$MODE" \
+  --mcp-enabled "$MCP_ENABLED" \
   --confirm "$deploy_confirm"
