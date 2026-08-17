@@ -25,12 +25,11 @@ Gate, Schema Compatibility) was green on every listed commit.
 | 2026-08-15 | `39453e07..0fef58d8` (5 commits) | **Phase 2 slice 2 complete** — the four creative read contracts under `/agent/v1`: creatives search (cursor-paginated, spend-sort from `config_creative_daily` only), creative detail (destination diagnostics via `creative_destination_resolver`), asset references (no bytes), creative-performance batch (`metric_source: "unavailable"` for precompute misses, `clicks_available: false`, allocation block attached). New: `api/routers/agent_creatives.py`, `services/agent_creatives_service.py`, `services/agent_creative_performance_service.py`; 22 tests in two files, both on the release-gating list; `docs/AGENT_API.md` updated. A static-guard test asserts the new modules never reference the raw RTB table |
 | 2026-08-16 | `eb1cb6d6..da084634` (5 commits; merged `41b4873f`, released `1acb8bd8`) | **Phase 3 complete** — standalone stateless MCP adapter, seven read tools over `/agent/v1`, token forwarding, in-process rate limiting, kill switch, non-root container, public guide, 43 MCP tests on the release gate, and end-to-end behavior verification against the production Agent API. The endpoint remained undeployed. |
 
-**Current delivery: Phase 4 — build and deploy wiring.** The repository now
-defines the third digest-pinned image, loopback-only Compose service,
-manifest/deploy/verify/rollback handling, and the fixed MCP ingress generator.
-This is code completion, not production rollout: publishing the image,
-installing host scripts, DNS, TLS, ingress application, and pilot enablement
-remain operator actions.
+| 2026-08-16 | `f00f0a4b` | **Phase 4 complete and deployed** — third digest-pinned image (`catscan-mcp`) built and gated by the GHCR workflow, loopback-only Compose service, manifest/deploy/verify/rollback handling, fixed `mcp.rtb.cat` ingress. Rolled out the same day: dark deploy accepted, DNS + TLS provisioned, ingress applied, kill switch enabled, and a scoped pilot tool call verified end-to-end against `https://mcp.rtb.cat/mcp`. |
+
+**Current state: the MCP server is live at `https://mcp.rtb.cat/mcp`** behind
+the deployment kill switch, serving scoped agent tokens. Next up: Phase 5
+hardening (see below) and the OAuth decision gate.
 
 **Open items not owned by code:**
 
@@ -315,7 +314,7 @@ Configuration (env, matching repo conventions): `CATSCAN_MCP_ENABLED`
 (compose-internal `http://api:8000`), `CATSCAN_MCP_PORT`,
 `CATSCAN_MCP_RATE_LIMIT_PER_MINUTE`.
 
-### Phase 4 — Build and deploy (the six-place checklist) — CODE COMPLETE
+### Phase 4 — Build and deploy (the six-place checklist) — DEPLOYED 2026-08-16
 
 Adding a third image touches every one of these; missing any breaks the
 release path:
