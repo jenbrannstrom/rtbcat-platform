@@ -76,12 +76,10 @@ spend comes directly from the canonical buyer-grain lane.
 
 ## Client configuration
 
-The intended production endpoint is `https://mcp.rtb.cat/mcp` using
-Streamable HTTP. Build, Compose, release-manifest, deploy/verify/rollback, and
-Nginx-generator wiring now exists in the repository. The endpoint remains dark
-until an operator publishes and deploys a Phase 4 release, provisions DNS and
-TLS, applies the vhost, and explicitly enables the kill switch for a pilot.
-Do not treat the configuration below as reachable until rollout is announced.
+The production endpoint is `https://mcp.rtb.cat/mcp` using Streamable HTTP.
+Availability is governed by the deployment's kill switch
+(`CATSCAN_MCP_ENABLED`); when it is off the endpoint returns HTTP 503 while
+`/health` stays reachable.
 Replace the placeholder with the per-identity value returned once by the token
 endpoint, preferably through the client's supported secret substitution:
 
