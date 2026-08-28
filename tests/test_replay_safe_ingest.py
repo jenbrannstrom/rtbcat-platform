@@ -7,8 +7,9 @@ report files safe:
      competing batches for the same day are orderable inside BigQuery;
   2. every raw-table read in ``refresh_rtb_summaries`` goes through the
      winning-batch filter (newest batch per report_type/buyer/day wins);
-  3. the delivery watchdog treats identical duplicate batches as normal and
-     alerts only on batches with differing totals (a genuine restatement).
+  3. the delivery watchdog treats identical duplicate batches as normal,
+     records differing totals as restatements, and keeps them out of human
+     alerts because the daily lane is reference-only.
 """
 
 from __future__ import annotations
@@ -138,29 +139,29 @@ def _batch(batch_id: str, micros: int, when: datetime | None) -> dict:
 
 
 def test_watchdog_single_batch_ok() -> None:
-    status, alert = evaluate_spend_lane(
-        [_batch("a", 100, datetime(2026, 8, 2, tzinfo=timezone.utc))], "2026-08-01", "seat"
+    status, restated = evaluate_spend_lane(
+        [_batch("a", 100, datetime(2026, 8, 2, tzinfo=timezone.utc))]
     )
     assert status == "ok"
-    assert alert is None
+    assert restated is False
 
 
 def test_watchdog_missing() -> None:
-    status, alert = evaluate_spend_lane([], "2026-08-01", "seat")
+    status, restated = evaluate_spend_lane([])
     assert status == "missing"
-    assert alert is None
+    assert restated is False
 
 
 def test_watchdog_identical_duplicates_are_normal() -> None:
     when = datetime(2026, 8, 2, tzinfo=timezone.utc)
-    status, alert = evaluate_spend_lane(
-        [_batch("b", 100, when), _batch("a", 100, when)], "2026-08-01", "seat"
+    status, restated = evaluate_spend_lane(
+        [_batch("b", 100, when), _batch("a", 100, when)]
     )
-    assert alert is None
+    assert restated is False
     assert "identical" in status
 
 
-def test_watchdog_differing_totals_alert_names_winner() -> None:
+def test_watchdog_differing_totals_are_recorded_as_restatement() -> None:
     newer = datetime(2026, 8, 3, tzinfo=timezone.utc)
     older = datetime(2026, 8, 2, tzinfo=timezone.utc)
     summaries = sorted(
@@ -168,8 +169,6 @@ def test_watchdog_differing_totals_alert_names_winner() -> None:
         key=lambda b: (b["created_at"], b["batch_id"]),
         reverse=True,
     )
-    status, alert = evaluate_spend_lane(summaries, "2026-08-01", "seat")
+    status, restated = evaluate_spend_lane(summaries)
     assert status.startswith("RESTATED(2")
-    assert alert is not None
-    assert "batch new" in alert
-    assert "DIFFERING" in alert
+    assert restated is True

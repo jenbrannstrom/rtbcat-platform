@@ -44,6 +44,8 @@ jobs:
             tests/test_deployment_serving_dsn.py \
             tests/test_precompute_completeness.py \
             tests/test_ingestion_observability.py \
+            tests/test_replay_safe_ingest.py \
+            tests/test_report_delivery_alert_discipline.py \
             tests/test_endpoint_feed.py \
             tests/test_migration_read_compatibility.py \
             tests/test_qps_router_async.py \
