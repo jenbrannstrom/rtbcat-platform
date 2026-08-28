@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# Run the report-delivery watchdog; post any alert to the Dept-3 Matrix room.
+# Run the report-delivery watchdog; post only actionable delivery/import
+# failures to the Dept-3 Matrix room. Daily spend restatements are reference
+# data and stay silent; Google's official month-end invoice is authoritative.
 # Alert text carries dates/seat ids only — never monetary values or secrets.
 #
 # Install on the app host (see catscan-report-delivery-check.service):
@@ -27,6 +29,24 @@ if [ "$rc" -eq 1 ]; then
     -e 's/1487810529/FrontClick/g' \
     -e 's/7942355670/STARTI/g' \
     -e 's/8087233591/Uplivo/g')
+  # Defence in depth for a rolling deployment: an older API image may still
+  # emit the retired restatement paragraph. Strip it here so the host wrapper
+  # cannot send daily-reference noise to Matrix.
+  body=$(printf '%s' "$body" | python3 -c '
+import sys
+
+sections = [section.strip() for section in sys.stdin.read().split("\n\n") if section.strip()]
+kept = [
+    section
+    for section in sections
+    if not section.startswith("Google re-sent money reports for earlier days")
+]
+sys.stdout.write("\n\n".join(kept))
+')
+  if [ -z "$body" ]; then
+    echo "Non-actionable daily spend restatement suppressed."
+    exit 0
+  fi
 else
   body="The report-delivery check itself failed to run (exit $rc) on the RTBcat server — check journalctl -u catscan-report-delivery-check"
 fi

@@ -15,17 +15,15 @@ yesterday UTC) it checks:
   - mailbox: which report kinds arrived on delivery days D+1/D+2, vs the
     kinds this seat normally receives (learned from a lookback window, so
     per-seat schedule differences don't need hardcoding);
-  - BigQuery rtb_daily: canonical spend lane (report_type='buyer_spend')
-    batches for (seat, D) agree with each other. Multiple batches per day are
-    normal since the batch-aware readers landed (redundant schedules,
-    re-deliveries) — the readers serve only the newest batch; an alert fires
-    only when batches carry DIFFERING totals (a restatement to confirm).
+  - BigQuery rtb_daily: the canonical daily reference lane
+    (report_type='buyer_spend') has rows for D. Multiple batches per day are
+    normal (redundant schedules, re-deliveries, and Google restatements); the
+    readers automatically serve only the newest batch.
 
-Restatements are reported ONCE per winning batch: the --json-out file doubles
-as state between runs (the wrapper always passes it), so an already-reported
-restated day stays muted until another re-delivery changes its winning batch.
-The differing batches themselves stay in BigQuery forever — without the mute,
-every run would repeat the full list for the whole trailing window.
+Daily spend is operational reference data, not billing authority. Google's
+official month-end invoice is authoritative for billing. Re-delivered daily
+reports and changed daily totals are therefore recorded in --json-out for
+diagnostics but are never human alerts.
 
 Runs inside the catscan-api container (uses the worker's Gmail token and the
 container's BigQuery credentials). Read-only; writes only the --json-out file.
@@ -147,8 +145,8 @@ def evaluate_spend_lane(summaries: list[dict]) -> tuple[str, bool]:
 
     Returns (status_label, restated). Identical duplicate batches are fine
     — the batch-aware readers serve exactly one. Differing totals mean the day
-    was restated: the newest batch serves, but flag it so a human knows the
-    number changed and can confirm the day was re-materialized afterwards.
+    was restated: the newest batch serves automatically. The boolean is kept
+    for machine-readable diagnostics only; restatements are not human alerts.
     """
     if not summaries:
         return "missing", False
@@ -160,20 +158,12 @@ def evaluate_spend_lane(summaries: list[dict]) -> tuple[str, bool]:
     return f"RESTATED({len(summaries)} batches)", True
 
 
-def summarize_days(days: list[str]) -> str:
-    """Render a day list compactly: few days verbatim, many as a range."""
-    days = sorted(days)
-    if len(days) <= 3:
-        return ", ".join(days)
-    return f"{days[0]} to {days[-1]} ({len(days)} days)"
-
-
 def render_alert_body(
     metric_d: date,
     delivery_d: date,
     missing_email: list[tuple[str, str, bool]],
     missing_rows: list[str],
-    new_restated: dict[str, list[str]],
+    _new_restated: dict[str, list[str]],
 ) -> str | None:
     """Compose the human-readable alert body, or None when all clear.
 
@@ -181,32 +171,30 @@ def render_alert_body(
     names, so write for the finance room: plain sentences, one line per
     customer, no batch ids. Policy: dates and seat ids only — never monetary
     values (see the deploy script header).
+
+    Only a missing canonical money lane is actionable. A missing email whose
+    rows already arrived, a missing secondary report, and every daily
+    restatement are silent. The official month-end invoice is billing truth.
     """
     money_missing: dict[str, bool] = {}  # seat -> spend rows exist anyway
-    secondary: dict[str, list[str]] = defaultdict(list)
     for seat, kind, lane_ok in missing_email:
         if kind == CANONICAL_KIND:
             money_missing[seat] = lane_ok
-        else:
-            secondary[seat].append(kind)
 
     sections: list[str] = []
-    if money_missing or missing_rows or secondary:
+    actionable_money_missing = {
+        seat: lane_ok for seat, lane_ok in money_missing.items() if not lane_ok
+    }
+    if actionable_money_missing or missing_rows:
         lines = [f"Report emails from Google for {metric_d} (expected {delivery_d}):"]
-        for seat, lane_ok in sorted(money_missing.items()):
-            if lane_ok:
-                lines.append(
-                    f"  - {seat}: the MONEY report email did not arrive, but spend "
-                    f"numbers for {metric_d} are already on record — nothing to do."
-                )
-            else:
-                lines.append(
-                    f"  - {seat}: the MONEY report email did not arrive and there are "
-                    f"no spend numbers for {metric_d} yet. The sheet cannot update "
-                    f"until the report is re-sent — re-run the saved report in the "
-                    f"Authorized Buyers console (it arrives by email). It may also "
-                    f"still arrive late on its own."
-                )
+        for seat in sorted(actionable_money_missing):
+            lines.append(
+                f"  - {seat}: the MONEY report email did not arrive and there are "
+                f"no spend numbers for {metric_d} yet. The sheet cannot update "
+                f"until the report is re-sent — re-run the saved report in the "
+                f"Authorized Buyers console (it arrives by email). It may also "
+                f"still arrive late on its own."
+            )
         for seat in sorted(missing_rows):
             if seat in money_missing:
                 continue  # its line above already says rows are missing
@@ -214,25 +202,6 @@ def render_alert_body(
                 f"  - {seat}: the money report email arrived but no spend numbers "
                 f"are on record for {metric_d} — the import may have failed."
             )
-        for seat, kinds in sorted(secondary.items()):
-            lines.append(
-                f"  - {seat}: secondary report missing ({', '.join(sorted(kinds))}) "
-                f"— the money sheet is not affected."
-            )
-        sections.append("\n".join(lines))
-
-    if new_restated:
-        lines = [
-            "Google re-sent money reports for earlier days and the totals CHANGED. "
-            "The newest report is now the one served for each day:"
-        ]
-        for seat, days in sorted(new_restated.items()):
-            lines.append(f"  - {seat}: {summarize_days(days)}")
-        lines.append(
-            "Check those days on the customer sheets after the next update. Each "
-            "restatement is reported once — if a day shows up again, Google re-sent "
-            "it again."
-        )
         sections.append("\n".join(lines))
 
     return "\n\n".join(sections) if sections else None
@@ -286,7 +255,7 @@ def main() -> int:
     dataset = os.getenv("BIGQUERY_DATASET", "rtbcat_analytics")
     batches = spend_lane_batches(project, dataset, metric_d)
 
-    # --json-out doubles as report-once state for restatements.
+    # Keep prior restatement winners only for silent diagnostic change tracking.
     prev_restatements: dict[str, str] = {}
     if args.json_out and Path(args.json_out).exists():
         try:
@@ -322,8 +291,8 @@ def main() -> int:
             missing_rows.append(seat)
 
     # Trailing-window restatement sweep (includes metric_d): a re-delivery is
-    # served immediately by the batch-aware readers; surface it only when the
-    # batches disagree, and only once per winning batch (see docstring).
+    # served immediately by the batch-aware readers. Record differing batches
+    # for diagnostics, but never turn them into a human alert.
     current_restatements: dict[str, str] = {}
     new_restated: dict[str, list[str]] = defaultdict(list)
     for (seat, day), summaries in sorted(batches.items()):
@@ -354,14 +323,20 @@ def main() -> int:
 
     print(f"Report delivery check for metric {metric_d} (delivery {delivery_d}):")
     for seat, info in result["seats"].items():
-        ok = not info["missing_deliveries"] and info["spend_lane"].startswith("ok")
+        ok = not (
+            info["spend_lane"] == "missing"
+            and CANONICAL_KIND in info["expected_kinds"]
+        )
         print(
             f"  {seat}: {'OK' if ok else 'ALERT'} — arrived {len(info['arrived_kinds'])}/"
             f"{len(info['expected_kinds'])} expected reports, spend lane {info['spend_lane']}"
         )
-    muted = len(current_restatements) - sum(len(d) for d in new_restated.values())
-    if muted:
-        print(f"  ({muted} already-reported restated day(s) muted)")
+    if current_restatements:
+        changed = sum(len(d) for d in new_restated.values())
+        print(
+            f"  ({len(current_restatements)} daily restatement(s) recorded silently; "
+            f"{changed} winning batch change(s) since the prior run)"
+        )
     if body:
         print("ALERTS:")
         print(body)
