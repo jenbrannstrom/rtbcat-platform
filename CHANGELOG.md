@@ -6,6 +6,22 @@ All notable changes to Cat-Scan are documented in this file.
 
 ## [Unreleased]
 
+## [0.9.7] - 2026-08-31
+
+### Added
+
+- User administration now supports guarded permanent deletion with cascading
+  cleanup of credentials, sessions, permissions, and agent tokens while
+  retaining an audit record.
+
+### Changed
+
+- Sudo promotion is staged behind an orange confirmation action instead of
+  saving immediately, and bottom-row user menus open upward so destructive
+  actions remain visible.
+- Change-password fields include show/hide controls for copying a generated
+  password into a password manager.
+
 ## [0.9.6] - 2026-08-31
 
 ### Added

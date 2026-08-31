@@ -267,6 +267,43 @@ class AdminService:
             "sessions_deleted": sessions_deleted,
         }
 
+    async def delete_user(
+        self,
+        admin: User,
+        user_id: str,
+        client_ip: Optional[str],
+    ) -> dict[str, str]:
+        """Permanently delete a user while retaining an audit record."""
+        user = await self._auth.get_user_by_id(user_id)
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        if user_id == admin.id:
+            raise HTTPException(status_code=400, detail="Cannot delete your own account")
+
+        deleted = await self._auth.delete_user(user_id)
+        if not deleted:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        await self._auth.log_audit(
+            audit_id=str(uuid.uuid4()),
+            action="delete_user",
+            user_id=admin.id,
+            resource_type="user",
+            resource_id=user_id,
+            details=json.dumps(
+                {
+                    "email": user.email,
+                    "role": user.role,
+                }
+            ),
+            ip_address=client_ip,
+        )
+
+        return {
+            "status": "success",
+            "message": "User permanently deleted",
+        }
+
     async def reset_user_password(
         self,
         admin: User,

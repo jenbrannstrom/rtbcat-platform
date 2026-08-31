@@ -48,17 +48,22 @@ removing the Sudo role.
 5. Use **Service Account Access (legacy)** only for older integrations
 6. Changes take effect on the user's next page load
 
+Promoting a user to **Sudo** is staged rather than saved immediately. Review
+the unrestricted-access warning, then select the orange **Confirm** button.
+After the promotion succeeds, the footer returns to the blue **Done** button.
+
 ### Changing a password
 
 Open the row menu and select **Change Password**. An administrator enters the
 new password directly; no email service is involved. Existing sessions for the
 user are revoked when the password changes.
 
-### Deactivating users
+### Deleting users
 
-Deactivating a user preserves their record (for audit trail) but prevents
-password, Authing, and OAuth-proxy login. It does not delete their data or
-permissions; the row menu can reactivate the account later.
+Select **Delete User** from the row menu and confirm the permanent deletion.
+The user record, password, sessions, explicit permissions, and agent tokens
+are removed. Audit history is retained, including the deleted email and role.
+You cannot delete your own account.
 
 ## Service accounts (`/settings/accounts`)
 
@@ -93,6 +98,7 @@ Every significant action is logged:
 | `create_user` | New user created |
 | `update_user` | User profile modified |
 | `deactivate_user` | User deactivated |
+| `delete_user` | User permanently deleted |
 | `reset_password` | Password reset |
 | `change_password` | Password changed |
 | `grant_permission` | Permission granted |

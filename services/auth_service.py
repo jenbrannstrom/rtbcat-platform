@@ -147,6 +147,10 @@ class AuthService:
             default_language=default_language,
         )
 
+    async def delete_user(self, user_id: str) -> bool:
+        """Permanently delete a user and their cascading auth records."""
+        return await self._auth.delete_user(user_id)
+
     async def update_last_login(self, user_id: str) -> None:
         """Update user's last login timestamp."""
         await self._auth.update_last_login(user_id)
