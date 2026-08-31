@@ -36,6 +36,7 @@ import { useAccount } from "@/contexts/account-context";
 import { useAuth } from "@/contexts/auth-context";
 import { useTranslation } from "@/contexts/i18n-context";
 import { LanguageSelector } from "@/components/language-selector";
+import { VersionPopover } from "@/components/version-popover";
 import {
   isBuyerScopedPath,
   replaceBuyerInPath,
@@ -140,12 +141,12 @@ export function Sidebar() {
     releaseVersion && releaseVersion !== "unknown"
       ? `v${releaseVersion} (${buildVersion})`
       : buildVersion;
-  const versionTitle =
+  const versionRelease =
+    releaseVersion && releaseVersion !== "unknown" ? `v${releaseVersion}` : null;
+  const versionBuild =
     process.env.NEXT_PUBLIC_GIT_SHA && process.env.NEXT_PUBLIC_GIT_SHA !== "unknown"
-      ? `Release: ${
-          releaseVersion && releaseVersion !== "unknown" ? `v${releaseVersion}` : "unknown"
-        } | Build: ${process.env.NEXT_PUBLIC_GIT_SHA}`
-      : versionLabel;
+      ? process.env.NEXT_PUBLIC_GIT_SHA
+      : null;
 
   // Load collapsed and expanded states from localStorage
   useEffect(() => {
@@ -840,12 +841,11 @@ export function Sidebar() {
                 </p>
               )}
               <div className="flex min-w-0 items-center gap-2 text-xs text-gray-400">
-                <span
-                  className="min-w-0 flex-1 truncate"
-                  title={versionTitle}
-                >
-                  {versionLabel}
-                </span>
+                <VersionPopover
+                  label={versionLabel}
+                  release={versionRelease}
+                  build={versionBuild}
+                />
                 <span className="flex-shrink-0" aria-hidden="true">·</span>
                 <a
                   href={getDocsHomeUrl()}
