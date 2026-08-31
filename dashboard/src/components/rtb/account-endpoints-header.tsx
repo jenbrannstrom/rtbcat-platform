@@ -69,8 +69,7 @@ function formatLocation(location: string | null, t: Translations): string {
   return map[location] || location;
 }
 
-function formatQPS(qps: number | null, t: Translations, locale: string): string {
-  if (qps === null) return t.pretargeting.endpointsHeaderUnlimited;
+function formatQPS(qps: number, locale: string): string {
   return qps.toLocaleString(locale);
 }
 
@@ -220,14 +219,13 @@ export function AccountEndpointsHeader({
     }
   }, [refreshWithLiveData]);
 
-  const handleStartEdit = useCallback((endpointId: string, currentQps: number | null) => {
-    if (currentQps === null) return; // Don't edit unlimited
+  const handleStartEdit = useCallback((endpointId: string) => {
     setEditingEndpointId(endpointId);
     setCommitResult(null);
     // Focus will be handled via autoFocus on the input
   }, []);
 
-  const handleEditSubmit = useCallback((endpointId: string, originalQps: number | null) => {
+  const handleEditSubmit = useCallback((endpointId: string, originalQps: number) => {
     const input = editInputRef.current;
     if (!input) return;
     const newValue = parseInt(input.value, 10);
@@ -441,7 +439,6 @@ export function AccountEndpointsHeader({
         {data.endpoints.map((endpoint) => {
           const isPending = endpoint.endpoint_id in pendingQpsEdits;
           const isEditing = editingEndpointId === endpoint.endpoint_id;
-          const isEditable = endpoint.maximum_qps !== null;
           const pendingValue = isPending ? pendingQpsEdits[endpoint.endpoint_id] : null;
 
           return (
@@ -471,7 +468,7 @@ export function AccountEndpointsHeader({
                       ref={editInputRef}
                       type="number"
                       min={0}
-                      defaultValue={pendingValue ?? endpoint.maximum_qps ?? 0}
+                      defaultValue={pendingValue ?? endpoint.maximum_qps}
                       autoFocus
                       className="w-20 px-1 py-0.5 text-xs text-right border border-blue-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-400"
                       onKeyDown={(e) => {
@@ -485,10 +482,10 @@ export function AccountEndpointsHeader({
                       {isPending && (
                         <>
                           <span className="text-gray-400 line-through text-[10px]">
-                            {formatQPS(endpoint.maximum_qps, t, language)}
+                            {formatQPS(endpoint.maximum_qps, language)}
                           </span>
                           <span className="font-semibold text-amber-700">
-                            {formatQPS(pendingValue!, t, language)}
+                            {formatQPS(pendingValue!, language)}
                           </span>
                           <button
                             onClick={() => handleUndoEdit(endpoint.endpoint_id)}
@@ -501,16 +498,16 @@ export function AccountEndpointsHeader({
                       )}
                       {!isPending && (
                         <span
-                          className={`font-medium text-gray-800 ${isEditable ? 'cursor-pointer hover:text-blue-600' : ''}`}
-                          onClick={() => isEditable && handleStartEdit(endpoint.endpoint_id, endpoint.maximum_qps)}
-                          title={isEditable ? t.pretargeting.endpointsEditQps : undefined}
+                          className="font-medium text-gray-800 cursor-pointer hover:text-blue-600"
+                          onClick={() => handleStartEdit(endpoint.endpoint_id)}
+                          title={t.pretargeting.endpointsEditQps}
                         >
-                          {formatQPS(endpoint.maximum_qps, t, language)}
+                          {formatQPS(endpoint.maximum_qps, language)}
                         </span>
                       )}
-                      {!isPending && isEditable && (
+                      {!isPending && (
                         <button
-                          onClick={() => handleStartEdit(endpoint.endpoint_id, endpoint.maximum_qps)}
+                          onClick={() => handleStartEdit(endpoint.endpoint_id)}
                           className="p-0.5 rounded hover:bg-gray-200 text-gray-400 hover:text-gray-600"
                         >
                           <Pencil className="h-2.5 w-2.5" />
@@ -632,7 +629,7 @@ export function AccountEndpointsHeader({
               {hasPendingEdits ? (
                 <div className="flex flex-col items-end">
                   <span className="text-[10px] text-blue-500 line-through">
-                    {formatQPS(data.total_qps_allocated, t, language)}
+                    {formatQPS(data.total_qps_allocated, language)}
                   </span>
                   <span className="text-sm font-bold text-amber-700">
                     {effectiveTotal.toLocaleString(language)}
@@ -640,7 +637,7 @@ export function AccountEndpointsHeader({
                 </div>
               ) : (
                 <span className="text-sm font-bold text-blue-900">
-                  {formatQPS(data.total_qps_allocated, t, language)}
+                  {formatQPS(data.total_qps_allocated, language)}
                 </span>
               )}
             </div>

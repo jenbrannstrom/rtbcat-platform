@@ -38,12 +38,20 @@ def parse_endpoint_response(endpoint_data: dict) -> EndpointDict:
     parts = name.split("/")
     endpoint_id = parts[-1] if len(parts) >= 4 else ""
 
-    # Google API returns maximumQps as string (int64 format); normalise to int|None
+    # Google returns maximumQps as a string (int64 format). It is a proto3
+    # scalar, so a 0 QPS cap is *omitted* from the JSON rather than sent as
+    # "0" -- absence means 0, not unlimited (RTB endpoints have no unlimited
+    # mode). Normalise to int; only a malformed value becomes None.
     raw_qps = endpoint_data.get("maximumQps")
-    if raw_qps is not None:
+    if raw_qps is None:
+        raw_qps = 0
+    else:
         try:
             raw_qps = int(raw_qps)
         except (TypeError, ValueError):
+            logger.warning(
+                "Endpoint %s returned unparseable maximumQps=%r", name, raw_qps
+            )
             raw_qps = None
 
     return EndpointDict(

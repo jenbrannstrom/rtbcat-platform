@@ -433,7 +433,6 @@ const value: PartialTranslations['pretargeting'] = {
   endpointsHeaderLocationEurope: 'Europa',
   endpointsHeaderLocationAsia: 'Asia',
   endpointsHeaderLocationUnspecified: 'No especificado',
-  endpointsHeaderUnlimited: 'Ilimitado',
   endpointsHeaderSelectSeat: 'Selecciona un seat para cargar endpoints RTB.',
   endpointsHeaderCannotConnectApi: 'No se puede conectar a la API.',
   endpointsHeaderFailedToLoad: 'No se pudieron cargar los endpoints.',

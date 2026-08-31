@@ -599,7 +599,6 @@ export interface Translations {
     endpointsHeaderLocationEurope: string;
     endpointsHeaderLocationAsia: string;
     endpointsHeaderLocationUnspecified: string;
-    endpointsHeaderUnlimited: string;
     endpointsHeaderSelectSeat: string;
     endpointsHeaderCannotConnectApi: string;
     endpointsHeaderFailedToLoad: string;

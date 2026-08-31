@@ -43,7 +43,9 @@ class EndpointDict(TypedDict, total=False):
         endpointId: Unique endpoint identifier (extracted from resource name).
         name: Full resource name (bidders/{bidder_id}/endpoints/{endpoint_id}).
         url: The URL that bid requests are sent to.
-        maximumQps: Maximum queries per second (optional, can be unlimited).
+        maximumQps: Maximum queries per second. Google omits the field when
+            the cap is 0 (proto3 default), so absence is normalised to 0;
+            None only if the API returned a malformed value.
         tradingLocation: Geographic location for trading.
         bidProtocol: Protocol used for bid requests.
         collectedAt: Timestamp when this data was collected.

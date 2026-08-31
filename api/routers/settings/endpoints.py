@@ -188,6 +188,16 @@ async def _resolve_bidder_context(
 # Helper: build endpoint items + totals from raw endpoint dicts
 # ---------------------------------------------------------------------------
 
+def _qps_or_zero(value: object) -> int:
+    """Coerce a stored/API maximum_qps to int, treating None as 0."""
+    if value is None:
+        return 0
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
+
+
 def _build_endpoint_items(rows: list[dict]) -> tuple[list[RTBEndpointItem], int, Optional[str]]:
     """Convert raw endpoint rows to response items with totals."""
     endpoints: list[RTBEndpointItem] = []
@@ -195,18 +205,22 @@ def _build_endpoint_items(rows: list[dict]) -> tuple[list[RTBEndpointItem], int,
     latest_sync = None
 
     for row in rows:
+        # NULL/None here is a row synced before absent-maximumQps was
+        # normalised to 0 (Google omits the field for a 0 cap). Treat it as 0
+        # -- RTB endpoints have no unlimited mode.
+        qps = _qps_or_zero(
+            row.get("maximum_qps") if "maximum_qps" in row else row.get("maximumQps")
+        )
         endpoints.append(
             RTBEndpointItem(
                 endpoint_id=row.get("endpoint_id") or row.get("endpointId", ""),
                 url=row.get("url", ""),
-                maximum_qps=row.get("maximum_qps") if "maximum_qps" in row else row.get("maximumQps"),
+                maximum_qps=qps,
                 trading_location=row.get("trading_location") if "trading_location" in row else row.get("tradingLocation"),
                 bid_protocol=row.get("bid_protocol") if "bid_protocol" in row else row.get("bidProtocol"),
             )
         )
-        qps = row.get("maximum_qps") if "maximum_qps" in row else row.get("maximumQps")
-        if qps:
-            total_qps += int(qps)
+        total_qps += qps
         synced = row.get("synced_at") or row.get("collectedAt")
         if synced:
             if latest_sync is None or str(synced) > str(latest_sync):
@@ -386,7 +400,7 @@ async def update_endpoint_qps(
         return RTBEndpointItem(
             endpoint_id=updated["endpointId"],
             url=updated["url"],
-            maximum_qps=updated.get("maximumQps"),
+            maximum_qps=_qps_or_zero(updated.get("maximumQps")),
             trading_location=updated.get("tradingLocation"),
             bid_protocol=updated.get("bidProtocol"),
         )

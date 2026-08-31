@@ -14,7 +14,9 @@ class RTBEndpointItem(BaseModel):
     """Individual RTB endpoint data."""
     endpoint_id: str
     url: str
-    maximum_qps: Optional[int] = None
+    # Always an int: Google omits maximumQps when the cap is 0 (proto3
+    # default) and RTB endpoints have no unlimited mode, so absent == 0.
+    maximum_qps: int = 0
     trading_location: Optional[str] = None
     bid_protocol: Optional[str] = None
 
