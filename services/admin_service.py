@@ -194,6 +194,9 @@ class AdminService:
         if role in ("admin", "read") and user_id == admin.id:
             raise HTTPException(status_code=400, detail="Cannot remove your own sudo role")
 
+        if role is not None and role not in ("sudo", "admin", "read"):
+            raise HTTPException(status_code=400, detail="Role must be 'sudo', 'admin', or 'read'")
+
         normalized_language = self._validate_default_language(default_language)
         await self._auth.update_user(
             user_id=user_id,
@@ -261,6 +264,43 @@ class AdminService:
         return {
             "status": "success",
             "message": "User deactivated",
+            "sessions_deleted": sessions_deleted,
+        }
+
+    async def reset_user_password(
+        self,
+        admin: User,
+        user_id: str,
+        password: str,
+        client_ip: Optional[str],
+    ) -> dict[str, str | int]:
+        """Set a local password for a user and invalidate existing sessions."""
+        user = await self._auth.get_user_by_id(user_id)
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        normalized_password = self._validate_local_password(password)
+        await self._store_local_password(user_id, normalized_password)
+        sessions_deleted = await self._auth.delete_user_sessions(user_id)
+
+        await self._auth.log_audit(
+            audit_id=str(uuid.uuid4()),
+            action="reset_password",
+            user_id=admin.id,
+            resource_type="user",
+            resource_id=user_id,
+            details=json.dumps(
+                {
+                    "email": user.email,
+                    "sessions_deleted": sessions_deleted,
+                }
+            ),
+            ip_address=client_ip,
+        )
+
+        return {
+            "status": "success",
+            "message": "Password changed",
             "sessions_deleted": sessions_deleted,
         }
 

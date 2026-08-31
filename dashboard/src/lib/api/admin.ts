@@ -36,6 +36,12 @@ export interface CreateUserResponse {
   message: string;
 }
 
+export interface AdminUserActionResponse {
+  status: string;
+  message: string;
+  sessions_deleted?: number;
+}
+
 export interface UserPermission {
   id: string;
   user_id: string;
@@ -126,11 +132,21 @@ export async function updateAdminUser(
   });
 }
 
-export async function deactivateUser(userId: string): Promise<{ status: string; message: string }> {
-  return fetchApi<{ status: string; message: string }>(
-    `/admin/users/${encodeURIComponent(userId)}`,
-    { method: "DELETE" }
+export async function deactivateUser(userId: string): Promise<AdminUserActionResponse> {
+  return fetchApi<AdminUserActionResponse>(
+    `/admin/users/${encodeURIComponent(userId)}/deactivate`,
+    { method: "POST" }
   );
+}
+
+export async function changeAdminUserPassword(
+  userId: string,
+  password: string
+): Promise<AdminUserActionResponse> {
+  return fetchApi<AdminUserActionResponse>(`/admin/users/${encodeURIComponent(userId)}/password`, {
+    method: "POST",
+    body: JSON.stringify({ password }),
+  });
 }
 
 // =============================================================================

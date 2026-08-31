@@ -184,6 +184,7 @@ the buyer-spend pipeline are denominated in this currency, not implicitly USD.
 | GET | `/admin/users/{id}` | User details |
 | PUT | `/admin/users/{id}` | Update user |
 | POST | `/admin/users/{id}/deactivate` | Deactivate user |
+| POST | `/admin/users/{id}/password` | Set or replace a user's local password |
 | GET | `/admin/users/{id}/permissions` | User's global permissions |
 | GET | `/admin/users/{id}/seat-permissions` | User's per-seat permissions |
 | POST | `/admin/users/{id}/seat-permissions` | Grant seat access |

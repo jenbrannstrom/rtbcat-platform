@@ -4,7 +4,7 @@
 
 ## Admin panel (`/admin`)
 
-The admin panel is only visible to users with the `is_sudo` flag. It provides
+The admin panel is only visible to users with the `sudo` role. It provides
 user management, system configuration, and audit logging.
 
 ## User management (`/admin/users`)
@@ -23,28 +23,42 @@ only).
 
 ### Roles and permissions
 
-**Global permissions** control what a user can do system-wide:
-- Standard user: access to main features
-- Restricted user: limited sidebar (no settings, admin, or QPS sections)
-- Admin (`is_sudo`): full access including admin panel
+The role and seat grants work together:
 
-**Per-seat permissions** control which buyer accounts a user can see:
-- Grant access to specific `buyer_account_id` values
-- Access levels can vary per seat
-- A user with no seat permissions sees no data
+- **Sudo** has unrestricted system-wide read/write access, including the admin panel.
+- **Admin** and **Read** are seat-scoped roles. They do not grant access to any
+  buyer seat on their own.
+- **Per-seat permissions** determine which buyer accounts a non-Sudo user can
+  see and whether each seat is read-only or administrable.
+
+A non-Sudo user with no seat permissions sees no buyer data. The permissions
+dialog shows this explicitly. It also provides bulk actions to set every active
+seat to Read or remove all seat access.
+
+For an account that needs read-only access to all current seats, use **Make
+read-only for all seats**. This creates Read grants for each active seat before
+removing the Sudo role.
 
 ### Managing permissions
 
 1. Go to `/admin/users`
-2. Select a user
-3. Under "Seat Permissions": grant or revoke access to buyer seats
-4. Under "Global Permissions": grant or revoke system-level access
-5. Changes take effect on the user's next page load
+2. Open the row menu and select **Manage Permissions**
+3. Set the role and default language
+4. Under **Seat Access**, grant or revoke access to buyer seats
+5. Use **Service Account Access (legacy)** only for older integrations
+6. Changes take effect on the user's next page load
+
+### Changing a password
+
+Open the row menu and select **Change Password**. An administrator enters the
+new password directly; no email service is involved. Existing sessions for the
+user are revoked when the password changes.
 
 ### Deactivating users
 
 Deactivating a user preserves their record (for audit trail) but prevents
-login. It does not delete their data or permissions; they can be reactivated.
+password, Authing, and OAuth-proxy login. It does not delete their data or
+permissions; the row menu can reactivate the account later.
 
 ## Service accounts (`/settings/accounts`)
 

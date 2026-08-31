@@ -6,6 +6,8 @@ All notable changes to Cat-Scan are documented in this file.
 
 ## [Unreleased]
 
+## [0.9.6] - 2026-08-31
+
 ### Added
 
 - Per-buyer ISO-4217 spend currency metadata, including migration 071,
@@ -24,6 +26,10 @@ All notable changes to Cat-Scan are documented in this file.
 - Importers (`unified_importer.py`, `bq_backfill_raw_facts.py`) detect at
   connect time whether `rtb_daily` is partitioned and pick the matching
   `ON CONFLICT` target, so one build spans the partition cutover.
+- Internal administrator password changes with session revocation and audit
+  logging; no email delivery service or additional dependency is required.
+- User activation controls and bulk read-only access assignment for all active
+  buyer seats.
 
 ### Removed
 
@@ -40,6 +46,10 @@ All notable changes to Cat-Scan are documented in this file.
   a dollar sign.
 - CLAUDE.md: production hot-patching allowance replaced with the
   sha-tagged-image invariant; stale `rtb_daily` size guidance corrected.
+- User administration now reports effective Sudo access instead of misleading
+  per-seat "No access" values, exposes role changes, and surfaces action errors.
+- Deactivation now blocks password, Authing, and OAuth-proxy authentication and
+  follows the documented `POST /admin/users/{id}/deactivate` contract.
 
 ## [0.9.4] - 2026-03-10
 
