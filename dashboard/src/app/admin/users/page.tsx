@@ -12,7 +12,10 @@ import {
   XCircle,
   AlertCircle,
   CheckCircle,
+  Eye,
+  EyeOff,
   KeyRound,
+  Trash2,
   UserCheck,
 } from "lucide-react";
 import { HelpLink } from "@/components/docs/help-link";
@@ -20,7 +23,7 @@ import {
   getAdminUsers,
   changeAdminUserPassword,
   createUser,
-  deactivateUser,
+  deleteAdminUser,
   getSeats,
   getUserPermissions,
   getUserSeatPermissions,
@@ -51,7 +54,9 @@ function UsersPage() {
     searchParams.get("action") === "create"
   );
   const [permissionsUser, setPermissionsUser] = useState<AdminUser | null>(null);
+  const [pendingSudoPromotion, setPendingSudoPromotion] = useState(false);
   const [passwordUser, setPasswordUser] = useState<AdminUser | null>(null);
+  const [showChangedPassword, setShowChangedPassword] = useState(false);
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [permissionError, setPermissionError] = useState<string | null>(null);
@@ -125,13 +130,13 @@ function UsersPage() {
     setError(null);
   };
 
-  const deactivateMutation = useMutation({
-    mutationFn: deactivateUser,
+  const deleteMutation = useMutation({
+    mutationFn: deleteAdminUser,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-users"] });
       queryClient.invalidateQueries({ queryKey: ["admin-stats"] });
       setActiveDropdown(null);
-      setActionNotice({ type: "success", message: t.admin.userDeactivated });
+      setActionNotice({ type: "success", message: t.admin.userDeleted });
     },
     onError: (err) => {
       setActionNotice({
@@ -157,11 +162,29 @@ function UsersPage() {
     },
   });
 
+  const updateRoleMutation = useMutation({
+    mutationFn: (params: { userId: string; role: string }) =>
+      updateAdminUser(params.userId, { role: params.role }),
+    onSuccess: (updatedUser) => {
+      setPermissionError(null);
+      setPendingSudoPromotion(false);
+      setPermissionsUser((current) =>
+        current?.id === updatedUser.id ? updatedUser : current
+      );
+      queryClient.invalidateQueries({ queryKey: ["admin-users"] });
+      queryClient.invalidateQueries({ queryKey: ["admin-stats"] });
+    },
+    onError: (err) => {
+      setPermissionError(err instanceof Error ? err.message : t.common.failed);
+    },
+  });
+
   const changePasswordMutation = useMutation({
     mutationFn: (params: { userId: string; password: string }) =>
       changeAdminUserPassword(params.userId, params.password),
     onSuccess: () => {
       setPasswordUser(null);
+      setShowChangedPassword(false);
       setError(null);
       setActionNotice({ type: "success", message: t.admin.passwordChanged });
     },
@@ -438,7 +461,7 @@ function UsersPage() {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {users?.map((user) => (
+              {users?.map((user, index) => (
                 <tr key={user.id} className="hover:bg-gray-50">
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center">
@@ -518,11 +541,17 @@ function UsersPage() {
                         <MoreVertical className="h-5 w-5" />
                       </button>
                       {activeDropdown === user.id && (
-                        <div className="absolute right-0 mt-2 w-56 bg-white rounded-md shadow-lg ring-1 ring-black ring-opacity-5 z-10">
+                        <div
+                          className={cn(
+                            "absolute right-0 w-56 bg-white rounded-md shadow-lg ring-1 ring-black ring-opacity-5 z-10",
+                            index >= users.length - 2 ? "bottom-full mb-2" : "top-full mt-2"
+                          )}
+                        >
                           <div className="py-1">
                             <button
                               onClick={() => {
                                 setPermissionsUser(user);
+                                setPendingSudoPromotion(false);
                                 setPermissionError(null);
                                 setActiveDropdown(null);
                               }}
@@ -534,6 +563,7 @@ function UsersPage() {
                             <button
                               onClick={() => {
                                 setPasswordUser(user);
+                                setShowChangedPassword(false);
                                 setError(null);
                                 setActiveDropdown(null);
                               }}
@@ -542,25 +572,6 @@ function UsersPage() {
                               <KeyRound className="h-4 w-4 mr-3 text-gray-400" />
                               {t.admin.changePassword}
                             </button>
-                            {user.is_active && (
-                              <button
-                                onClick={() => {
-                                  if (
-                                    window.confirm(
-                                      t.admin.deactivateConfirm.replace("{email}", user.email)
-                                    )
-                                  ) {
-                                    setActionNotice(null);
-                                    deactivateMutation.mutate(user.id);
-                                  }
-                                }}
-                                disabled={deactivateMutation.isPending}
-                                className="flex items-center w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50"
-                              >
-                                <XCircle className="h-4 w-4 mr-3" />
-                                {t.admin.deactivate}
-                              </button>
-                            )}
                             {!user.is_active && (
                               <button
                                 onClick={() => {
@@ -574,6 +585,23 @@ function UsersPage() {
                                 {t.admin.activate}
                               </button>
                             )}
+                            <button
+                              onClick={() => {
+                                if (
+                                  window.confirm(
+                                    t.admin.deleteUserConfirm.replace("{email}", user.email)
+                                  )
+                                ) {
+                                  setActionNotice(null);
+                                  deleteMutation.mutate(user.id);
+                                }
+                              }}
+                              disabled={deleteMutation.isPending}
+                              className="flex items-center w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50 disabled:opacity-50"
+                            >
+                              <Trash2 className="h-4 w-4 mr-3" />
+                              {t.admin.deleteUser}
+                            </button>
                           </div>
                         </div>
                       )}
@@ -808,6 +836,7 @@ function UsersPage() {
                 type="button"
                 onClick={() => {
                   setPasswordUser(null);
+                  setShowChangedPassword(false);
                   setError(null);
                 }}
                 className="text-gray-400 hover:text-gray-600"
@@ -830,29 +859,59 @@ function UsersPage() {
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     {t.admin.password}
                   </label>
-                  <input
-                    type="password"
-                    name="password"
-                    required
-                    minLength={8}
-                    autoComplete="new-password"
-                    autoFocus
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                  />
+                  <div className="relative">
+                    <input
+                      type={showChangedPassword ? "text" : "password"}
+                      name="password"
+                      required
+                      minLength={8}
+                      autoComplete="new-password"
+                      autoFocus
+                      className="w-full px-3 py-2 pr-11 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowChangedPassword((visible) => !visible)}
+                      className="absolute inset-y-0 right-0 flex items-center px-3 text-gray-400 hover:text-gray-700"
+                      aria-label={showChangedPassword ? "Hide password" : "Show password"}
+                      title={showChangedPassword ? "Hide password" : "Show password"}
+                    >
+                      {showChangedPassword ? (
+                        <EyeOff className="h-5 w-5" aria-hidden="true" />
+                      ) : (
+                        <Eye className="h-5 w-5" aria-hidden="true" />
+                      )}
+                    </button>
+                  </div>
                   <p className="mt-1 text-xs text-gray-500">{t.admin.passwordMinLengthHelp}</p>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     {t.admin.confirmPassword}
                   </label>
-                  <input
-                    type="password"
-                    name="confirm_password"
-                    required
-                    minLength={8}
-                    autoComplete="new-password"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                  />
+                  <div className="relative">
+                    <input
+                      type={showChangedPassword ? "text" : "password"}
+                      name="confirm_password"
+                      required
+                      minLength={8}
+                      autoComplete="new-password"
+                      className="w-full px-3 py-2 pr-11 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowChangedPassword((visible) => !visible)}
+                      className="absolute inset-y-0 right-0 flex items-center px-3 text-gray-400 hover:text-gray-700"
+                      aria-label={showChangedPassword ? "Hide password" : "Show password"}
+                      title={showChangedPassword ? "Hide password" : "Show password"}
+                    >
+                      {showChangedPassword ? (
+                        <EyeOff className="h-5 w-5" aria-hidden="true" />
+                      ) : (
+                        <Eye className="h-5 w-5" aria-hidden="true" />
+                      )}
+                    </button>
+                  </div>
                 </div>
               </div>
               <div className="px-6 pb-6 pt-5 mt-5 border-t flex gap-3">
@@ -860,6 +919,7 @@ function UsersPage() {
                   type="button"
                   onClick={() => {
                     setPasswordUser(null);
+                    setShowChangedPassword(false);
                     setError(null);
                   }}
                   className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
@@ -891,7 +951,10 @@ function UsersPage() {
                 <p className="text-sm text-gray-500">{t.admin.permissionsHelp}</p>
               </div>
               <button
-                onClick={() => setPermissionsUser(null)}
+                onClick={() => {
+                  setPermissionsUser(null);
+                  setPendingSudoPromotion(false);
+                }}
                 className="text-gray-400 hover:text-gray-600"
               >
                 <XCircle className="h-5 w-5" />
@@ -903,6 +966,13 @@ function UsersPage() {
                 <div className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2" role="alert">
                   <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
                   <p className="text-sm text-red-700">{permissionError}</p>
+                </div>
+              )}
+
+              {pendingSudoPromotion && (
+                <div className="p-3 bg-orange-50 border border-orange-300 rounded-lg flex items-start gap-2" role="status">
+                  <AlertCircle className="h-5 w-5 text-orange-600 flex-shrink-0 mt-0.5" />
+                  <p className="text-sm text-orange-900">{t.admin.sudoConfirmationHelp}</p>
                 </div>
               )}
 
@@ -936,20 +1006,21 @@ function UsersPage() {
                   <p className="text-xs text-gray-500 max-w-md">{t.admin.roleHelp}</p>
                 </div>
                 <select
-                  value={permissionsUser.role}
+                  value={pendingSudoPromotion ? "sudo" : permissionsUser.role}
                   onChange={(e) => {
                     const role = e.target.value;
                     setPermissionError(null);
-                    updateAdminUser(permissionsUser.id, { role })
-                      .then((updatedUser) => {
-                        queryClient.invalidateQueries({ queryKey: ["admin-users"] });
-                        queryClient.invalidateQueries({ queryKey: ["admin-stats"] });
-                        setPermissionsUser(updatedUser);
-                      })
-                      .catch((err) => {
-                        setPermissionError(err instanceof Error ? err.message : t.common.failed);
-                      });
+                    if (role === "sudo" && permissionsUser.role !== "sudo") {
+                      setPendingSudoPromotion(true);
+                      return;
+                    }
+
+                    setPendingSudoPromotion(false);
+                    if (role !== permissionsUser.role) {
+                      updateRoleMutation.mutate({ userId: permissionsUser.id, role });
+                    }
                   }}
+                  disabled={updateRoleMutation.isPending}
                   className="ml-4 px-3 py-2 border border-gray-300 rounded-lg text-sm"
                 >
                   <option value="read">{t.admin.readRole}</option>
@@ -1142,10 +1213,30 @@ function UsersPage() {
 
             <div className="flex-shrink-0 px-6 pb-6 pt-4 border-t flex justify-end">
               <button
-                onClick={() => setPermissionsUser(null)}
-                className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+                onClick={() => {
+                  if (pendingSudoPromotion) {
+                    updateRoleMutation.mutate({
+                      userId: permissionsUser.id,
+                      role: "sudo",
+                    });
+                    return;
+                  }
+                  setPermissionsUser(null);
+                  setPendingSudoPromotion(false);
+                }}
+                disabled={updateRoleMutation.isPending}
+                className={cn(
+                  "px-4 py-2 text-white rounded-lg disabled:opacity-50",
+                  pendingSudoPromotion
+                    ? "bg-orange-600 hover:bg-orange-700"
+                    : "bg-primary-600 hover:bg-primary-700"
+                )}
               >
-                {t.common.done}
+                {updateRoleMutation.isPending
+                  ? t.common.loading
+                  : pendingSudoPromotion
+                    ? t.admin.confirmSudo
+                    : t.common.done}
               </button>
             </div>
           </div>

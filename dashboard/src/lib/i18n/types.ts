@@ -1223,8 +1223,12 @@ export interface Translations {
     userActivated: string;
     userDeactivated: string;
     deactivateConfirm: string;
+    userDeleted: string;
+    deleteUserConfirm: string;
     roleHelp: string;
     sudoAccessHelp: string;
+    sudoConfirmationHelp: string;
+    confirmSudo: string;
     noSeatAccessWarning: string;
     makeReadOnlyAllSeats: string;
     setAllSeatsRead: string;
@@ -1323,6 +1327,7 @@ export interface Translations {
     auditActionCreateUser: string;
     auditActionUpdateUser: string;
     auditActionDeactivateUser: string;
+    auditActionDeleteUser: string;
     auditActionResetPassword: string;
     auditActionChangePassword: string;
     auditActionGrantPermission: string;

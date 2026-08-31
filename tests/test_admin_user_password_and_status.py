@@ -7,10 +7,13 @@ from fastapi.routing import APIRoute
 from starlette.requests import Request
 
 from api import auth_authing, session_middleware
+from api.routers import admin as admin_router
 from api.routers.admin import router
 from api.session_middleware import SessionAuthMiddleware
 from services.admin_service import AdminService
 from services.auth_service import User
+from storage.postgres_repositories import auth_repo as auth_repo_module
+from storage.postgres_repositories.auth_repo import AuthRepository
 from tests.support.asgi_client import SyncASGIClient
 
 
@@ -109,7 +112,68 @@ async def test_deactivate_user_updates_status_and_revokes_sessions():
     assert result["status"] == "success"
 
 
-def test_deactivate_route_uses_documented_post_contract_and_keeps_legacy_delete():
+@pytest.mark.asyncio
+async def test_admin_can_permanently_delete_another_user_and_audit_identity():
+    auth = MagicMock()
+    auth.get_user_by_id = AsyncMock(return_value=_target())
+    auth.delete_user = AsyncMock(return_value=True)
+    auth.log_audit = AsyncMock()
+    service = AdminService(auth_service=auth, repo=MagicMock())
+
+    result = await service.delete_user(
+        admin=_admin(),
+        user_id="user-1",
+        client_ip="127.0.0.1",
+    )
+
+    auth.delete_user.assert_awaited_once_with("user-1")
+    assert result == {"status": "success", "message": "User permanently deleted"}
+    audit_call = auth.log_audit.await_args.kwargs
+    assert audit_call["action"] == "delete_user"
+    assert audit_call["resource_id"] == "user-1"
+    assert json.loads(audit_call["details"]) == {
+        "email": "user@example.com",
+        "role": "read",
+    }
+
+
+@pytest.mark.asyncio
+async def test_admin_cannot_delete_own_account():
+    auth = MagicMock()
+    auth.get_user_by_id = AsyncMock(return_value=_admin())
+    auth.delete_user = AsyncMock()
+    auth.log_audit = AsyncMock()
+    service = AdminService(auth_service=auth, repo=MagicMock())
+
+    with pytest.raises(HTTPException) as exc:
+        await service.delete_user(
+            admin=_admin(),
+            user_id="admin-1",
+            client_ip=None,
+        )
+
+    assert exc.value.status_code == 400
+    auth.delete_user.assert_not_awaited()
+    auth.log_audit.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_auth_repository_permanently_deletes_user_row(monkeypatch):
+    calls: list[tuple[str, tuple[str]]] = []
+
+    async def fake_execute(sql: str, params: tuple[str]) -> int:
+        calls.append((sql, params))
+        return 1
+
+    monkeypatch.setattr(auth_repo_module, "pg_execute", fake_execute)
+
+    deleted = await AuthRepository().delete_user("user-1")
+
+    assert deleted is True
+    assert calls == [("DELETE FROM users WHERE id = %s", ("user-1",))]
+
+
+def test_user_status_and_delete_routes_have_distinct_contracts():
     methods_by_path = {
         route.path: route.methods
         for route in router.routes
@@ -118,6 +182,28 @@ def test_deactivate_route_uses_documented_post_contract_and_keeps_legacy_delete(
 
     assert "POST" in methods_by_path["/admin/users/{user_id}/deactivate"]
     assert "DELETE" in methods_by_path["/admin/users/{user_id}"]
+
+
+def test_permanent_delete_route_requires_explicit_confirmation(monkeypatch):
+    service = MagicMock()
+    service.delete_user = AsyncMock(
+        return_value={"status": "success", "message": "User permanently deleted"}
+    )
+    monkeypatch.setattr(admin_router, "get_admin_service", lambda: service)
+
+    app = FastAPI()
+    app.include_router(router)
+    app.dependency_overrides[admin_router.require_admin] = _admin
+    client = SyncASGIClient(app)
+
+    rejected = client.delete("/admin/users/user-1")
+    assert rejected.status_code == 400
+    service.delete_user.assert_not_awaited()
+
+    deleted = client.delete("/admin/users/user-1?confirm=true")
+    assert deleted.status_code == 200
+    assert deleted.json()["status"] == "success"
+    service.delete_user.assert_awaited_once()
 
 
 def test_inactive_user_cannot_reauthenticate_through_oauth_proxy(monkeypatch):

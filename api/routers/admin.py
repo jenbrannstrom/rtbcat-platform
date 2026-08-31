@@ -281,14 +281,30 @@ async def deactivate_user(
     )
 
 
-@router.delete("/users/{user_id}", include_in_schema=False)
-async def deactivate_user_legacy(
+@router.delete("/users/{user_id}")
+async def delete_user(
     request: Request,
     user_id: str,
+    confirm: bool = Query(False, description="Confirm permanent deletion"),
     admin: User = Depends(require_admin),
-) -> dict[str, str | int]:
-    """Backward-compatible alias for older dashboard clients."""
-    return await deactivate_user(request=request, user_id=user_id, admin=admin)
+) -> dict[str, str]:
+    """Permanently delete a user and their sessions and permissions.
+
+    Requires sudo role and an explicit ``confirm=true`` query parameter.
+    Audit history is retained. The current user cannot delete their own account.
+    """
+    if not confirm:
+        raise HTTPException(
+            status_code=400,
+            detail="Permanent user deletion requires confirm=true",
+        )
+
+    admin_svc = get_admin_service()
+    return await admin_svc.delete_user(
+        admin=admin,
+        user_id=user_id,
+        client_ip=_get_client_ip(request),
+    )
 
 
 @router.post("/users/{user_id}/password")

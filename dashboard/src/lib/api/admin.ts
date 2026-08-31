@@ -139,6 +139,13 @@ export async function deactivateUser(userId: string): Promise<AdminUserActionRes
   );
 }
 
+export async function deleteAdminUser(userId: string): Promise<AdminUserActionResponse> {
+  return fetchApi<AdminUserActionResponse>(
+    `/admin/users/${encodeURIComponent(userId)}?confirm=true`,
+    { method: "DELETE" }
+  );
+}
+
 export async function changeAdminUserPassword(
   userId: string,
   password: string

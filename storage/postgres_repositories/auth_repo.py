@@ -134,6 +134,14 @@ class AuthRepository:
         )
         return rowcount > 0
 
+    async def delete_user(self, user_id: str) -> bool:
+        """Permanently delete a user and their cascading auth records."""
+        rowcount = await pg_execute(
+            "DELETE FROM users WHERE id = %s",
+            (user_id,),
+        )
+        return rowcount > 0
+
     async def update_last_login(self, user_id: str) -> None:
         """Update user's last login timestamp."""
         now = datetime.utcnow().isoformat()

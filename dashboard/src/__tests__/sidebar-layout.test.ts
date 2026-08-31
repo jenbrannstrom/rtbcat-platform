@@ -5,6 +5,10 @@ const sidebarSource = readFileSync(
   new URL("../components/sidebar.tsx", import.meta.url),
   "utf8"
 );
+const versionPopoverSource = readFileSync(
+  new URL("../components/version-popover.tsx", import.meta.url),
+  "utf8"
+);
 
 describe("sidebar overflow regression", () => {
   it("keeps the sidebar fixed-width and navigation vertical-only", () => {
@@ -22,7 +26,10 @@ describe("sidebar overflow regression", () => {
       'className="flex-shrink-0 overflow-hidden px-2 py-3 border-t border-gray-200"'
     );
     expect(sidebarSource).toMatch(
-      /<span\s+className="min-w-0 flex-1 truncate"\s+title=\{versionTitle\}/
+      /<VersionPopover\s+label=\{versionLabel\}/
+    );
+    expect(versionPopoverSource).toContain(
+      '"min-w-0 flex-1 truncate text-left underline decoration-dotted underline-offset-2 hover:text-gray-600 transition-colors cursor-pointer"'
     );
     expect(sidebarSource).toContain(
       'className="flex-shrink-0 whitespace-nowrap hover:text-primary-600 transition-colors"'
