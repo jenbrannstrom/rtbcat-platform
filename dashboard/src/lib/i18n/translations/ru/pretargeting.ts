@@ -359,7 +359,6 @@ const value: PartialTranslations['pretargeting'] = {
   endpointsHeaderLocationEurope: 'Европа',
   endpointsHeaderLocationAsia: 'Азия',
   endpointsHeaderLocationUnspecified: 'Не указано',
-  endpointsHeaderUnlimited: 'Без ограничений',
   endpointsHeaderSelectSeat: 'Выберите место для загрузки RTB-эндпоинтов.',
   endpointsHeaderCannotConnectApi: 'Не удается подключиться к API.',
   endpointsHeaderFailedToLoad: 'Не удалось загрузить эндпоинты.',

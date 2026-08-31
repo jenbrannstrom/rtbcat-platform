@@ -359,7 +359,6 @@ const value: Translations['pretargeting'] = {
     endpointsHeaderLocationEurope: 'Europe',
     endpointsHeaderLocationAsia: 'Asia',
     endpointsHeaderLocationUnspecified: 'Unspecified',
-    endpointsHeaderUnlimited: 'Unlimited',
     endpointsHeaderSelectSeat: 'Select a seat to load RTB endpoints.',
     endpointsHeaderCannotConnectApi: 'Cannot connect to API.',
     endpointsHeaderFailedToLoad: 'Failed to load endpoints.',

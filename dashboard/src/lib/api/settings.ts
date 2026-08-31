@@ -17,7 +17,8 @@ export interface PendingChange {
 export interface RTBEndpointItem {
   endpoint_id: string;
   url: string;
-  maximum_qps: number | null;
+  /** Allocated QPS cap. Always a number: Google RTB endpoints have no unlimited mode. */
+  maximum_qps: number;
   trading_location: string | null;
   bid_protocol: string | null;
 }

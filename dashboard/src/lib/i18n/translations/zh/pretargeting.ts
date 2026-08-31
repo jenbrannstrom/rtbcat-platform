@@ -403,7 +403,6 @@ const value: PartialTranslations['pretargeting'] = {
   endpointsHeaderLocationEurope: '欧洲',
   endpointsHeaderLocationAsia: '亚洲',
   endpointsHeaderLocationUnspecified: '未指定',
-  endpointsHeaderUnlimited: '无限制',
   endpointsHeaderSelectSeat: '选择一个席位以加载 RTB 端点。',
   endpointsHeaderCannotConnectApi: '无法连接 API。',
   endpointsHeaderFailedToLoad: '端点加载失败。',
