@@ -74,6 +74,11 @@ class UpdateUserRequest(BaseModel):
     default_language: Optional[str] = None
 
 
+class ResetUserPasswordRequest(BaseModel):
+    """Request to set or replace a user's local password."""
+    password: str = Field(..., min_length=8, description="New local password")
+
+
 class PermissionRequest(BaseModel):
     """Request to grant/update permission."""
     service_account_id: str
@@ -257,7 +262,7 @@ async def update_user(
     )
 
 
-@router.delete("/users/{user_id}")
+@router.post("/users/{user_id}/deactivate")
 async def deactivate_user(
     request: Request,
     user_id: str,
@@ -272,6 +277,33 @@ async def deactivate_user(
     return await admin_svc.deactivate_user(
         admin=admin,
         user_id=user_id,
+        client_ip=_get_client_ip(request),
+    )
+
+
+@router.delete("/users/{user_id}", include_in_schema=False)
+async def deactivate_user_legacy(
+    request: Request,
+    user_id: str,
+    admin: User = Depends(require_admin),
+) -> dict[str, str | int]:
+    """Backward-compatible alias for older dashboard clients."""
+    return await deactivate_user(request=request, user_id=user_id, admin=admin)
+
+
+@router.post("/users/{user_id}/password")
+async def reset_user_password(
+    request: Request,
+    user_id: str,
+    password_request: ResetUserPasswordRequest,
+    admin: User = Depends(require_admin),
+) -> dict[str, str | int]:
+    """Set or replace a user's local password without email delivery."""
+    admin_svc = get_admin_service()
+    return await admin_svc.reset_user_password(
+        admin=admin,
+        user_id=user_id,
+        password=password_request.password,
         client_ip=_get_client_ip(request),
     )
 

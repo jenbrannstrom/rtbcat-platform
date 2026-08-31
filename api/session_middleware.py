@@ -171,6 +171,10 @@ class SessionAuthMiddleware(BaseHTTPMiddleware):
             # Try to find existing user
             user = await auth_svc.get_user_by_email(email)
             if user:
+                if not user.is_active:
+                    logger.warning("Blocked OAuth2 login for inactive user: %s", email)
+                    request.state.auth_denied_reason = "inactive_user"
+                    return None, True
                 return user, False
 
             # Auto-create user from OAuth2 Proxy
@@ -242,9 +246,13 @@ class SessionAuthMiddleware(BaseHTTPMiddleware):
                     request.state.oauth2_authenticated = True
                     return await call_next(request)
                 if denied:
+                    if getattr(request.state, "auth_denied_reason", None) == "inactive_user":
+                        detail = "Account is deactivated. Contact an administrator."
+                    else:
+                        detail = "User provisioning disabled. Contact an administrator."
                     return JSONResponse(
                         status_code=403,
-                        content={"detail": "User provisioning disabled. Contact an administrator."},
+                        content={"detail": detail},
                     )
             else:
                 logger.warning(

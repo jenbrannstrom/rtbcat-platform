@@ -454,6 +454,12 @@ async def authing_callback(
         )
         logger.info(f"Created user from Authing: {email} (role={role})")
     else:
+        if not user.is_active:
+            logger.warning("Blocked Authing login for inactive user: %s", email)
+            return RedirectResponse(
+                url="/login?error=Account+is+deactivated.+Contact+an+administrator",
+                status_code=302,
+            )
         # Update last login
         await auth_svc.update_last_login(user.id)
 
