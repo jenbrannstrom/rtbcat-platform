@@ -5,6 +5,7 @@ Supports Gemini, Claude, and Grok for creative language detection.
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 import logging
@@ -293,8 +294,10 @@ Rules:
             prompt,
             self.api_key or "",
             temperature=0.1,
-            max_output_tokens=100,
+            max_output_tokens=512,
             timeout=timeout,
+            response_mime_type="application/json",
+            thinking_budget=0,
         )
         return self._parse_response(response_text)
 
@@ -625,21 +628,32 @@ Rules:
         return result
 
     def _detect_vision_gemini(self, prompt: str, media_type: str, b64_data: str, timeout: float) -> LanguageDetectionResult:
+        model = get_gemini_model_name()
+        generation_config: dict[str, object] = {
+            "temperature": 0.1,
+            "maxOutputTokens": 512,
+            "responseMimeType": "application/json",
+        }
+        # Flash 2.5 otherwise spends the small response budget on reasoning,
+        # leaving an incomplete JSON language result.
+        if model.startswith("gemini-2.5-flash"):
+            generation_config["thinkingConfig"] = {"thinkingBudget": 0}
         payload = {
             "contents": [{"parts": [
                 {"inline_data": {"mime_type": media_type, "data": b64_data}},
                 {"text": prompt},
             ]}],
-            "generationConfig": {"temperature": 0.1, "maxOutputTokens": 200},
+            "generationConfig": generation_config,
         }
-        model = get_gemini_model_name()
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={self.api_key}"
         response_data = self._post_json(url=url, headers={"Content-Type": "application/json"}, payload=payload, timeout=timeout)
         candidates = response_data.get("candidates", [])
         if not candidates:
             raise RuntimeError("Gemini vision returned no candidates")
+        if candidates[0].get("finishReason") == "MAX_TOKENS":
+            raise RuntimeError("Gemini vision response was truncated (MAX_TOKENS)")
         parts = candidates[0].get("content", {}).get("parts", [])
-        text = parts[0].get("text", "") if parts else ""
+        text = "".join(part.get("text", "") for part in parts if not part.get("thought"))
         result = self._parse_response(text)
         if result.source:
             result.source = f"{self.provider}_vision"
@@ -677,6 +691,17 @@ Rules:
         raw_data: dict,
         creative_format: str,
     ) -> LanguageDetectionResult:
+        """Run blocking vision, OCR and Playwright work outside the event loop."""
+        return await asyncio.to_thread(
+            self._analyze_creative_sync, creative_id, raw_data, creative_format
+        )
+
+    def _analyze_creative_sync(
+        self,
+        creative_id: str,
+        raw_data: dict,
+        creative_format: str,
+    ) -> LanguageDetectionResult:
         """Analyze a creative and detect its language.
 
         Prefer visible evidence for visual formats, then fall back to static
@@ -685,6 +710,7 @@ Rules:
         false ZH labels for visibly Vietnamese ads.
         """
         text = self.extract_text_from_creative(raw_data, creative_format)
+        failures: list[str] = []
 
         image_source = self._resolve_image_for_creative(creative_id, raw_data, creative_format)
         if image_source:
@@ -703,6 +729,8 @@ Rules:
                     ):
                         return evidence_result
                 return result
+            if result.error:
+                failures.append(f"Image analysis: {result.error}")
 
         if creative_format in {"HTML", "VIDEO"}:
             evidence_result = self._detect_from_rendered_evidence(
@@ -712,12 +740,16 @@ Rules:
             )
             if evidence_result.success:
                 return evidence_result
+            if evidence_result.error:
+                failures.append(f"Rendered evidence: {evidence_result.error}")
 
         if text:
             logger.debug("Analyzing language for creative %s with %s (text)", creative_id, self.provider)
             result = self.detect_language(text)
             if result.success:
                 return result
+            if result.error:
+                failures.append(f"Text analysis: {result.error}")
 
         if creative_format not in {"HTML", "VIDEO", "IMAGE"}:
             google_result = self._google_detected_language_result(raw_data)
@@ -726,7 +758,11 @@ Rules:
 
         return LanguageDetectionResult(
             source=self.provider,
-            error=f"No text or image content found in {creative_format} creative",
+            error=(
+                "; ".join(failures)
+                if failures
+                else f"No text or image content found in {creative_format} creative"
+            ),
         )
 
     def _detect_from_rendered_evidence(

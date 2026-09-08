@@ -24,6 +24,8 @@ def generate_gemini_content(
     temperature: float = 0.1,
     max_output_tokens: int = 100,
     timeout: Optional[float] = None,
+    response_mime_type: Optional[str] = None,
+    thinking_budget: Optional[int] = None,
 ) -> str:
     """Generate Gemini output from text plus optional local images."""
     try:
@@ -45,20 +47,32 @@ def generate_gemini_content(
             )
         )
 
+    model = get_gemini_model_name()
+    generation_config: dict[str, object] = {
+        "temperature": temperature,
+        "maxOutputTokens": max_output_tokens,
+    }
+    if response_mime_type:
+        generation_config["responseMimeType"] = response_mime_type
+    if thinking_budget is not None and model.startswith("gemini-2.5-flash"):
+        generation_config["thinkingConfig"] = {"thinkingBudget": thinking_budget}
+
     client = genai.Client(
         api_key=api_key,
-        http_options=types.HttpOptions(timeout=max(1, int(timeout)))
+        # Callers pass seconds; the SDK expects milliseconds.
+        http_options=types.HttpOptions(timeout=max(1, int(timeout * 1000)))
         if timeout
         else None,
     )
     response = client.models.generate_content(
-        model=get_gemini_model_name(),
+        model=model,
         contents=contents,
-        config=types.GenerateContentConfig(
-            temperature=temperature,
-            maxOutputTokens=max_output_tokens,
-        ),
+        config=types.GenerateContentConfig(**generation_config),
     )
+    for candidate in getattr(response, "candidates", None) or []:
+        finish_reason = getattr(candidate, "finish_reason", None)
+        if getattr(finish_reason, "value", finish_reason) == "MAX_TOKENS":
+            raise RuntimeError("Gemini response was truncated (MAX_TOKENS)")
     text = getattr(response, "text", None)
     if not text:
         raise RuntimeError("Gemini response did not contain text content")

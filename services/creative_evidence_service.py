@@ -556,6 +556,7 @@ class CreativeEvidenceService:
             temperature=0.1,
             max_output_tokens=500,
             timeout=20.0,
+            thinking_budget=0,
         )
 
     def _ocr_with_claude(self, image_path: str, api_key: str) -> str:
