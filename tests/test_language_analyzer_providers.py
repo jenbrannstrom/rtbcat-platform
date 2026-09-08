@@ -1,13 +1,81 @@
 """Tests for provider-specific language analyzer paths."""
 
+import asyncio
 from types import SimpleNamespace
 
 import pytest
 
-from api.analysis.language_analyzer import LanguageAnalyzer
+from api.analysis.language_analyzer import LanguageAnalyzer, LanguageDetectionResult
 
 
 class TestLanguageAnalyzerProviders:
+    def test_gemini_vision_reserves_output_for_complete_language_json(self, monkeypatch):
+        analyzer = LanguageAnalyzer(provider="gemini", api_key="test-key")
+        monkeypatch.setenv("CATSCAN_GEMINI_MODEL", "gemini-2.5-flash")
+        monkeypatch.setattr(analyzer, "_load_image_base64", lambda _: ("image/png", "aW1hZ2U="))
+
+        def fake_post_json(url, headers, payload, timeout):
+            config = payload["generationConfig"]
+            if config.get("thinkingConfig", {}).get("thinkingBudget") != 0 or config["maxOutputTokens"] < 512:
+                return {"candidates": [{"finishReason": "MAX_TOKENS", "content": {"parts": [{"text": "```json\n{\n"}]}}]}
+            assert config["responseMimeType"] == "application/json"
+            return {"candidates": [{"finishReason": "STOP", "content": {"parts": [{"text":
+                '{"visible_text":"Trip.com 지금 다운로드","language":"Korean","language_code":"ko","confidence":0.9}'
+            }]}}]}
+
+        monkeypatch.setattr(analyzer, "_post_json", fake_post_json)
+        result = analyzer.detect_language_from_image("banner.png")
+
+        assert result.success
+        assert result.language_code == "ko"
+        assert result.source == "gemini_vision"
+
+    def test_gemini_vision_rejects_truncation_even_with_parseable_json(self, monkeypatch):
+        analyzer = LanguageAnalyzer(provider="gemini", api_key="test-key")
+        monkeypatch.setattr(analyzer, "_load_image_base64", lambda _: ("image/png", "aW1hZ2U="))
+        monkeypatch.setattr(analyzer, "_post_json", lambda **kwargs: {
+            "candidates": [{"finishReason": "MAX_TOKENS", "content": {"parts": [{"text":
+                '{"language":"English","language_code":"en","confidence":0.9}'
+            }]}}]
+        })
+
+        result = analyzer.detect_language_from_image("banner.png")
+
+        assert not result.success
+        assert "MAX_TOKENS" in result.error
+
+    @pytest.mark.asyncio
+    async def test_rendered_fallback_runs_outside_asyncio_loop(self, monkeypatch):
+        analyzer = LanguageAnalyzer(provider="gemini", api_key="test-key")
+        monkeypatch.setattr(analyzer, "_resolve_image_for_creative", lambda *args: None)
+
+        def collect(*args, **kwargs):
+            # Playwright's synchronous API refuses a running asyncio loop.
+            with pytest.raises(RuntimeError, match="no running event loop"):
+                asyncio.get_running_loop()
+            return SimpleNamespace(text_content="", ocr_texts=["지금 다운로드"], screenshot_path=None, video_frames=[])
+
+        monkeypatch.setattr("services.creative_evidence_service.CreativeEvidenceService.collect_evidence", collect)
+        monkeypatch.setattr(analyzer, "detect_language", lambda text: LanguageDetectionResult(language="Korean", language_code="ko", confidence=0.9))
+
+        result = await analyzer.analyze_creative("banner", {"html": {"snippet": "<canvas></canvas>"}}, "HTML")
+
+        assert result.success
+        assert result.language_code == "ko"
+
+    @pytest.mark.asyncio
+    async def test_image_failure_is_preserved_when_rendered_fallback_fails(self, monkeypatch):
+        analyzer = LanguageAnalyzer(provider="gemini", api_key="test-key")
+        monkeypatch.setattr(analyzer, "detect_language_from_image", lambda _: LanguageDetectionResult(error="Gemini vision response was truncated (MAX_TOKENS)"))
+        monkeypatch.setattr(analyzer, "_detect_from_rendered_evidence", lambda *args: LanguageDetectionResult(error="Screenshot unavailable"))
+
+        result = await analyzer.analyze_creative("banner", {"html": {"thumbnailUrl": "https://example.com/banner.png"}}, "HTML")
+
+        assert not result.success
+        assert "MAX_TOKENS" in result.error
+        assert "Screenshot unavailable" in result.error
+        assert "No text or image content found" not in result.error
+
     def test_detect_language_with_gemini(self, monkeypatch):
         analyzer = LanguageAnalyzer(provider="gemini", api_key="test-gemini-key")
 

@@ -60,7 +60,11 @@ export function buildLanguageFlagHeadline(
   );
   const countries = formatCountries(row.serving_countries || [], t, locale);
 
-  let title = t.languageFlagsHeadlineFallback;
+  let title = severity === "review"
+    ? t.languageFlagsNeedsReview
+    : severity === "ok"
+    ? t.languageFlagsOk
+    : t.languageFlagsHeadlineFallback;
   if (languageName && countries) {
     const template = severity === "review"
       ? t.languageFlagsHeadlineReview

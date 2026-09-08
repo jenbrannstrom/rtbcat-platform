@@ -6,6 +6,16 @@ All notable changes to Cat-Scan are documented in this file.
 
 ## [Unreleased]
 
+## [0.9.8] - 2026-09-07
+
+### Fixed
+
+- Creative language detection now reserves enough Gemini output for complete
+  JSON results and reports truncated responses instead of missing content.
+- Screenshot fallback runs outside the async request loop, and Gemini OCR
+  timeouts correctly convert seconds to milliseconds.
+- Language flag headlines show “Needs review” when analysis is unavailable.
+
 ## [0.9.7] - 2026-08-31
 
 ### Added
