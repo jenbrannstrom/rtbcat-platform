@@ -29,6 +29,7 @@ import {
   type AgentTokenScope,
 } from "@/lib/api";
 import {
+  MAX_AGENT_TOKEN_BUYER_IDS,
   validateAgentTokenMint,
   type AgentTokenMintErrors,
 } from "@/lib/agent-token-validation";
@@ -51,11 +52,12 @@ function getTokenStatus(token: AgentTokenRecord): "active" | "revoked" | "expire
 
 function AgentTokensPage() {
   const queryClient = useQueryClient();
-  const { language } = useTranslation();
+  const { language, t } = useTranslation();
   const [showMintDialog, setShowMintDialog] = useState(false);
   const [name, setName] = useState("");
   const [targetUserId, setTargetUserId] = useState("");
   const [buyerId, setBuyerId] = useState("");
+  const [selectedBuyerIds, setSelectedBuyerIds] = useState<string[]>([]);
   const [allGrantedBuyers, setAllGrantedBuyers] = useState(false);
   const [scopes, setScopes] = useState<AgentTokenScope[]>([DEFAULT_SCOPE]);
   const [expiresInDays, setExpiresInDays] = useState("90");
@@ -134,6 +136,7 @@ function AgentTokensPage() {
     setName("");
     setTargetUserId("");
     setBuyerId("");
+    setSelectedBuyerIds([]);
     setAllGrantedBuyers(false);
     setScopes([DEFAULT_SCOPE]);
     setExpiresInDays("90");
@@ -150,9 +153,23 @@ function AgentTokensPage() {
   const handleTargetUserChange = (userId: string) => {
     setTargetUserId(userId);
     setBuyerId("");
+    setSelectedBuyerIds([]);
     setAllGrantedBuyers(false);
     setFormErrors((current) => ({ ...current, userId: undefined, buyerScope: undefined }));
     setMintError(null);
+  };
+
+  const handleSelectedBuyerChange = (optionBuyerId: string, checked: boolean) => {
+    setSelectedBuyerIds((current) =>
+      checked
+        ? [...current, optionBuyerId]
+        : current.filter((currentBuyerId) => currentBuyerId !== optionBuyerId)
+    );
+    if (checked) {
+      setBuyerId("");
+      setAllGrantedBuyers(false);
+    }
+    setFormErrors((current) => ({ ...current, buyerScope: undefined }));
   };
 
   const handleScopeChange = (scope: AgentTokenScope, checked: boolean) => {
@@ -181,6 +198,7 @@ function AgentTokensPage() {
       userId: targetUserId,
       targetUserRole: selectedUser?.role ?? null,
       buyerId,
+      buyerIds: selectedBuyerIds,
       allGrantedBuyers,
       grantedBuyerIds: availableBuyerIds,
       scopes,
@@ -197,7 +215,9 @@ function AgentTokensPage() {
         user_id: targetUserId,
         ...(allGrantedBuyers
           ? { all_granted_buyers: true }
-          : { buyer_id: buyerId }),
+          : selectedBuyerIds.length > 0
+            ? { buyer_ids: selectedBuyerIds }
+            : { buyer_id: buyerId }),
         scopes,
         expires_in_days: parsedExpiry,
       });
@@ -349,7 +369,17 @@ function AgentTokensPage() {
                         <span className="break-all">{token.user_email || token.user_id}</span>
                       </td>
                       <td className="px-4 py-4 text-sm text-gray-600 whitespace-nowrap">
-                        {token.buyer_id || "All granted seats"}
+                        {token.buyer_ids && token.buyer_ids.length > 0 ? (
+                          <div className="flex flex-wrap gap-1 whitespace-normal min-w-48">
+                            {token.buyer_ids.map((tokenBuyerId) => (
+                              <span key={tokenBuyerId} className="px-2 py-1 rounded bg-gray-100 font-mono text-xs">
+                                {tokenBuyerId}
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          token.buyer_id || "All granted seats"
+                        )}
                       </td>
                       <td className="px-4 py-4 text-xs text-gray-600 min-w-56">
                         <div className="flex flex-wrap gap-1">
@@ -489,7 +519,7 @@ function AgentTokensPage() {
                       </optgroup>
                     )}
                     {sudoUsers.length > 0 && (
-                      <optgroup label="Sudo users (single buyer only)">
+                      <optgroup label="Sudo users (explicit buyers only)">
                         {sudoUsers.map((user) => (
                           <UserOption key={user.id} user={user} />
                         ))}
@@ -523,7 +553,10 @@ function AgentTokensPage() {
                       disabled={!selectedUser || selectedUser.role === "sudo" || availableBuyerIds.length === 0}
                       onChange={(event) => {
                         setAllGrantedBuyers(event.target.checked);
-                        if (event.target.checked) setBuyerId("");
+                        if (event.target.checked) {
+                          setBuyerId("");
+                          setSelectedBuyerIds([]);
+                        }
                         setFormErrors((current) => ({ ...current, buyerScope: undefined }));
                       }}
                       className="mt-0.5 h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
@@ -544,7 +577,10 @@ function AgentTokensPage() {
                     value={buyerId}
                     onChange={(event) => {
                       setBuyerId(event.target.value);
-                      if (event.target.value) setAllGrantedBuyers(false);
+                      if (event.target.value) {
+                        setAllGrantedBuyers(false);
+                        setSelectedBuyerIds([]);
+                      }
                       setFormErrors((current) => ({ ...current, buyerScope: undefined }));
                     }}
                     disabled={!selectedUser || allGrantedBuyers || seatsLoading || seatPermissionsLoading}
@@ -561,6 +597,59 @@ function AgentTokensPage() {
                       </option>
                     ))}
                   </select>
+
+                  <div className="relative my-3 text-center text-xs text-gray-400 before:absolute before:left-0 before:right-0 before:top-1/2 before:border-t before:border-gray-200">
+                    <span className="relative bg-white px-2">{t.admin.agentTokenSelectedBuyersDivider}</span>
+                  </div>
+
+                  <div
+                    role="group"
+                    aria-label={t.admin.agentTokenSelectedBuyers}
+                    className="rounded-lg border border-gray-300"
+                  >
+                    <div className="flex items-center justify-between gap-3 border-b border-gray-200 px-3 py-2">
+                      <span className="text-sm font-medium text-gray-700">
+                        {t.admin.agentTokenSelectedBuyers}
+                      </span>
+                      <span className="text-xs text-gray-500">
+                        {t.admin.agentTokenSelectedBuyersCount.replace(
+                          "{count}",
+                          String(selectedBuyerIds.length)
+                        )}
+                      </span>
+                    </div>
+                    <div className="max-h-44 overflow-y-auto px-3 py-2 space-y-1">
+                      {availableBuyerIds.length === 0 ? (
+                        <p className="text-xs text-gray-500">
+                          {seatsLoading || seatPermissionsLoading ? "Loading buyer grants..." : "No buyers available."}
+                        </p>
+                      ) : (
+                        availableBuyerIds.map((optionBuyerId) => (
+                          <label key={optionBuyerId} className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={selectedBuyerIds.includes(optionBuyerId)}
+                              disabled={
+                                !selectedBuyerIds.includes(optionBuyerId) &&
+                                selectedBuyerIds.length >= MAX_AGENT_TOKEN_BUYER_IDS
+                              }
+                              onChange={(event) =>
+                                handleSelectedBuyerChange(optionBuyerId, event.target.checked)
+                              }
+                              className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                            />
+                            <span>{getBuyerLabel(optionBuyerId)}</span>
+                          </label>
+                        ))
+                      )}
+                    </div>
+                    <p className="border-t border-gray-200 px-3 py-2 text-xs text-gray-500">
+                      {t.admin.agentTokenSelectedBuyersHint.replace(
+                        "{max}",
+                        String(MAX_AGENT_TOKEN_BUYER_IDS)
+                      )}
+                    </p>
+                  </div>
                   {seatsFailed || seatPermissionsFailed ? (
                     <p className="mt-1 text-xs text-red-600">
                       {seatPermissionsError instanceof Error
@@ -573,7 +662,7 @@ function AgentTokensPage() {
                     <p className={cn("mt-1 text-xs", formErrors.buyerScope ? "text-red-600" : "text-gray-500")}>
                       {formErrors.buyerScope || (
                         selectedUser?.role === "sudo"
-                          ? "Sudo users are forced to one active buyer."
+                          ? "Sudo users need one buyer or a list of selected buyers."
                           : "Single-buyer options come from this user's seat grants."
                       )}
                     </p>

@@ -1165,6 +1165,10 @@ export interface Translations {
     userManagement: string;
     manageUsersLink: string;
     manageAgentTokens: string;
+    agentTokenSelectedBuyers: string;
+    agentTokenSelectedBuyersHint: string;
+    agentTokenSelectedBuyersCount: string;
+    agentTokenSelectedBuyersDivider: string;
     createNewUser: string;
     viewAuditLog: string;
     systemSettings: string;

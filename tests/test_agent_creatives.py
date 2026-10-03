@@ -286,6 +286,20 @@ def test_creatives_list_rejects_buyer_outside_token_scope() -> None:
     assert repo.calls == []
 
 
+def test_creatives_list_honours_buyer_list_token_scope() -> None:
+    context = _context(buyer_id=None)
+    context.token.buyer_ids = ["buyer-1", "buyer-2"]
+    repo = _StubCreativesRepo()
+    client = _router_client(context=context, repo=repo, auth=_StubAuthService())
+
+    allowed = client.get("/api/agent/v1/creatives", params=_list_params(buyer_id="buyer-2"))
+    denied = client.get("/api/agent/v1/creatives", params=_list_params(buyer_id="buyer-3"))
+
+    assert allowed.status_code == 200
+    assert denied.status_code == 403
+    assert denied.json()["detail"] == "Agent token is not scoped to this buyer."
+
+
 def test_creatives_list_rejects_stats_only_scope() -> None:
     client = _router_client(
         context=_context(scopes=[AGENT_STATS_READ_SCOPE]),

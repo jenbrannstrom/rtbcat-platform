@@ -21,8 +21,11 @@ from services.agent_token_service import (
     AgentTokenService,
 )
 from services.auth_service import AuthService, User
+from storage.postgres_repositories.seats_repo import SeatsRepository
 
 logger = logging.getLogger(__name__)
+
+MAX_TOKEN_BUYER_IDS = 50
 
 router = APIRouter(prefix="/agent/v1", tags=["Agent API"])
 
@@ -45,6 +48,15 @@ class AgentTokenCreateRequest(BaseModel):
             "request instead."
         ),
     )
+    buyer_ids: list[str] | None = Field(
+        None,
+        description=(
+            "Explicit buyer hard-scope list (1 to 50 active buyer seats, no "
+            "duplicates). Mutually exclusive with buyer_id and "
+            "all_granted_buyers. Allowed for sudo users; for non-sudo users "
+            "every buyer must also be in the user's seat grants."
+        ),
+    )
     scopes: list[str] = Field(default_factory=lambda: [AGENT_STATS_READ_SCOPE])
     expires_in_days: int = Field(90, ge=1, le=366)
 
@@ -57,6 +69,7 @@ class AgentTokenResponse(BaseModel):
     token_prefix: str
     user_id: str
     buyer_id: str | None = None
+    buyer_ids: list[str] | None = None
     scopes: list[str]
     expires_at: str
     is_active: bool
@@ -91,6 +104,7 @@ class AgentMeResponse(BaseModel):
     token_id: str
     token_name: str
     buyer_id: str | None
+    buyer_ids: list[str] | None = None
     scopes: list[str]
 
 
@@ -110,6 +124,12 @@ def get_auth_service() -> AuthService:
     return AuthService()
 
 
+def get_seats_repo() -> SeatsRepository:
+    # Straight to the repository: SeatsService caches seat lists, and a mint
+    # must not accept a seat that was just deactivated.
+    return SeatsRepository()
+
+
 def _token_response(record: AgentTokenRecord) -> AgentTokenResponse:
     return AgentTokenResponse(
         id=record.id,
@@ -117,6 +137,7 @@ def _token_response(record: AgentTokenRecord) -> AgentTokenResponse:
         token_prefix=record.token_prefix,
         user_id=record.user_id,
         buyer_id=record.buyer_id,
+        buyer_ids=record.buyer_ids,
         scopes=record.scopes,
         expires_at=record.expires_at,
         is_active=record.is_active,
@@ -180,14 +201,59 @@ async def require_token_admin(request: Request, user: User = Depends(require_adm
     return user
 
 
+async def _validate_token_buyer_ids(
+    *,
+    buyer_ids: list[str],
+    target_user: User,
+    auth_service: AuthService,
+    seats_repo: SeatsRepository,
+) -> list[str]:
+    """Validate an explicit buyer list and return it as the hard-scope."""
+    if not 1 <= len(buyer_ids) <= MAX_TOKEN_BUYER_IDS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"buyer_ids must contain between 1 and {MAX_TOKEN_BUYER_IDS} buyers.",
+        )
+    if any(not buyer_id or buyer_id != buyer_id.strip() for buyer_id in buyer_ids):
+        raise HTTPException(
+            status_code=400,
+            detail="buyer_ids must not contain empty or whitespace-padded values.",
+        )
+    if len(set(buyer_ids)) != len(buyer_ids):
+        raise HTTPException(status_code=400, detail="buyer_ids must not contain duplicates.")
+
+    if target_user.role != "sudo":
+        granted = set(await auth_service.get_user_buyer_seat_ids(target_user.id))
+        if not granted:
+            raise HTTPException(
+                status_code=400,
+                detail="Agent user has no buyer read grants.",
+            )
+        if not set(buyer_ids).issubset(granted):
+            raise HTTPException(
+                status_code=400,
+                detail="Agent user does not have read access to every requested buyer.",
+            )
+
+    active_seats = await seats_repo.get_buyer_seats_by_ids(buyer_ids, active_only=True)
+    if {str(seat["buyer_id"]) for seat in active_seats} != set(buyer_ids):
+        raise HTTPException(
+            status_code=400,
+            detail="Every buyer in buyer_ids must be an existing, active buyer seat.",
+        )
+    return list(buyer_ids)
+
+
 async def _validate_token_target(
     *,
     payload: AgentTokenCreateRequest,
     auth_service: AuthService,
-) -> str | None:
+    seats_repo: SeatsRepository,
+) -> tuple[str | None, list[str] | None]:
     """Validate the token target and return the buyer hard-scope to store.
 
-    Returns ``None`` only for the sanctioned multi-buyer research shape
+    Returns ``(buyer_id, buyer_ids)``; at most one is set. Both are ``None``
+    only for the sanctioned multi-buyer research shape
     (``all_granted_buyers=true`` on a non-sudo user with seat grants): the
     token then carries no hard-scope and the user's seat grants bound every
     request. Sudo users can never hold an unscoped token.
@@ -203,6 +269,19 @@ async def _validate_token_target(
             status_code=400,
             detail="all_granted_buyers and buyer_id are mutually exclusive.",
         )
+    if payload.buyer_ids is not None and (payload.buyer_id or payload.all_granted_buyers):
+        raise HTTPException(
+            status_code=400,
+            detail="buyer_ids is mutually exclusive with buyer_id and all_granted_buyers.",
+        )
+
+    if payload.buyer_ids is not None:
+        return None, await _validate_token_buyer_ids(
+            buyer_ids=payload.buyer_ids,
+            target_user=target_user,
+            auth_service=auth_service,
+            seats_repo=seats_repo,
+        )
 
     if target_user.role == "sudo":
         if payload.all_granted_buyers:
@@ -211,15 +290,19 @@ async def _validate_token_target(
                 detail=(
                     "all_granted_buyers is not allowed for sudo users: an "
                     "unscoped sudo token would grant unrestricted buyer access. "
-                    "Use a non-sudo user with explicit seat grants."
+                    "Use buyer_ids for an explicit buyer list, or a non-sudo "
+                    "user with explicit seat grants."
                 ),
             )
         if not payload.buyer_id:
             raise HTTPException(
                 status_code=400,
-                detail="buyer_id is required when creating an agent token for a sudo user.",
+                detail=(
+                    "buyer_id or buyer_ids is required when creating an agent "
+                    "token for a sudo user."
+                ),
             )
-        return payload.buyer_id
+        return payload.buyer_id, None
 
     buyer_ids = await auth_service.get_user_buyer_seat_ids(target_user.id)
     if not buyer_ids:
@@ -229,7 +312,7 @@ async def _validate_token_target(
         )
 
     if payload.all_granted_buyers:
-        return None
+        return None, None
 
     if payload.buyer_id:
         if payload.buyer_id not in buyer_ids:
@@ -237,23 +320,38 @@ async def _validate_token_target(
                 status_code=400,
                 detail="Agent user does not have read access to the requested buyer.",
             )
-        return payload.buyer_id
+        return payload.buyer_id, None
 
     if len(buyer_ids) == 1:
-        return buyer_ids[0]
+        return buyer_ids[0], None
 
     raise HTTPException(
         status_code=400,
         detail=(
             "buyer_id is required when agent user has multiple buyer grants "
-            "(or pass all_granted_buyers=true for a token covering all grants)."
+            "(or pass buyer_ids for an explicit list, or all_granted_buyers=true "
+            "for a token covering all grants)."
         ),
     )
 
 
+def _token_buyer_scope(token: AgentTokenRecord) -> list[str] | None:
+    """Return the token's buyer hard-scope, or ``None`` when it has none.
+
+    A token row with a list takes its scope from the list alone, so an empty
+    list denies every buyer rather than falling through to unscoped.
+    """
+    if token.buyer_ids is not None:
+        return list(token.buyer_ids)
+    if token.buyer_id:
+        return [token.buyer_id]
+    return None
+
+
 def _enforce_token_buyer(context: AgentAuthContext, resolved_buyer_id: str) -> None:
     """Reject a request outside the token's buyer hard-scope."""
-    if context.token.buyer_id and context.token.buyer_id != resolved_buyer_id:
+    scope = _token_buyer_scope(context.token)
+    if scope is not None and resolved_buyer_id not in scope:
         raise HTTPException(
             status_code=403,
             detail="Agent token is not scoped to this buyer.",
@@ -294,6 +392,7 @@ async def agent_me(context: AgentAuthContext = Depends(require_agent_identity)) 
         token_id=context.token.id,
         token_name=context.token.name,
         buyer_id=context.token.buyer_id,
+        buyer_ids=context.token.buyer_ids,
         scopes=context.token.scopes,
     )
 
@@ -379,8 +478,14 @@ async def list_agent_buyers(
     auth_service: AuthService = Depends(get_auth_service),
 ) -> dict[str, Any]:
     """List the buyer seats visible to this agent identity."""
-    if context.token.buyer_id:
-        buyer_ids: list[str] | None = [context.token.buyer_id]
+    token_scope = _token_buyer_scope(context.token)
+    buyer_ids: list[str] | None
+    if token_scope is not None:
+        buyer_ids = token_scope
+        if context.token.buyer_ids is not None and context.user.role != "sudo":
+            # A list minted against seat grants never outlives those grants.
+            granted = set(await auth_service.get_user_buyer_seat_ids(context.user.id))
+            buyer_ids = [buyer_id for buyer_id in token_scope if buyer_id in granted]
         scope_source = "token_hard_scope"
     elif context.user.role == "sudo":
         # Legacy unscoped sudo tokens (pre-dating the API's sudo hard-scope
@@ -397,7 +502,7 @@ async def list_agent_buyers(
         action="agent_buyers_read",
         user_id=context.user.id,
         resource_type="agent_api",
-        resource_id=context.token.buyer_id or "all-granted",
+        resource_id=",".join(token_scope) if token_scope else "all-granted",
         details=f"token_id={context.token.id}; scope_source={scope_source}; "
         f"buyer_count={payload['scope']['buyer_count']}",
         ip_address=request.client.host if request.client else None,
@@ -461,17 +566,27 @@ async def create_agent_token(
     admin_user: User = Depends(require_token_admin),
     token_service: AgentTokenService = Depends(get_agent_token_service),
     auth_service: AuthService = Depends(get_auth_service),
+    seats_repo: SeatsRepository = Depends(get_seats_repo),
 ) -> AgentTokenCreateResponse:
     """Create a revocable bearer token for a buyer-scoped agent user."""
     requested_scopes = set(payload.scopes or [AGENT_STATS_READ_SCOPE])
     if not requested_scopes.issubset(AGENT_TOKEN_SCOPES):
         raise HTTPException(status_code=400, detail="Unsupported agent token scope.")
 
-    token_buyer_id = await _validate_token_target(payload=payload, auth_service=auth_service)
+    token_buyer_id, token_buyer_ids = await _validate_token_target(
+        payload=payload,
+        auth_service=auth_service,
+        seats_repo=seats_repo,
+    )
+    if token_buyer_ids is not None:
+        audit_buyer_scope = f"buyer_ids={','.join(token_buyer_ids)}"
+    else:
+        audit_buyer_scope = f"buyer_id={token_buyer_id or 'all-granted-buyers'}"
     created = await token_service.create_token(
         name=payload.name,
         user_id=payload.user_id,
         buyer_id=token_buyer_id,
+        buyer_ids=token_buyer_ids,
         scopes=payload.scopes,
         expires_in_days=payload.expires_in_days,
         created_by=admin_user.id,
@@ -484,7 +599,7 @@ async def create_agent_token(
         resource_id=created.record.id,
         details=(
             f"user_id={payload.user_id}; "
-            f"buyer_id={token_buyer_id or 'all-granted-buyers'}; "
+            f"{audit_buyer_scope}; "
             f"scopes={','.join(created.record.scopes)}"
         ),
     )
