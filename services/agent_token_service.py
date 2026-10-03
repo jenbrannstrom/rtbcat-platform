@@ -42,6 +42,7 @@ class AgentTokenRecord:
     expires_at: str
     is_active: bool
     buyer_id: str | None = None
+    buyer_ids: list[str] | None = None
     user_email: str | None = None
     created_at: str | None = None
     created_by: str | None = None
@@ -143,12 +144,17 @@ def _user_from_token_row(row: dict) -> User:
 
 
 def _record_from_row(row: dict) -> AgentTokenRecord:
+    # A list token's buyer_id column only mirrors the first listed buyer for
+    # releases that pre-date buyer_ids; the list is the whole scope here.
+    raw_buyer_ids = row.get("buyer_ids")
+    buyer_ids = [str(item) for item in raw_buyer_ids] if raw_buyer_ids is not None else None
     return AgentTokenRecord(
         id=str(row["id"]),
         name=str(row["name"]),
         token_prefix=str(row["token_prefix"]),
         user_id=str(row["user_id"]),
-        buyer_id=row.get("buyer_id"),
+        buyer_id=row.get("buyer_id") if buyer_ids is None else None,
+        buyer_ids=buyer_ids,
         scopes=parse_scopes(row.get("scopes")),
         is_active=_is_active_db_value(row.get("is_active")),
         expires_at=str(row.get("expires_at")),
@@ -178,9 +184,18 @@ class AgentTokenService:
         user_id: str,
         created_by: str | None,
         buyer_id: str | None = None,
+        buyer_ids: list[str] | None = None,
         scopes: Iterable[str] | None = None,
         expires_in_days: int = 90,
     ) -> CreatedAgentToken:
+        if buyer_ids is not None:
+            if not buyer_ids or buyer_id:
+                raise ValueError("buyer_ids must be a non-empty list without buyer_id.")
+            buyer_ids = list(buyer_ids)
+            # Stored alongside the list so pre-buyer_ids releases see a
+            # single-buyer token, never an unscoped one.
+            buyer_id = buyer_ids[0]
+
         user = await self._auth.get_user_by_id(user_id)
         if not user:
             raise HTTPException(status_code=404, detail="Agent user not found.")
@@ -197,6 +212,7 @@ class AgentTokenService:
             token_prefix=token_prefix(plaintext),
             user_id=user_id,
             buyer_id=buyer_id,
+            buyer_ids=buyer_ids,
             scopes=serialize_scopes(scopes or [AGENT_STATS_READ_SCOPE]),
             expires_at=expires_at.isoformat(),
             created_by=created_by,

@@ -8,6 +8,8 @@ export interface AgentTokenMintValues {
   userId: string;
   targetUserRole: string | null;
   buyerId: string;
+  /** Explicit multi-buyer hard-scope ("Selected buyers"). */
+  buyerIds?: string[];
   allGrantedBuyers: boolean;
   grantedBuyerIds: string[];
   scopes: AgentTokenScope[];
@@ -17,6 +19,8 @@ export interface AgentTokenMintValues {
 export type AgentTokenMintErrors = Partial<
   Record<"name" | "userId" | "buyerScope" | "scopes" | "expiresInDays", string>
 >;
+
+export const MAX_AGENT_TOKEN_BUYER_IDS = 50;
 
 /** Mirrors the API's mint constraints without retaining any token material. */
 export function validateAgentTokenMint(
@@ -42,15 +46,24 @@ export function validateAgentTokenMint(
     errors.scopes = "Select at least one supported scope.";
   }
 
-  if (values.targetUserRole === "sudo") {
+  const buyerIds = values.buyerIds ?? [];
+  if (buyerIds.length > 0 && (values.buyerId || values.allGrantedBuyers)) {
+    errors.buyerScope = "Choose only one buyer scope option.";
+  } else if (buyerIds.length > MAX_AGENT_TOKEN_BUYER_IDS) {
+    errors.buyerScope = `Select at most ${MAX_AGENT_TOKEN_BUYER_IDS} buyers.`;
+  } else if (values.targetUserRole === "sudo") {
     if (values.allGrantedBuyers) {
-      errors.buyerScope = "Sudo users must use a single buyer scope.";
-    } else if (!values.buyerId) {
+      errors.buyerScope = "Sudo users must use one buyer or selected buyers.";
+    } else if (!values.buyerId && buyerIds.length === 0) {
       errors.buyerScope = "Select a buyer for this sudo user.";
     }
   } else if (values.userId) {
     if (values.grantedBuyerIds.length === 0) {
       errors.buyerScope = "The target user has no buyer seat grants.";
+    } else if (buyerIds.length > 0) {
+      if (buyerIds.some((buyerId) => !values.grantedBuyerIds.includes(buyerId))) {
+        errors.buyerScope = "The target user does not have access to every selected buyer.";
+      }
     } else if (values.allGrantedBuyers && values.buyerId) {
       errors.buyerScope = "Choose either one buyer or all granted buyers.";
     } else if (!values.allGrantedBuyers && !values.buyerId) {
