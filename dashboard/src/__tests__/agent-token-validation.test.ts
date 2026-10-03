@@ -60,7 +60,7 @@ describe("validateAgentTokenMint", () => {
     ).toBe("Choose either one buyer or all granted buyers.");
   });
 
-  it("forces sudo targets to a single buyer", () => {
+  it("forces sudo targets to an explicit buyer scope", () => {
     expect(
       validateAgentTokenMint({
         ...validValues,
@@ -68,7 +68,7 @@ describe("validateAgentTokenMint", () => {
         buyerId: "",
         allGrantedBuyers: true,
       }).buyerScope
-    ).toBe("Sudo users must use a single buyer scope.");
+    ).toBe("Sudo users must use one buyer or selected buyers.");
     expect(
       validateAgentTokenMint({
         ...validValues,
@@ -76,5 +76,44 @@ describe("validateAgentTokenMint", () => {
         buyerId: "",
       }).buyerScope
     ).toBe("Select a buyer for this sudo user.");
+  });
+
+  it("accepts selected buyers for sudo and non-sudo targets", () => {
+    const selected = { ...validValues, buyerId: "", buyerIds: ["buyer-1", "buyer-2"] };
+    expect(validateAgentTokenMint(selected)).toEqual({});
+    expect(
+      validateAgentTokenMint({
+        ...selected,
+        targetUserRole: "sudo",
+        buyerIds: ["1487810529", "6574658621", "6634662463", "7942355670", "8087233591"],
+        grantedBuyerIds: [],
+      })
+    ).toEqual({});
+  });
+
+  it("rejects selected buyers outside the grants, mixed with another option, or over 50", () => {
+    expect(
+      validateAgentTokenMint({ ...validValues, buyerId: "", buyerIds: ["buyer-1", "buyer-3"] })
+        .buyerScope
+    ).toBe("The target user does not have access to every selected buyer.");
+    expect(
+      validateAgentTokenMint({ ...validValues, buyerIds: ["buyer-2"] }).buyerScope
+    ).toBe("Choose only one buyer scope option.");
+    expect(
+      validateAgentTokenMint({
+        ...validValues,
+        buyerId: "",
+        buyerIds: ["buyer-1"],
+        allGrantedBuyers: true,
+      }).buyerScope
+    ).toBe("Choose only one buyer scope option.");
+    expect(
+      validateAgentTokenMint({
+        ...validValues,
+        targetUserRole: "sudo",
+        buyerId: "",
+        buyerIds: Array.from({ length: 51 }, (_, index) => `buyer-${index}`),
+      }).buyerScope
+    ).toBe("Select at most 50 buyers.");
   });
 });

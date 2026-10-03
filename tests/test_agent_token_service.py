@@ -43,6 +43,7 @@ class _FakeAgentTokenRepo:
             "token_prefix": kwargs["token_prefix"],
             "user_id": kwargs["user_id"],
             "buyer_id": kwargs["buyer_id"],
+            "buyer_ids": kwargs.get("buyer_ids"),
             "scopes": kwargs["scopes"],
             "is_active": True,
             "expires_at": kwargs["expires_at"],
@@ -220,3 +221,85 @@ async def test_cleanup_expired_tokens_revokes_only_expired_unrevoked() -> None:
     assert repo.rows_by_id[valid.record.id]["revoked_at"] is None
     # idempotent: a second sweep revokes nothing
     assert await service.cleanup_expired_tokens() == 0
+
+
+FINANCE_BUYER_IDS = ["1487810529", "6574658621", "6634662463", "7942355670", "8087233591"]
+
+
+@pytest.mark.asyncio
+async def test_create_token_with_buyer_ids_stores_list_and_rollback_anchor() -> None:
+    repo = _FakeAgentTokenRepo()
+    service = AgentTokenService(repo=repo, auth_service=_FakeAuthService())
+
+    created = await service.create_token(
+        name="Finance spend",
+        user_id="agent-user",
+        buyer_ids=FINANCE_BUYER_IDS,
+        scopes=[AGENT_STATS_READ_SCOPE],
+        expires_in_days=30,
+        created_by="admin-user",
+    )
+
+    stored_row = repo.rows_by_id[created.record.id]
+    assert stored_row["buyer_ids"] == FINANCE_BUYER_IDS
+    # Releases that pre-date buyer_ids read only buyer_id; it must never be NULL.
+    assert stored_row["buyer_id"] == FINANCE_BUYER_IDS[0]
+    assert created.record.buyer_ids == FINANCE_BUYER_IDS
+    assert created.record.buyer_id is None
+
+
+@pytest.mark.asyncio
+async def test_authenticated_list_token_exposes_only_the_list() -> None:
+    repo = _FakeAgentTokenRepo()
+    service = AgentTokenService(repo=repo, auth_service=_FakeAuthService())
+    created = await service.create_token(
+        name="Finance spend",
+        user_id="agent-user",
+        buyer_ids=FINANCE_BUYER_IDS,
+        created_by="admin-user",
+    )
+
+    context = await service.authenticate_token(created.token)
+
+    assert context is not None
+    assert context.token.buyer_ids == FINANCE_BUYER_IDS
+    assert context.token.buyer_id is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "kwargs",
+    [{"buyer_ids": []}, {"buyer_ids": ["buyer-1"], "buyer_id": "buyer-1"}],
+)
+async def test_create_token_rejects_empty_or_mixed_buyer_scope(kwargs: dict) -> None:
+    repo = _FakeAgentTokenRepo()
+    service = AgentTokenService(repo=repo, auth_service=_FakeAuthService())
+
+    with pytest.raises(ValueError):
+        await service.create_token(
+            name="Finance spend",
+            user_id="agent-user",
+            created_by="admin-user",
+            **kwargs,
+        )
+    assert repo.rows_by_id == {}
+
+
+@pytest.mark.asyncio
+async def test_single_buyer_token_row_without_buyer_ids_is_unchanged() -> None:
+    repo = _FakeAgentTokenRepo()
+    service = AgentTokenService(repo=repo, auth_service=_FakeAuthService())
+    created = await service.create_token(
+        name="Daily report",
+        user_id="agent-user",
+        buyer_id="buyer-1",
+        created_by="admin-user",
+    )
+    # Rows written before migration 074 carry no buyer_ids value at all.
+    del repo.rows_by_id[created.record.id]["buyer_ids"]
+
+    context = await service.authenticate_token(created.token)
+
+    assert context is not None
+    assert context.token.buyer_id == "buyer-1"
+    assert context.token.buyer_ids is None

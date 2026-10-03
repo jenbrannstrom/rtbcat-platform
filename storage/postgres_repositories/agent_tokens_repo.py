@@ -22,14 +22,15 @@ class AgentTokensRepository:
         scopes: str,
         expires_at: str,
         created_by: str | None,
+        buyer_ids: list[str] | None = None,
     ) -> dict[str, Any]:
         await pg_execute(
             """
             INSERT INTO agent_api_tokens (
-                id, name, token_hash, token_prefix, user_id, buyer_id, scopes,
-                expires_at, created_by
+                id, name, token_hash, token_prefix, user_id, buyer_id, buyer_ids,
+                scopes, expires_at, created_by
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """,
             (
                 token_id,
@@ -38,6 +39,7 @@ class AgentTokensRepository:
                 token_prefix,
                 user_id,
                 buyer_id,
+                buyer_ids,
                 scopes,
                 expires_at,
                 created_by,
@@ -52,7 +54,8 @@ class AgentTokensRepository:
         return await pg_query_one(
             """
             SELECT
-                t.id, t.name, t.token_prefix, t.user_id, t.buyer_id, t.scopes,
+                t.id, t.name, t.token_prefix, t.user_id, t.buyer_id, t.buyer_ids,
+                t.scopes,
                 t.is_active, t.expires_at, t.last_used_at, t.created_at,
                 t.created_by, t.revoked_at, t.revoked_by,
                 u.email AS user_email,
@@ -70,7 +73,8 @@ class AgentTokensRepository:
         return await pg_query_one(
             """
             SELECT
-                t.id, t.name, t.token_prefix, t.user_id, t.buyer_id, t.scopes,
+                t.id, t.name, t.token_prefix, t.user_id, t.buyer_id, t.buyer_ids,
+                t.scopes,
                 t.is_active, t.expires_at, t.last_used_at, t.last_used_ip,
                 t.last_used_user_agent, t.created_at, t.created_by,
                 t.revoked_at, t.revoked_by,
@@ -99,8 +103,8 @@ class AgentTokensRepository:
             conditions.append("t.user_id = %s")
             params.append(user_id)
         if buyer_id:
-            conditions.append("t.buyer_id = %s")
-            params.append(buyer_id)
+            conditions.append("(t.buyer_id = %s OR %s = ANY(t.buyer_ids))")
+            params.extend([buyer_id, buyer_id])
         if active_only:
             conditions.append("t.is_active = TRUE AND t.revoked_at IS NULL")
 
@@ -109,7 +113,8 @@ class AgentTokensRepository:
         return await pg_query(
             f"""
             SELECT
-                t.id, t.name, t.token_prefix, t.user_id, t.buyer_id, t.scopes,
+                t.id, t.name, t.token_prefix, t.user_id, t.buyer_id, t.buyer_ids,
+                t.scopes,
                 t.is_active, t.expires_at, t.last_used_at, t.created_at,
                 t.created_by, t.revoked_at, t.revoked_by,
                 u.email AS user_email,

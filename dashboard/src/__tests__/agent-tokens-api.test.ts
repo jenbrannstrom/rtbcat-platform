@@ -57,6 +57,29 @@ describe("agent token API client", () => {
     );
   });
 
+  it("mints a selected-buyers token with buyer_ids only", async () => {
+    const request: CreateAgentTokenRequest = {
+      name: "Finance spend",
+      user_id: "user-1",
+      buyer_ids: ["1487810529", "6574658621"],
+      scopes: ["agent:stats:read"],
+      expires_in_days: 90,
+    };
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ token: "test-token", token_type: "Bearer", token_record: {} }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })
+    );
+
+    await createAgentToken(request);
+
+    const body = JSON.parse(String(fetchMock.mock.calls[0][1]?.body));
+    expect(body.buyer_ids).toEqual(["1487810529", "6574658621"]);
+    expect(body).not.toHaveProperty("buyer_id");
+    expect(body).not.toHaveProperty("all_granted_buyers");
+  });
+
   it("URL-encodes the token id when revoking", async () => {
     fetchMock.mockResolvedValueOnce(
       new Response(JSON.stringify({ status: "revoked", token_id: "token/id" }), {
