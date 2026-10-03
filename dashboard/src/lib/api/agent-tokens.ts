@@ -20,6 +20,7 @@ export interface AgentTokenRecord {
   token_prefix: string;
   user_id: string;
   buyer_id: string | null;
+  buyer_ids?: string[] | null;
   scopes: string[];
   expires_at: string;
   is_active: boolean;
@@ -38,6 +39,7 @@ export interface CreateAgentTokenRequest {
   name: string;
   user_id: string;
   buyer_id?: string;
+  buyer_ids?: string[];
   all_granted_buyers?: boolean;
   scopes: AgentTokenScope[];
   expires_in_days: number;
