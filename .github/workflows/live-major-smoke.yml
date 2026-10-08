@@ -58,8 +58,6 @@ on:
         description: "Per-request timeout for live API calls."
         required: false
         default: "120"
-  schedule:
-    - cron: "20 4 * * *"
 
 concurrency:
   group: live-major-smoke-${{ github.ref }}
