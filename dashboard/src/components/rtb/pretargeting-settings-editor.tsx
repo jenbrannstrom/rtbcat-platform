@@ -1118,7 +1118,7 @@ export function PretargetingSettingsEditor({
     onSuccess: async (data) => {
       setPushResult({ success: true, message: data.message });
       // Sync to get updated state from Google
-      await syncPretargetingConfigs();
+      await syncPretargetingConfigs({ billing_id });
       queryClient.invalidateQueries({ queryKey: ['pretargeting-detail', billing_id] });
       queryClient.invalidateQueries({ queryKey: ['pretargeting-configs'] });
       queryClient.invalidateQueries({ queryKey: ['pretargeting-history', billing_id] });
@@ -1150,7 +1150,7 @@ export function PretargetingSettingsEditor({
     onSuccess: async (data) => {
       setPushResult({ success: true, message: data.message });
       setRollbackPreview(null);
-      await syncPretargetingConfigs();
+      await syncPretargetingConfigs({ billing_id });
       queryClient.invalidateQueries({ queryKey: ['pretargeting-detail', billing_id] });
       queryClient.invalidateQueries({ queryKey: ['pretargeting-configs'] });
       queryClient.invalidateQueries({ queryKey: ['pretargeting-history', billing_id] });
@@ -1165,7 +1165,7 @@ export function PretargetingSettingsEditor({
     mutationFn: () => suspendPretargeting(billing_id),
     onSuccess: async (data) => {
       setPushResult({ success: true, message: data.message });
-      await syncPretargetingConfigs();
+      await syncPretargetingConfigs({ billing_id });
       queryClient.invalidateQueries({ queryKey: ['pretargeting-detail', billing_id] });
       queryClient.invalidateQueries({ queryKey: ['pretargeting-configs'] });
       setShowConfirmSuspend(false);
@@ -1179,7 +1179,7 @@ export function PretargetingSettingsEditor({
     mutationFn: () => activatePretargeting(billing_id),
     onSuccess: async (data) => {
       setPushResult({ success: true, message: data.message });
-      await syncPretargetingConfigs();
+      await syncPretargetingConfigs({ billing_id });
       queryClient.invalidateQueries({ queryKey: ['pretargeting-detail', billing_id] });
       queryClient.invalidateQueries({ queryKey: ['pretargeting-configs'] });
     },
@@ -1506,7 +1506,7 @@ export function PretargetingSettingsEditor({
           {activeTab === 'publishers' && (
             <button
               onClick={async () => {
-                await syncPretargetingConfigs();
+                await syncPretargetingConfigs({ billing_id });
                 refetchDetail();
                 refetchPublishers();
               }}

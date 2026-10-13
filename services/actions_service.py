@@ -14,7 +14,7 @@ from services.changes_service import ChangesService
 from utils.list_payloads import parse_list_payload
 
 logger = logging.getLogger(__name__)
-from services.pretargeting_service import PretargetingService
+from services.pretargeting_service import PretargetingService, build_config_row
 from services.snapshots_service import SnapshotsService
 
 if TYPE_CHECKING:
@@ -81,11 +81,18 @@ class ActionsService:
         bidder_id = config["bidder_id"]
         config_id = config["config_id"]
 
-        accounts = await self._seats.get_service_accounts(active_only=True)
-        if not accounts:
-            raise ValueError("No service account configured")
-
-        service_account = accounts[0]
+        # Use the service account that owns this config's bidder. Falling back to
+        # the first active account only makes sense for single-account installs.
+        service_account = await self._seats.get_service_account_for_bidder(str(bidder_id))
+        if service_account is None:
+            accounts = await self._seats.get_service_accounts(active_only=True)
+            if not accounts:
+                raise ValueError("No service account configured")
+            service_account = accounts[0]
+            logger.warning(
+                "No service account linked to bidder %s; falling back to %s",
+                bidder_id, service_account.display_name,
+            )
         if not service_account.credentials_path:
             raise ValueError("Credentials path not configured")
 
@@ -123,6 +130,7 @@ class ActionsService:
         await self._apply_change_to_client(change, client, config_id, billing_id)
 
         await self._changes.mark_pending_change_applied(change_id, applied_by="system")
+        await self._refresh_local_config(client, config_id, bidder_id, billing_id)
         await self._pretargeting.add_history(
             config_id=str(config_id),
             bidder_id=str(bidder_id),
@@ -203,6 +211,10 @@ class ActionsService:
                 failed += 1
                 change_record["status"] = "failed"
                 change_record["error"] = str(exc)
+                logger.exception(
+                    "Failed to apply pending change %s (%s=%s) for billing %s",
+                    change.get("id"), change.get("change_type"), change.get("value"), billing_id,
+                )
             commit_changes.append(change_record)
 
         config = await self._pretargeting.get_config(billing_id)
@@ -434,6 +446,34 @@ class ActionsService:
             "message": f"Rolled back to snapshot. Applied {len(changes)} changes.",
             "history_id": history_id,
         }
+
+    async def _refresh_local_config(
+        self,
+        client: PretargetingClient,
+        config_id: str,
+        bidder_id: str,
+        billing_id: str,
+    ) -> None:
+        """Store Google's current view of the config so the UI reflects the push.
+
+        The pretargeting pages read maximum QPS, sizes, geos and publishers from
+        the stored row, which otherwise only changes on a sync. A failure here
+        must not undo an already-applied change, so it is logged and swallowed.
+        """
+        try:
+            live = await client.get_pretargeting_config_by_id(str(config_id))
+            if not live:
+                logger.warning(
+                    "Config %s (billing %s) not returned by Google after apply; local row left as-is",
+                    config_id, billing_id,
+                )
+                return
+            await self._pretargeting.save_config(build_config_row(str(bidder_id), live))
+        except Exception:
+            logger.exception(
+                "Applied change to config %s (billing %s) but failed to refresh the local row",
+                config_id, billing_id,
+            )
 
     async def _apply_change_to_client(
         self, change: dict[str, Any], client: PretargetingClient, config_id: str, _billing_id: str
