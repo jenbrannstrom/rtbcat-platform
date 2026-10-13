@@ -23,6 +23,10 @@ class _PretargetingStub:
         self.history_calls.append(kwargs)
         return 42
 
+    async def save_config(self, row: dict):
+        self.saved_rows = getattr(self, "saved_rows", [])
+        self.saved_rows.append(row)
+
 
 class _SnapshotsStub:
     def __init__(self, snapshot: dict):
@@ -48,6 +52,9 @@ class _ClientStub:
 
     async def activate_pretargeting_config(self, config_id: str):
         self.activate_calls.append(config_id)
+
+    async def get_pretargeting_config_by_id(self, config_id: str):
+        return {"configId": config_id, "billingId": "cfg-9", "includedFormats": ["VIDEO"]}
 
 
 @pytest.mark.asyncio
@@ -139,6 +146,10 @@ async def test_rollback_to_snapshot_persists_optimizer_audit_context(monkeypatch
     assert payload["history_id"] == 42
     assert len(client.patch_calls) == 1
     assert len(pretargeting.history_calls) == 1
+    # Rollback is a Google write too: the local row is refreshed from Google.
+    assert len(pretargeting.saved_rows) == 1
+    assert pretargeting.saved_rows[0]["config_id"] == "google-cfg-9"
+    assert pretargeting.saved_rows[0]["bidder_id"] == "buyer-9"
 
     history = pretargeting.history_calls[0]
     assert history["change_type"] == "rollback"
