@@ -28,7 +28,7 @@ def build_config_row(bidder_id: str, cfg: dict[str, Any]) -> dict[str, Any]:
     return {
         "bidder_id": str(bidder_id),
         "config_id": cfg["configId"],
-        "billing_id": str(cfg.get("billingId", "")).strip() or None,
+        "billing_id": str(cfg.get("billingId") or "").strip() or None,
         "display_name": cfg.get("displayName"),
         "state": cfg.get("state", "ACTIVE"),
         "included_formats": json.dumps(cfg.get("includedFormats", []) or []),

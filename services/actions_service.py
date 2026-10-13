@@ -111,6 +111,7 @@ class ActionsService:
         billing_id: str,
         change_id: int,
         dry_run: bool,
+        refresh_local: bool = True,
     ) -> dict[str, Any]:
         change = await self._changes.get_pending_change(change_id)
         if not change or change["billing_id"] != billing_id:
@@ -130,7 +131,8 @@ class ActionsService:
         await self._apply_change_to_client(change, client, config_id, billing_id)
 
         await self._changes.mark_pending_change_applied(change_id, applied_by="system")
-        await self._refresh_local_config(client, config_id, bidder_id, billing_id)
+        if refresh_local:
+            await self._refresh_local_config(client, config_id, bidder_id, billing_id)
         await self._pretargeting.add_history(
             config_id=str(config_id),
             bidder_id=str(bidder_id),
@@ -204,6 +206,7 @@ class ActionsService:
                     billing_id=billing_id,
                     change_id=change["id"],
                     dry_run=False,
+                    refresh_local=False,
                 )
                 applied += 1
                 change_record["status"] = "applied"
@@ -216,6 +219,17 @@ class ActionsService:
                     change.get("id"), change.get("change_type"), change.get("value"), billing_id,
                 )
             commit_changes.append(change_record)
+
+        if applied:
+            # One refresh for the whole batch, not one per change.
+            try:
+                client, config_id, bidder_id = await self._get_pretargeting_client(billing_id)
+                await self._refresh_local_config(client, config_id, bidder_id, billing_id)
+            except Exception:
+                logger.exception(
+                    "Applied %d change(s) for billing %s but could not refresh the local row",
+                    applied, billing_id,
+                )
 
         config = await self._pretargeting.get_config(billing_id)
         config_id = str(config.get("config_id")) if config and config.get("config_id") else None
@@ -419,6 +433,8 @@ class ActionsService:
         elif snapshot.get("state") == "ACTIVE" and current.get("state") == "SUSPENDED":
             await client.activate_pretargeting_config(config_id)
 
+        await self._refresh_local_config(client, config_id, bidder_id, billing_id)
+
         history_payload = {
             "snapshot_id": snapshot_id,
             "proposal_id": proposal_id,
@@ -456,9 +472,12 @@ class ActionsService:
     ) -> None:
         """Store Google's current view of the config so the UI reflects the push.
 
-        The pretargeting pages read maximum QPS, sizes, geos and publishers from
-        the stored row, which otherwise only changes on a sync. A failure here
-        must not undo an already-applied change, so it is logged and swallowed.
+        Refreshes the pretargeting_configs row (maximum QPS, sizes, geos,
+        formats, raw_config), which otherwise only changes on a sync. The
+        pretargeting_publishers table is still rewritten only by the sync
+        endpoint, which the dashboard calls after a push with the config's
+        billing_id. A failure here must not undo an already-applied change, so
+        it is logged and swallowed.
         """
         try:
             live = await client.get_pretargeting_config_by_id(str(config_id))

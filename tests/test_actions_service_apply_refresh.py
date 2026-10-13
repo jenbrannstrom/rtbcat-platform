@@ -44,7 +44,9 @@ class _ChangesStub:
         return self.changes.get(change_id)
 
     async def list_pending_changes(self, billing_id: str, status: str, limit: int):
-        return [c for c in self.changes.values() if c["billing_id"] == billing_id and c["status"] == status]
+        # The real service returns newest-first; apply_all reverses to oldest-first.
+        rows = [c for c in self.changes.values() if c["billing_id"] == billing_id and c["status"] == status]
+        return list(reversed(rows))
 
     async def mark_pending_change_applied(self, change_id: int, applied_by=None):
         self.applied.append(change_id)
@@ -225,6 +227,33 @@ async def test_refresh_failure_does_not_undo_an_applied_change(monkeypatch, capl
     assert changes.applied == [1]
     assert pretargeting.saved_rows == []
     assert "failed to refresh the local row" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_apply_all_refreshes_the_local_row_once_per_batch(monkeypatch):
+    config = {"billing_id": "b-1", "config_id": "cfg-1", "bidder_id": "bidder-B"}
+    pretargeting = _PretargetingStub(config)
+    changes = _ChangesStub([_qps_change(1, "b-1", "12000"), _qps_change(2, "b-1", "15000")])
+    client = _GoogleClientStub({"configId": "cfg-1", "billingId": "b-1", "maximumQps": "10000"})
+    service = ActionsService(
+        changes_service=changes,
+        pretargeting_service=pretargeting,
+        snapshots_service=_SnapshotsStub(),
+        seats_service=object(),
+    )
+
+    async def _stub_get_client(_billing_id: str):
+        return client, "cfg-1", "bidder-B"
+
+    monkeypatch.setattr(service, "_get_pretargeting_client", _stub_get_client)
+
+    result = await service.apply_all_pending_changes("b-1", dry_run=False)
+
+    assert (result["changes_applied"], result["changes_failed"]) == (2, 0)
+    assert changes.applied == [1, 2]
+    assert len(client.patch_calls) == 2
+    assert len(pretargeting.saved_rows) == 1
+    assert json.loads(pretargeting.saved_rows[0]["raw_config"])["maximumQps"] == "15000"
 
 
 @pytest.mark.asyncio

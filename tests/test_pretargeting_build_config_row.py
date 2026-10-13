@@ -43,3 +43,10 @@ def test_build_config_row_handles_sparse_payload():
     assert row["included_operating_systems"] is None
     assert json.loads(row["included_sizes"]) == []
     assert json.loads(row["included_geos"]) == []
+
+
+def test_build_config_row_treats_null_billing_id_as_missing():
+    """parse_pretargeting_config always emits the key, sometimes with None."""
+    row = build_config_row("b", {"configId": "cfg-3", "billingId": None})
+
+    assert row["billing_id"] is None

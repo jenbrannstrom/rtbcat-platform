@@ -87,17 +87,25 @@ async def sync_pretargeting_configs(
     the config that `billing_id` names, the given `service_account_id`, or the
     first active service account.
     """
+    pretargeting_service = PretargetingService()
     owning_bidder_id: Optional[str] = None
     service_account = None
 
     if billing_id:
         # A config page is asking: sync the bidder that owns *this* config, not
         # whichever service account happens to sort first.
-        owning_config = await PretargetingService().get_config(billing_id)
+        owning_config = await pretargeting_service.get_config(billing_id)
         if not owning_config:
             raise HTTPException(status_code=404, detail="Pretargeting config not found")
         owning_bidder_id = str(owning_config["bidder_id"])
         service_account = await seats_service.get_service_account_for_bidder(owning_bidder_id)
+        if service_account is None:
+            logger.warning(
+                "No active service account linked to bidder %s (billing %s); "
+                "falling back to %s",
+                owning_bidder_id, billing_id,
+                f"service account {service_account_id}" if service_account_id else "the first active service account",
+            )
 
     # Get service account from new multi-account system
     if service_account is None and service_account_id:
@@ -141,7 +149,6 @@ async def sync_pretargeting_configs(
     logger.info(f"Using bidder_id: {account_id} for pretargeting sync")
 
     try:
-        pretargeting_service = PretargetingService()
         client = PretargetingClient(
             credentials_path=str(creds_path),
             account_id=account_id,
@@ -155,7 +162,7 @@ async def sync_pretargeting_configs(
         # Extract and store publisher targeting into pretargeting_publishers
         publishers_synced = 0
         for cfg in configs:
-            cfg_billing_id = str(cfg.get("billingId", "")).strip()
+            cfg_billing_id = str(cfg.get("billingId") or "").strip()
             if not cfg_billing_id:
                 continue
 
