@@ -7,6 +7,26 @@ import pytest
 from services.changes_service import ChangesService
 
 
+@pytest.mark.parametrize("workers", ["2", "4", "invalid", "0"])
+@pytest.mark.asyncio
+async def test_multiworker_pending_changes_follow_external_stage_and_apply(monkeypatch, workers) -> None:
+    ChangesService.clear_list_pending_changes_cache()
+    repo = _StubChangesRepo()
+    repo.rows = []
+    monkeypatch.setenv("UVICORN_WORKERS", "1")
+    assert await ChangesService(repo=repo).list_pending_changes("billing-1", "pending") == []
+    monkeypatch.setenv("UVICORN_WORKERS", workers)
+    service = ChangesService(repo=repo)
+    assert await service.list_pending_changes("billing-1", "pending") == []
+
+    # Staging and applying happen in another API worker: no local invalidation.
+    repo.rows = [{"id": 55, "billing_id": "billing-1", "status": "pending", "value": "15001"}]
+    assert [row["id"] for row in await service.list_pending_changes("billing-1", "pending")] == [55]
+    repo.rows[0]["status"] = "applied"
+    assert await service.list_pending_changes("billing-1", "pending") == []
+    ChangesService.clear_list_pending_changes_cache()
+
+
 class _StubChangesRepo:
     def __init__(self) -> None:
         self.list_calls = 0
