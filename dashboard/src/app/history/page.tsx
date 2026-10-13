@@ -17,6 +17,7 @@ import {
   User,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { refreshPretargetingAfterMutation, type PretargetingPushResult } from '@/lib/pretargeting-refresh';
 import { getPretargetingHistory, type PretargetingHistoryItem, getSnapshots, rollbackSnapshot, type PretargetingSnapshot } from '@/lib/api';
 import { useTranslation } from '@/contexts/i18n-context';
 import { HelpLink } from '@/components/docs/help-link';
@@ -55,6 +56,7 @@ function RollbackModal({
   const [dryRunResult, setDryRunResult] = useState<{ changes_made: string[]; message: string } | null>(null);
   const [dryRunLoading, setDryRunLoading] = useState(false);
   const [dryRunError, setDryRunError] = useState<string | null>(null);
+  const [rollbackResult, setRollbackResult] = useState<PretargetingPushResult | null>(null);
   const queryClient = useQueryClient();
 
   // Run dry-run on mount if snapshot available
@@ -85,10 +87,10 @@ function RollbackModal({
         dry_run: false,
       });
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['pretargeting-history'] });
-      queryClient.invalidateQueries({ queryKey: ['pretargeting-snapshots'] });
-      onSuccess();
+    onSuccess: async (result) => {
+      const feedback = await refreshPretargetingAfterMutation(queryClient, change.config_id, result);
+      setRollbackResult(feedback);
+      if (!feedback.warning) onSuccess();
     },
   });
 
@@ -109,7 +111,11 @@ function RollbackModal({
         </div>
 
         <div className="p-6 space-y-4">
-          {noSnapshot ? (
+          {rollbackResult ? (
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm text-amber-800">
+              {rollbackResult.message}
+            </div>
+          ) : noSnapshot ? (
             <div className="bg-gray-50 rounded-lg p-4 flex items-start gap-2">
               <AlertTriangle className="h-4 w-4 text-gray-500 mt-0.5 flex-shrink-0" />
               <p className="text-sm text-gray-600">
@@ -199,9 +205,9 @@ function RollbackModal({
             disabled={executeMutation.isPending}
             className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
           >
-            {noSnapshot || noChanges ? t.common.close : t.history.cancel}
+            {rollbackResult || noSnapshot || noChanges ? t.common.close : t.history.cancel}
           </button>
-          {!noSnapshot && !noChanges && dryRunResult && (
+          {!rollbackResult && !noSnapshot && !noChanges && dryRunResult && (
             <button
               onClick={() => executeMutation.mutate()}
               disabled={executeMutation.isPending || !reason.trim()}

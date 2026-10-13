@@ -6,6 +6,21 @@ All notable changes to Cat-Scan are documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- Pushing a pretargeting change (QPS cap, sizes, geos, publishers) to Google
+  now refreshes the config page it was pushed from. The apply path and the
+  follow-up sync use the service account that owns the config's bidder, and
+  Google's post-push config is stored locally immediately instead of waiting
+  for the next sync. Failed changes inside "Push to Google" are now logged.
+- Syncing pretargeting configs from Google no longer clears the custom name a
+  user gave a config in the dashboard.
+- Pretargeting pushes and rollbacks now distinguish applied changes from page
+  refresh failures, refresh cached views even when sync fails, and show partial
+  batches as warnings. The API reports whether its local config refresh succeeded.
+- Pretargeting sync checks admin access to the target bidder. Config operations
+  reject an unlinked bidder when multiple service accounts make fallback ambiguous.
+
 ## [0.9.8] - 2026-09-07
 
 ### Fixed

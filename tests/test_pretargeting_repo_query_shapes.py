@@ -33,6 +33,30 @@ async def test_list_configs_uses_distinct_on_for_bidder_scope(monkeypatch: pytes
 
 
 @pytest.mark.asyncio
+async def test_save_config_upsert_preserves_customer_user_name(monkeypatch: pytest.MonkeyPatch):
+    """A sync or post-push refresh builds rows from Google, which has no user_name.
+
+    The upsert must keep the name a customer set in the dashboard instead of
+    overwriting it with NULL on every sync.
+    """
+    captured: dict[str, object] = {}
+
+    async def _stub_execute(sql: str, params: tuple = ()):
+        captured["sql"] = sql
+        captured["params"] = params
+        return 1
+
+    monkeypatch.setattr("storage.postgres_repositories.pretargeting_repo.pg_execute", _stub_execute)
+    repo = PretargetingRepository()
+    await repo.save_config({"bidder_id": "b", "config_id": "c", "raw_config": "{}"})
+
+    sql = " ".join(str(captured["sql"]).split())
+    assert "user_name = COALESCE(EXCLUDED.user_name, pretargeting_configs.user_name)" in sql
+    assert "user_name = EXCLUDED.user_name," not in sql
+    assert captured["params"][4] is None
+
+
+@pytest.mark.asyncio
 async def test_list_configs_uses_distinct_on_for_global_scope(monkeypatch: pytest.MonkeyPatch):
     captured: dict[str, object] = {}
 

@@ -49,6 +49,7 @@ import {
 import { useTranslation } from '@/contexts/i18n-context';
 import type { Translations } from '@/lib/i18n/types';
 import { cn } from '@/lib/utils';
+import { refreshPretargetingAfterMutation, type PretargetingPushResult } from '@/lib/pretargeting-refresh';
 import { isValidPublisherId, detectPublisherType } from '@/lib/publisher-validation';
 
 interface PretargetingSettingsEditorProps {
@@ -1028,7 +1029,7 @@ export function PretargetingSettingsEditor({
   } | null>(null);
   const [showCommitToast, setShowCommitToast] = useState(false);
   const [showConfirmSuspend, setShowConfirmSuspend] = useState(false);
-  const [pushResult, setPushResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [pushResult, setPushResult] = useState<PretargetingPushResult | null>(null);
   const queryClient = useQueryClient();
 
   useEffect(() => {
@@ -1116,14 +1117,8 @@ export function PretargetingSettingsEditor({
   const applyAllMutation = useMutation({
     mutationFn: () => applyAllPendingChanges(billing_id, false),
     onSuccess: async (data) => {
-      setPushResult({ success: true, message: data.message });
-      // Sync to get updated state from Google
-      await syncPretargetingConfigs();
-      queryClient.invalidateQueries({ queryKey: ['pretargeting-detail', billing_id] });
-      queryClient.invalidateQueries({ queryKey: ['pretargeting-configs'] });
-      queryClient.invalidateQueries({ queryKey: ['pretargeting-history', billing_id] });
-      queryClient.invalidateQueries({ queryKey: ['pretargeting-publishers', billing_id] });
-      setShowCommitToast(false);
+      setPushResult(await refreshPretargetingAfterMutation(queryClient, billing_id, data));
+      setShowCommitToast(data.changes_failed > 0);
     },
     onError: (error: Error) => {
       setPushResult({ success: false, message: error.message });
@@ -1148,13 +1143,8 @@ export function PretargetingSettingsEditor({
     mutationFn: (snapshotId: number) =>
       rollbackSnapshot({ billing_id, snapshot_id: snapshotId, dry_run: false }),
     onSuccess: async (data) => {
-      setPushResult({ success: true, message: data.message });
+      setPushResult(await refreshPretargetingAfterMutation(queryClient, billing_id, data));
       setRollbackPreview(null);
-      await syncPretargetingConfigs();
-      queryClient.invalidateQueries({ queryKey: ['pretargeting-detail', billing_id] });
-      queryClient.invalidateQueries({ queryKey: ['pretargeting-configs'] });
-      queryClient.invalidateQueries({ queryKey: ['pretargeting-history', billing_id] });
-      queryClient.invalidateQueries({ queryKey: ['pretargeting-snapshots', billing_id] });
     },
     onError: (error: Error) => {
       setPushResult({ success: false, message: error.message });
@@ -1164,10 +1154,7 @@ export function PretargetingSettingsEditor({
   const suspendMutation = useMutation({
     mutationFn: () => suspendPretargeting(billing_id),
     onSuccess: async (data) => {
-      setPushResult({ success: true, message: data.message });
-      await syncPretargetingConfigs();
-      queryClient.invalidateQueries({ queryKey: ['pretargeting-detail', billing_id] });
-      queryClient.invalidateQueries({ queryKey: ['pretargeting-configs'] });
+      setPushResult(await refreshPretargetingAfterMutation(queryClient, billing_id, data));
       setShowConfirmSuspend(false);
     },
     onError: (error: Error) => {
@@ -1178,10 +1165,7 @@ export function PretargetingSettingsEditor({
   const activateMutation = useMutation({
     mutationFn: () => activatePretargeting(billing_id),
     onSuccess: async (data) => {
-      setPushResult({ success: true, message: data.message });
-      await syncPretargetingConfigs();
-      queryClient.invalidateQueries({ queryKey: ['pretargeting-detail', billing_id] });
-      queryClient.invalidateQueries({ queryKey: ['pretargeting-configs'] });
+      setPushResult(await refreshPretargetingAfterMutation(queryClient, billing_id, data));
     },
     onError: (error: Error) => {
       setPushResult({ success: false, message: error.message });
@@ -1506,7 +1490,7 @@ export function PretargetingSettingsEditor({
           {activeTab === 'publishers' && (
             <button
               onClick={async () => {
-                await syncPretargetingConfigs();
+                await syncPretargetingConfigs({ billing_id });
                 refetchDetail();
                 refetchPublishers();
               }}
@@ -1569,15 +1553,17 @@ export function PretargetingSettingsEditor({
       {pushResult && (
         <div className={cn(
           "px-4 py-2 border-b flex items-center justify-between",
-          pushResult.success ? "bg-green-50 border-green-200" : "bg-red-50 border-red-200"
+          pushResult.warning ? "bg-amber-50 border-amber-200" : pushResult.success ? "bg-green-50 border-green-200" : "bg-red-50 border-red-200"
         )}>
           <div className="flex items-center gap-2 text-sm">
-            {pushResult.success ? (
+            {pushResult.warning ? (
+              <AlertTriangle className="h-5 w-5 text-amber-600" />
+            ) : pushResult.success ? (
               <Check className="h-4 w-4 text-green-600" />
             ) : (
               <AlertTriangle className="h-4 w-4 text-red-600" />
             )}
-            <span className={pushResult.success ? "text-green-800" : "text-red-800"}>
+            <span className={pushResult.warning ? "text-amber-800" : pushResult.success ? "text-green-800" : "text-red-800"}>
               {pushResult.message}
             </span>
           </div>

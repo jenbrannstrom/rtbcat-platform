@@ -8,12 +8,13 @@ from typing import Any, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from api.dependencies import get_current_user, require_seat_admin_or_sudo
+from api.dependencies import get_current_user, get_store, require_bidder_admin, require_seat_admin_or_sudo
 from collectors import PretargetingClient
 from services.auth_service import User
 from services.changes_service import ChangesService
-from services.pretargeting_service import PretargetingService
+from services.pretargeting_service import PretargetingService, build_config_row
 from services.seats_service import SeatsService
+from storage.postgres_store import PostgresStore
 from utils.list_payloads import parse_list_payload
 
 from .models import (
@@ -73,25 +74,57 @@ def get_seats_service() -> SeatsService:
 @router.post("/settings/pretargeting/sync", response_model=SyncPretargetingResponse)
 async def sync_pretargeting_configs(
     service_account_id: Optional[str] = Query(None, description="Service account ID to use"),
+    billing_id: Optional[str] = Query(
+        None,
+        description="Sync the bidder that owns this pretargeting config (billing ID)",
+    ),
     _user: User = Depends(require_seat_admin_or_sudo),
     seats_service: SeatsService = Depends(get_seats_service),
+    store: PostgresStore = Depends(get_store),
 ) -> SyncPretargetingResponse:
     """Sync pretargeting configs from Google Authorized Buyers API.
 
-    Fetches all pretargeting configurations for the configured bidder account
-    and stores them in the pretargeting_configs table.
+    Fetches all pretargeting configurations for one bidder account and stores
+    them in the pretargeting_configs table. The bidder is chosen from, in order:
+    the config that `billing_id` names, the given `service_account_id`, or the
+    first active service account.
     """
+    pretargeting_service = PretargetingService()
+    owning_bidder_id: Optional[str] = None
+    service_account = None
+
+    if billing_id:
+        # A config page is asking: sync the bidder that owns *this* config, not
+        # whichever service account happens to sort first.
+        owning_config = await pretargeting_service.get_config(billing_id)
+        if not owning_config:
+            raise HTTPException(status_code=404, detail="Pretargeting config not found")
+        owning_bidder_id = str(owning_config["bidder_id"])
+        service_account = await seats_service.get_service_account_for_bidder(owning_bidder_id)
+        if service_account is None:
+            logger.warning(
+                "No active service account linked to bidder %s (billing %s); "
+                "falling back to %s",
+                owning_bidder_id, billing_id,
+                f"service account {service_account_id}" if service_account_id else "a single active service account",
+            )
+
     # Get service account from new multi-account system
-    if service_account_id:
+    if service_account is None and service_account_id:
         service_account = await seats_service.get_service_account(service_account_id)
         if not service_account:
             raise HTTPException(status_code=404, detail="Service account not found")
-    else:
+    if service_account is None:
         accounts = await seats_service.get_service_accounts(active_only=True)
         if not accounts:
             raise HTTPException(
                 status_code=400,
                 detail="No service account configured. Upload credentials via /setup."
+            )
+        if owning_bidder_id and len(accounts) != 1:
+            raise HTTPException(
+                status_code=400,
+                detail=f"No service account linked to bidder {owning_bidder_id}; link one before syncing.",
             )
         service_account = accounts[0]
 
@@ -109,7 +142,9 @@ async def sync_pretargeting_configs(
         )
 
     # Get bidder account ID from buyer_seats table (linked to service account)
-    account_id = await seats_service.get_bidder_id_for_service_account(service_account.id)
+    account_id = owning_bidder_id
+    if not account_id:
+        account_id = await seats_service.get_bidder_id_for_service_account(service_account.id)
     if not account_id:
         # Fallback: Get any buyer_seat (single-account scenario)
         account_id = await seats_service.get_first_bidder_id()
@@ -118,10 +153,10 @@ async def sync_pretargeting_configs(
             status_code=400,
             detail="No buyer seats discovered. Use /seats/discover first."
         )
+    await require_bidder_admin(account_id, store=store, user=_user)
     logger.info(f"Using bidder_id: {account_id} for pretargeting sync")
 
     try:
-        pretargeting_service = PretargetingService()
         client = PretargetingClient(
             credentials_path=str(creds_path),
             account_id=account_id,
@@ -130,40 +165,13 @@ async def sync_pretargeting_configs(
 
         # Store configs in database using store methods
         for cfg in configs:
-            # Extract sizes as strings
-            sizes = []
-            for dim in cfg.get("includedCreativeDimensions", []):
-                if dim.get("width") and dim.get("height"):
-                    sizes.append(f"{dim['width']}x{dim['height']}")
-
-            # Extract geo IDs
-            geo_targeting = cfg.get("geoTargeting", {}) or {}
-            included_geos = geo_targeting.get("includedIds", [])
-            excluded_geos = geo_targeting.get("excludedIds", [])
-
-            # Extract OS targeting IDs (iOS = 30001, Android = 30002)
-            included_os = cfg.get("includedMobileOperatingSystemIds", [])
-
-            await pretargeting_service.save_config({
-                "bidder_id": account_id,
-                "config_id": cfg["configId"],
-                "billing_id": str(cfg.get("billingId", "")).strip() or None,
-                "display_name": cfg.get("displayName"),
-                "state": cfg.get("state", "ACTIVE"),
-                "included_formats": json.dumps(cfg.get("includedFormats", [])),
-                "included_platforms": json.dumps(cfg.get("includedPlatforms", [])),
-                "included_sizes": json.dumps(sizes),
-                "included_geos": json.dumps(included_geos),
-                "excluded_geos": json.dumps(excluded_geos),
-                "included_operating_systems": json.dumps(included_os) if included_os else None,
-                "raw_config": json.dumps(cfg),
-            })
+            await pretargeting_service.save_config(build_config_row(account_id, cfg))
 
         # Extract and store publisher targeting into pretargeting_publishers
         publishers_synced = 0
         for cfg in configs:
-            billing_id = str(cfg.get("billingId", "")).strip()
-            if not billing_id:
+            cfg_billing_id = str(cfg.get("billingId") or "").strip()
+            if not cfg_billing_id:
                 continue
 
             publisher_targeting = cfg.get("publisherTargeting", {}) or {}
@@ -173,12 +181,12 @@ async def sync_pretargeting_configs(
             excluded_publishers = publisher_values if publisher_mode == "EXCLUSIVE" else []
 
             # Clear stale api_sync entries for this billing_id before inserting new ones
-            await pretargeting_service.clear_sync_publishers(billing_id)
+            await pretargeting_service.clear_sync_publishers(cfg_billing_id)
 
             # Insert WHITELIST publishers (included)
             for pub_id in included_publishers:
                 await pretargeting_service.add_publisher(
-                    billing_id=billing_id,
+                    billing_id=cfg_billing_id,
                     publisher_id=str(pub_id),
                     mode="WHITELIST",
                     status="active",
@@ -189,7 +197,7 @@ async def sync_pretargeting_configs(
             # Insert BLACKLIST publishers (excluded)
             for pub_id in excluded_publishers:
                 await pretargeting_service.add_publisher(
-                    billing_id=billing_id,
+                    billing_id=cfg_billing_id,
                     publisher_id=str(pub_id),
                     mode="BLACKLIST",
                     status="active",

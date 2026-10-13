@@ -13,7 +13,6 @@ import {
   cancelPendingChange,
   applyAllPendingChanges,
   discardAllPretargetingChanges,
-  syncPretargetingConfigs,
   searchGeoTargets,
   getPretargetingHistory,
   getSnapshots,
@@ -27,6 +26,7 @@ import {
   type PretargetingSnapshot,
 } from '@/lib/api';
 import { cn } from '@/lib/utils';
+import { refreshPretargetingAfterMutation, type PretargetingPushResult } from '@/lib/pretargeting-refresh';
 import { isValidPublisherId } from '@/lib/publisher-validation';
 import { COMMONLY_BLOCKED, type BlockSuggestion } from '@/lib/commonly-blocked-publishers';
 import { Loader2, AlertCircle, AlertTriangle, ArrowUpDown, ChevronRight, ChevronDown, Info, ImageIcon, X, Check, Clock, Upload, Search, ExternalLink, Ban, ShieldAlert, RotateCcw, History } from 'lucide-react';
@@ -139,7 +139,7 @@ export function ConfigBreakdownPanel({
   const [fullCreative, setFullCreative] = useState<Creative | null>(null);
   const [expandedCountries, setExpandedCountries] = useState<Set<string>>(new Set());
   const [showCommitToast, setShowCommitToast] = useState(false);
-  const [pushResult, setPushResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [pushResult, setPushResult] = useState<PretargetingPushResult | null>(null);
   const [showLowVolumeSizes, setShowLowVolumeSizes] = useState(false);
   const [selectedSizes, setSelectedSizes] = useState<Set<string>>(new Set());
   const [publisherBlockInput, setPublisherBlockInput] = useState('');
@@ -255,13 +255,8 @@ export function ConfigBreakdownPanel({
   const applyAllMutation = useMutation({
     mutationFn: () => applyAllPendingChanges(billing_id, false),
     onSuccess: async (result) => {
-      await syncPretargetingConfigs();
-      setPushResult({ success: true, message: result.message });
-      setShowCommitToast(false);
-      queryClient.invalidateQueries({ queryKey: ['pretargeting-detail', billing_id] });
-      queryClient.invalidateQueries({ queryKey: ['pretargeting-configs'] });
-      queryClient.invalidateQueries({ queryKey: ['config-breakdown', billing_id] });
-      queryClient.invalidateQueries({ queryKey: ['pretargeting-publishers', billing_id] });
+      setPushResult(await refreshPretargetingAfterMutation(queryClient, billing_id, result));
+      setShowCommitToast(result.changes_failed > 0);
     },
     onError: (error: Error) => {
       setPushResult({ success: false, message: error.message });
@@ -994,13 +989,9 @@ export function ConfigBreakdownPanel({
       if (!undoPushSnapshot) throw new Error('No snapshot');
       return rollbackSnapshot({ billing_id, snapshot_id: undoPushSnapshot.id, dry_run: false });
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['pretargeting-history'] });
-      queryClient.invalidateQueries({ queryKey: ['pretargeting-snapshots'] });
-      queryClient.invalidateQueries({ queryKey: ['config-breakdown'] });
-      queryClient.invalidateQueries({ queryKey: ['config-detail'] });
+    onSuccess: async (result) => {
+      setPushResult(await refreshPretargetingAfterMutation(queryClient, billing_id, result));
       setUndoPushSnapshot(null);
-      setPushResult({ success: true, message: 'Push undone. Config restored to pre-push state.' });
     },
   });
 
@@ -1466,16 +1457,18 @@ export function ConfigBreakdownPanel({
             {pushResult && (
               <div className={cn(
                 "mb-3 rounded border px-3 py-2 text-xs flex items-center justify-between",
-                pushResult.success
+                pushResult.warning
+                  ? "bg-amber-50 border-amber-200 text-amber-800"
+                  : pushResult.success
                   ? "bg-green-50 border-green-200 text-green-800"
                   : "bg-red-50 border-red-200 text-red-800"
               )}>
                 <div>
                   <span className="font-medium">
-                    {pushResult.success ? t.pretargeting.pushedToGoogle : t.pretargeting.pushFailed}
+                    {!pushResult.warning && (pushResult.success ? t.pretargeting.pushedToGoogle : t.pretargeting.pushFailed)}
                   </span>
                   {' '}{pushResult.message}
-                  {pushResult.success && (
+                  {pushResult.success && !pushResult.warning && (
                     <span className="block mt-0.5 text-green-600">{t.pretargeting.snapshotSavedUndoHint}</span>
                   )}
                 </div>

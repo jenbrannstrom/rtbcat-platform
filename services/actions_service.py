@@ -11,11 +11,11 @@ from googleapiclient.errors import HttpError
 
 from collectors import PretargetingClient
 from services.changes_service import ChangesService
+from services.pretargeting_service import PretargetingService, build_config_row
+from services.snapshots_service import SnapshotsService
 from utils.list_payloads import parse_list_payload
 
 logger = logging.getLogger(__name__)
-from services.pretargeting_service import PretargetingService
-from services.snapshots_service import SnapshotsService
 
 if TYPE_CHECKING:
     from services.seats_service import SeatsService
@@ -81,11 +81,22 @@ class ActionsService:
         bidder_id = config["bidder_id"]
         config_id = config["config_id"]
 
-        accounts = await self._seats.get_service_accounts(active_only=True)
-        if not accounts:
-            raise ValueError("No service account configured")
-
-        service_account = accounts[0]
+        # Use the service account that owns this config's bidder. Falling back to
+        # the first active account only makes sense for single-account installs.
+        service_account = await self._seats.get_service_account_for_bidder(str(bidder_id))
+        if service_account is None:
+            accounts = await self._seats.get_service_accounts(active_only=True)
+            if not accounts:
+                raise ValueError("No service account configured")
+            if len(accounts) != 1:
+                raise ValueError(
+                    f"No service account linked to bidder {bidder_id}; link one before applying changes."
+                )
+            service_account = accounts[0]
+            logger.warning(
+                "No service account linked to bidder %s; falling back to %s",
+                bidder_id, service_account.display_name,
+            )
         if not service_account.credentials_path:
             raise ValueError("Credentials path not configured")
 
@@ -104,6 +115,7 @@ class ActionsService:
         billing_id: str,
         change_id: int,
         dry_run: bool,
+        refresh_local: bool = True,
     ) -> dict[str, Any]:
         change = await self._changes.get_pending_change(change_id)
         if not change or change["billing_id"] != billing_id:
@@ -123,6 +135,9 @@ class ActionsService:
         await self._apply_change_to_client(change, client, config_id, billing_id)
 
         await self._changes.mark_pending_change_applied(change_id, applied_by="system")
+        local_refresh_succeeded = None
+        if refresh_local:
+            local_refresh_succeeded = await self._refresh_local_config(client, config_id, bidder_id, billing_id)
         await self._pretargeting.add_history(
             config_id=str(config_id),
             bidder_id=str(bidder_id),
@@ -138,6 +153,7 @@ class ActionsService:
             "status": "applied",
             "change_id": change_id,
             "dry_run": False,
+            "local_refresh_succeeded": local_refresh_succeeded,
             "message": f"Successfully applied {change['change_type']}: {change['value']}",
         }
 
@@ -196,6 +212,7 @@ class ActionsService:
                     billing_id=billing_id,
                     change_id=change["id"],
                     dry_run=False,
+                    refresh_local=False,
                 )
                 applied += 1
                 change_record["status"] = "applied"
@@ -203,7 +220,24 @@ class ActionsService:
                 failed += 1
                 change_record["status"] = "failed"
                 change_record["error"] = str(exc)
+                logger.exception(
+                    "Failed to apply pending change %s (%s=%s) for billing %s",
+                    change.get("id"), change.get("change_type"), change.get("value"), billing_id,
+                )
             commit_changes.append(change_record)
+
+        local_refresh_succeeded = None
+        if applied:
+            # One refresh for the whole batch, not one per change.
+            try:
+                client, config_id, bidder_id = await self._get_pretargeting_client(billing_id)
+                local_refresh_succeeded = await self._refresh_local_config(client, config_id, bidder_id, billing_id)
+            except Exception:
+                local_refresh_succeeded = False
+                logger.exception(
+                    "Applied %d change(s) for billing %s but could not refresh the local row",
+                    applied, billing_id,
+                )
 
         config = await self._pretargeting.get_config(billing_id)
         config_id = str(config.get("config_id")) if config and config.get("config_id") else None
@@ -232,6 +266,7 @@ class ActionsService:
             "dry_run": False,
             "changes_applied": applied,
             "changes_failed": failed,
+            "local_refresh_succeeded": local_refresh_succeeded,
             "message": f"Applied {applied} changes, {failed} failed",
         }
 
@@ -407,6 +442,8 @@ class ActionsService:
         elif snapshot.get("state") == "ACTIVE" and current.get("state") == "SUSPENDED":
             await client.activate_pretargeting_config(config_id)
 
+        local_refresh_succeeded = await self._refresh_local_config(client, config_id, bidder_id, billing_id)
+
         history_payload = {
             "snapshot_id": snapshot_id,
             "proposal_id": proposal_id,
@@ -433,7 +470,46 @@ class ActionsService:
             "changes_made": changes,
             "message": f"Rolled back to snapshot. Applied {len(changes)} changes.",
             "history_id": history_id,
+            "local_refresh_succeeded": local_refresh_succeeded,
         }
+
+    async def _refresh_local_config(
+        self,
+        client: PretargetingClient,
+        config_id: str,
+        bidder_id: str,
+        billing_id: str,
+    ) -> bool:
+        """Store Google's current view of the config so the UI reflects the push.
+
+        Refreshes the pretargeting_configs row (maximum QPS, sizes, geos,
+        formats, raw_config), which otherwise only changes on a sync. The
+        pretargeting_publishers table is still rewritten only by the sync
+        endpoint, which the dashboard calls after a push with the config's
+        billing_id. A failure here must not undo an already-applied change, so
+        it is logged and reported separately from the Google write result.
+        """
+        try:
+            live = await client.get_pretargeting_config_by_id(str(config_id))
+            if not live:
+                logger.warning(
+                    "Config %s (billing %s) not returned by Google after apply; local row left as-is",
+                    config_id, billing_id,
+                )
+                return False
+            if (
+                str(live.get("configId")) != str(config_id)
+                or str(live.get("billingId") or "").strip() != str(billing_id)
+            ):
+                raise ValueError("Google refresh returned a different config or missing billing ID")
+            await self._pretargeting.save_config(build_config_row(str(bidder_id), live))
+            return True
+        except Exception:
+            logger.exception(
+                "Applied change to config %s (billing %s) but failed to refresh the local row",
+                config_id, billing_id,
+            )
+            return False
 
     async def _apply_change_to_client(
         self, change: dict[str, Any], client: PretargetingClient, config_id: str, _billing_id: str

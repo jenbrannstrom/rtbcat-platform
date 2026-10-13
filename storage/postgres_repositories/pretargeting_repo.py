@@ -198,7 +198,8 @@ class PretargetingRepository:
             ON CONFLICT (bidder_id, config_id) DO UPDATE SET
                 billing_id = EXCLUDED.billing_id,
                 display_name = EXCLUDED.display_name,
-                user_name = EXCLUDED.user_name,
+                -- Google payloads carry no user_name; never wipe a customer-set name.
+                user_name = COALESCE(EXCLUDED.user_name, pretargeting_configs.user_name),
                 state = EXCLUDED.state,
                 included_formats = EXCLUDED.included_formats,
                 included_platforms = EXCLUDED.included_platforms,

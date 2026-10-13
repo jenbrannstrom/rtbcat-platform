@@ -94,6 +94,7 @@ export interface ApplyChangeResponse {
   dry_run: boolean;
   message: string;
   updated_config?: PretargetingConfigResponse;
+  local_refresh_succeeded?: boolean | null;
 }
 
 export interface ApplyAllResponse {
@@ -102,6 +103,7 @@ export interface ApplyAllResponse {
   changes_applied: number;
   changes_failed: number;
   message: string;
+  local_refresh_succeeded?: boolean | null;
 }
 
 export interface DiscardAllPendingChangesResponse {
@@ -126,6 +128,7 @@ export interface RollbackResponse {
   snapshot_id: number;
   changes_made: string[];
   message: string;
+  local_refresh_succeeded?: boolean | null;
 }
 
 export async function getRTBEndpoints(params?: {
@@ -196,10 +199,15 @@ export async function getPretargetingConfigs(params?: {
 
 export async function syncPretargetingConfigs(params?: {
   service_account_id?: string;
+  /** Sync the bidder that owns this config, not the first service account. */
+  billing_id?: string;
 }): Promise<SyncPretargetingResponse> {
   const searchParams = new URLSearchParams();
   if (params?.service_account_id) {
     searchParams.set("service_account_id", params.service_account_id);
+  }
+  if (params?.billing_id) {
+    searchParams.set("billing_id", params.billing_id);
   }
   const query = searchParams.toString();
   return fetchApi<SyncPretargetingResponse>(`/settings/pretargeting/sync${query ? `?${query}` : ""}`, {
