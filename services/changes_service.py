@@ -6,6 +6,7 @@ import time
 from typing import Any
 
 from storage.postgres_repositories.changes_repo import ChangesRepository
+from utils.process_cache import mutable_process_cache_enabled
 
 
 class ChangesService:
@@ -16,6 +17,7 @@ class ChangesService:
 
     def __init__(self, repo: ChangesRepository | None = None) -> None:
         self._repo = repo or ChangesRepository()
+        self._cache_enabled = mutable_process_cache_enabled()
 
     @classmethod
     def clear_list_pending_changes_cache(cls) -> None:
@@ -77,7 +79,7 @@ class ChangesService:
         )
         now = time.monotonic()
         cached = self._LIST_PENDING_CHANGES_CACHE.get(cache_key)
-        if cached and cached[0] > now:
+        if self._cache_enabled and cached and cached[0] > now:
             return [dict(row) for row in cached[1]]
 
         rows = await self._repo.list_pending_changes(
@@ -85,10 +87,11 @@ class ChangesService:
             status=status,
             limit=limit,
         )
-        self._LIST_PENDING_CHANGES_CACHE[cache_key] = (
-            now + self._LIST_PENDING_CHANGES_CACHE_TTL_SECONDS,
-            [dict(row) for row in rows],
-        )
+        if self._cache_enabled:
+            self._LIST_PENDING_CHANGES_CACHE[cache_key] = (
+                now + self._LIST_PENDING_CHANGES_CACHE_TTL_SECONDS,
+                [dict(row) for row in rows],
+            )
         return rows
 
     async def get_pending_change(self, change_id: int) -> dict[str, Any] | None:

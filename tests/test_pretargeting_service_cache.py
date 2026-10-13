@@ -7,6 +7,38 @@ import pytest
 from services.pretargeting_service import PretargetingService
 
 
+@pytest.mark.parametrize("workers", ["2", "4", "invalid", "0"])
+@pytest.mark.parametrize(
+    "method,args,repo_attribute,updated",
+    [
+        ("list_configs", (), "rows", [{"billing_id": "1001", "maximum_qps": 15001}]),
+        ("list_configs_for_buyer", ("buyer-1",), "rows", [{"billing_id": "1001", "maximum_qps": 15001}]),
+        ("get_config", ("1001",), "config_row", {"billing_id": "1001", "maximum_qps": 15001}),
+        ("list_history", (), "history_rows", [{"config_id": "cfg-1", "change_type": "api_write"}]),
+        ("list_publishers", ("1001",), "publisher_rows", [{"billing_id": "1001", "publisher_id": "pub-new", "mode": "WHITELIST", "status": "active"}]),
+        ("list_pending_publisher_changes", ("1001",), "pending_publisher_rows", []),
+    ],
+)
+@pytest.mark.asyncio
+async def test_multiworker_reads_observe_external_writes_without_local_invalidation(
+    monkeypatch, workers, method, args, repo_attribute, updated,
+) -> None:
+    _clear_service_caches()
+    repo = _StubPretargetingRepo()
+    # Leave a warm process-local cache behind. The multiworker service must
+    # ignore it, including when another worker writes after its first read.
+    monkeypatch.setenv("UVICORN_WORKERS", "1")
+    await getattr(PretargetingService(repo=repo), method)(*args)
+    monkeypatch.setenv("UVICORN_WORKERS", workers)
+    service = PretargetingService(repo=repo)
+    await getattr(service, method)(*args)
+
+    # A sibling process updates Postgres without touching this process's dicts.
+    setattr(repo, repo_attribute, updated)
+    assert await getattr(service, method)(*args) == updated
+    _clear_service_caches()
+
+
 def _clear_service_caches() -> None:
     PretargetingService.clear_list_configs_cache()
     PretargetingService.clear_history_cache()

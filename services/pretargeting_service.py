@@ -7,6 +7,7 @@ import time
 from typing import Any
 
 from storage.postgres_repositories.pretargeting_repo import PretargetingRepository
+from utils.process_cache import mutable_process_cache_enabled
 
 
 def build_config_row(bidder_id: str, cfg: dict[str, Any]) -> dict[str, Any]:
@@ -57,6 +58,7 @@ class PretargetingService:
 
     def __init__(self, repo: PretargetingRepository | None = None) -> None:
         self._repo = repo or PretargetingRepository()
+        self._cache_enabled = mutable_process_cache_enabled()
 
     @staticmethod
     def _list_cache_key(
@@ -106,7 +108,7 @@ class PretargetingService:
         )
         now = time.monotonic()
         cached_entry = self._LIST_CONFIGS_CACHE.get(cache_key)
-        if cached_entry and cached_entry[0] > now:
+        if self._cache_enabled and cached_entry and cached_entry[0] > now:
             return [dict(row) for row in cached_entry[1]]
 
         rows = await self._repo.list_configs(
@@ -114,10 +116,11 @@ class PretargetingService:
             limit=limit,
             summary_only=summary_only,
         )
-        self._LIST_CONFIGS_CACHE[cache_key] = (
-            now + self._LIST_CONFIGS_CACHE_TTL_SECONDS,
-            [dict(row) for row in rows],
-        )
+        if self._cache_enabled:
+            self._LIST_CONFIGS_CACHE[cache_key] = (
+                now + self._LIST_CONFIGS_CACHE_TTL_SECONDS,
+                [dict(row) for row in rows],
+            )
         return rows
 
     async def list_configs_for_buyer(
@@ -135,7 +138,7 @@ class PretargetingService:
         )
         now = time.monotonic()
         cached_entry = self._LIST_CONFIGS_CACHE.get(cache_key)
-        if cached_entry and cached_entry[0] > now:
+        if self._cache_enabled and cached_entry and cached_entry[0] > now:
             return [dict(row) for row in cached_entry[1]]
 
         rows = await self._repo.list_configs_for_buyer(
@@ -143,10 +146,11 @@ class PretargetingService:
             limit=limit,
             summary_only=summary_only,
         )
-        self._LIST_CONFIGS_CACHE[cache_key] = (
-            now + self._LIST_CONFIGS_CACHE_TTL_SECONDS,
-            [dict(row) for row in rows],
-        )
+        if self._cache_enabled:
+            self._LIST_CONFIGS_CACHE[cache_key] = (
+                now + self._LIST_CONFIGS_CACHE_TTL_SECONDS,
+                [dict(row) for row in rows],
+            )
         return rows
 
     @classmethod
@@ -200,16 +204,17 @@ class PretargetingService:
             raise ValueError("billing_id is required")
         now = time.monotonic()
         cached_entry = self._CONFIG_CACHE.get(billing_id)
-        if cached_entry and cached_entry[0] > now:
+        if self._cache_enabled and cached_entry and cached_entry[0] > now:
             cached_value = cached_entry[1]
             return dict(cached_value) if cached_value else None
 
         row = await self._repo.get_config_by_billing_id(billing_id)
         cached_row = dict(row) if row else None
-        self._CONFIG_CACHE[billing_id] = (
-            now + self._CONFIG_CACHE_TTL_SECONDS,
-            cached_row,
-        )
+        if self._cache_enabled:
+            self._CONFIG_CACHE[billing_id] = (
+                now + self._CONFIG_CACHE_TTL_SECONDS,
+                cached_row,
+            )
         return dict(cached_row) if cached_row else None
 
     async def save_config(self, config: dict[str, Any]) -> None:
@@ -267,7 +272,7 @@ class PretargetingService:
         )
         now = time.monotonic()
         cached_entry = self._HISTORY_CACHE.get(cache_key)
-        if cached_entry and cached_entry[0] > now:
+        if self._cache_enabled and cached_entry and cached_entry[0] > now:
             return [dict(row) for row in cached_entry[1]]
 
         rows = await self._repo.list_history(
@@ -276,10 +281,11 @@ class PretargetingService:
             days=days,
             limit=limit,
         )
-        self._HISTORY_CACHE[cache_key] = (
-            now + self._HISTORY_CACHE_TTL_SECONDS,
-            [dict(row) for row in rows],
-        )
+        if self._cache_enabled:
+            self._HISTORY_CACHE[cache_key] = (
+                now + self._HISTORY_CACHE_TTL_SECONDS,
+                [dict(row) for row in rows],
+            )
         return rows
 
     async def add_history(
@@ -324,14 +330,15 @@ class PretargetingService:
         )
         now = time.monotonic()
         cached_entry = self._PUBLISHERS_CACHE.get(cache_key)
-        if cached_entry and cached_entry[0] > now:
+        if self._cache_enabled and cached_entry and cached_entry[0] > now:
             return [dict(row) for row in cached_entry[1]]
 
         rows = await self._repo.list_publishers(billing_id, mode=mode, status=status)
-        self._PUBLISHERS_CACHE[cache_key] = (
-            now + self._PUBLISHERS_CACHE_TTL_SECONDS,
-            [dict(row) for row in rows],
-        )
+        if self._cache_enabled:
+            self._PUBLISHERS_CACHE[cache_key] = (
+                now + self._PUBLISHERS_CACHE_TTL_SECONDS,
+                [dict(row) for row in rows],
+            )
         return rows
 
     async def add_publisher(
@@ -402,14 +409,15 @@ class PretargetingService:
             raise ValueError("billing_id is required")
         now = time.monotonic()
         cached_entry = self._PENDING_PUBLISHER_CHANGES_CACHE.get(billing_id)
-        if cached_entry and cached_entry[0] > now:
+        if self._cache_enabled and cached_entry and cached_entry[0] > now:
             return [dict(row) for row in cached_entry[1]]
 
         rows = await self._repo.list_pending_publisher_changes(billing_id)
-        self._PENDING_PUBLISHER_CHANGES_CACHE[billing_id] = (
-            now + self._PENDING_PUBLISHER_CHANGES_CACHE_TTL_SECONDS,
-            [dict(row) for row in rows],
-        )
+        if self._cache_enabled:
+            self._PENDING_PUBLISHER_CHANGES_CACHE[billing_id] = (
+                now + self._PENDING_PUBLISHER_CHANGES_CACHE_TTL_SECONDS,
+                [dict(row) for row in rows],
+            )
         return rows
 
     async def discard_pending_publisher_changes(self, billing_id: str) -> int:

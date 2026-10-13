@@ -187,6 +187,7 @@ v1-pretargeting-regression:
 	  tests/test_pretargeting_build_config_row.py \
 	  tests/test_pretargeting_repo_query_shapes.py \
 	  tests/test_pretargeting_service_cache.py \
+	  tests/test_changes_service_cache.py \
 	  tests/test_cross_seat_authz_regression.py
 	cd dashboard && node_modules/.bin/vitest run src/__tests__/pretargeting-refresh.test.ts
 
