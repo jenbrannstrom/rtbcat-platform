@@ -254,6 +254,7 @@ class ApplyChangeResponse(BaseModel):
     dry_run: bool
     message: str
     updated_config: Optional[PretargetingConfigResponse] = None
+    local_refresh_succeeded: Optional[bool] = None
 
 
 class ApplyAllResponse(BaseModel):
@@ -263,6 +264,7 @@ class ApplyAllResponse(BaseModel):
     changes_applied: int
     changes_failed: int
     message: str
+    local_refresh_succeeded: Optional[bool] = None
 
 
 class DiscardAllPendingChangesResponse(BaseModel):
@@ -299,3 +301,4 @@ class RollbackResponse(BaseModel):
     changes_made: list[str]
     message: str
     history_id: Optional[int] = None
+    local_refresh_succeeded: Optional[bool] = None

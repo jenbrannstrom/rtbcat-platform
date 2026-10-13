@@ -15,6 +15,11 @@ All notable changes to Cat-Scan are documented in this file.
   for the next sync. Failed changes inside "Push to Google" are now logged.
 - Syncing pretargeting configs from Google no longer clears the custom name a
   user gave a config in the dashboard.
+- Pretargeting pushes and rollbacks now distinguish applied changes from page
+  refresh failures, refresh cached views even when sync fails, and show partial
+  batches as warnings. The API reports whether its local config refresh succeeded.
+- Pretargeting sync checks admin access to the target bidder. Config operations
+  reject an unlinked bidder when multiple service accounts make fallback ambiguous.
 
 ## [0.9.8] - 2026-09-07
 

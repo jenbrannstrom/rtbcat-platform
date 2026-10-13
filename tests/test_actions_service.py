@@ -144,6 +144,7 @@ async def test_rollback_to_snapshot_persists_optimizer_audit_context(monkeypatch
 
     assert payload["status"] == "applied"
     assert payload["history_id"] == 42
+    assert payload["local_refresh_succeeded"] is True
     assert len(client.patch_calls) == 1
     assert len(pretargeting.history_calls) == 1
     # Rollback is a Google write too: the local row is refreshed from Google.

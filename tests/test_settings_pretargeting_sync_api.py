@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import types
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -11,6 +12,7 @@ from fastapi import FastAPI
 from tests.support.asgi_client import SyncASGIClient
 
 from api.routers.settings import pretargeting as pretargeting_router
+from api import dependencies
 
 
 def _account(tmp_path, name: str):
@@ -84,12 +86,17 @@ class _StubClient:
         return None
 
 
-def _build_client(monkeypatch, seats) -> SyncASGIClient:
+def _build_client(monkeypatch, seats, *, allowed_bidders=None) -> SyncASGIClient:
     app = FastAPI()
     app.include_router(pretargeting_router.router, prefix="/api")
     app.dependency_overrides[pretargeting_router.require_seat_admin_or_sudo] = lambda: types.SimpleNamespace(
-        id="u1", role="admin", email="admin@example.com"
+        id="u1", role="sudo" if allowed_bidders is None else "admin", email="admin@example.com"
     )
+    store = types.SimpleNamespace(get_bidder_ids_for_buyer_ids=AsyncMock(return_value=allowed_bidders))
+    app.dependency_overrides[dependencies.get_store] = lambda: store
+    monkeypatch.setattr(dependencies, "get_auth_service", lambda: types.SimpleNamespace(
+        get_user_buyer_seat_ids=AsyncMock(return_value=["my-seat"]),
+    ))
     app.dependency_overrides[pretargeting_router.get_seats_service] = lambda: seats
     monkeypatch.setattr(pretargeting_router, "PretargetingService", _StubPretargetingService)
     monkeypatch.setattr(pretargeting_router, "PretargetingClient", _StubClient)
@@ -137,3 +144,46 @@ def test_sync_with_unknown_billing_id_is_404(monkeypatch, seats):
     response = client.post("/api/settings/pretargeting/sync?billing_id=does-not-exist")
 
     assert response.status_code == 404
+
+
+@pytest.mark.parametrize("query", [
+    "?billing_id=198363911721", "?service_account_id=sa-zzz-owner", "",
+])
+def test_sync_denies_foreign_bidder_before_google_or_local_writes(monkeypatch, seats, query):
+    client = _build_client(monkeypatch, seats, allowed_bidders=["bidder-foreign"])
+
+    response = client.post(f"/api/settings/pretargeting/sync{query}")
+
+    assert response.status_code == 403, response.text
+    assert _StubClient.built == []
+    assert _StubPretargetingService.saved == []
+
+
+def test_sync_allows_admin_of_target_bidder(monkeypatch, seats):
+    client = _build_client(monkeypatch, seats, allowed_bidders=["bidder-B"])
+    response = client.post("/api/settings/pretargeting/sync?billing_id=198363911721")
+    assert response.status_code == 200, response.text
+
+
+def test_sync_unlinked_bidder_with_single_account_keeps_target_bidder(monkeypatch, seats):
+    seats.owner_by_bidder = {}
+    seats.accounts = seats.accounts[:1]
+    client = _build_client(monkeypatch, seats)
+
+    response = client.post("/api/settings/pretargeting/sync?billing_id=198363911721")
+
+    assert response.status_code == 200, response.text
+    assert _StubClient.built == [{
+        "credentials_path": seats.accounts[0].credentials_path, "account_id": "bidder-B",
+    }]
+
+
+def test_sync_refuses_ambiguous_credentials_for_unlinked_bidder(monkeypatch, seats):
+    seats.owner_by_bidder = {}
+    client = _build_client(monkeypatch, seats)
+
+    response = client.post("/api/settings/pretargeting/sync?billing_id=198363911721")
+
+    assert response.status_code == 400, response.text
+    assert _StubClient.built == []
+    assert _StubPretargetingService.saved == []
