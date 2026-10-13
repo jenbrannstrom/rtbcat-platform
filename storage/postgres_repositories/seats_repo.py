@@ -279,6 +279,23 @@ class SeatsRepository:
         row = await pg_query_one("SELECT bidder_id FROM buyer_seats LIMIT 1")
         return row["bidder_id"] if row else None
 
+    async def get_service_account_for_bidder(
+        self, bidder_id: str
+    ) -> Optional[dict[str, Any]]:
+        """Get the active service account whose buyer_seats row owns this bidder."""
+        return await pg_query_one(
+            """
+            SELECT sa.id, sa.client_email, sa.project_id, sa.display_name,
+                   sa.credentials_path, sa.is_active, sa.last_used, sa.created_at
+            FROM service_accounts sa
+            JOIN buyer_seats bs ON bs.service_account_id = sa.id
+            WHERE bs.bidder_id = %s AND sa.is_active = true
+            ORDER BY sa.display_name, sa.id
+            LIMIT 1
+            """,
+            (bidder_id,),
+        )
+
     async def get_buyer_seat_with_bidder(
         self, buyer_id: str
     ) -> Optional[dict[str, Any]]:

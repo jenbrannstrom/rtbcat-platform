@@ -299,6 +299,13 @@ class SeatsService:
         """Get the first available bidder_id (for single-account scenarios)."""
         return await self.repo.get_first_bidder_id()
 
+    async def get_service_account_for_bidder(
+        self, bidder_id: str
+    ) -> Optional[ServiceAccount]:
+        """Get the active service account linked (via buyer_seats) to a bidder."""
+        row = await self.repo.get_service_account_for_bidder(bidder_id)
+        return ServiceAccount.from_row(row) if row else None
+
     async def get_buyer_seat_with_bidder(self, buyer_id: str) -> Optional[dict]:
         """Get buyer seat info including bidder_id and display_name."""
         now = time.monotonic()

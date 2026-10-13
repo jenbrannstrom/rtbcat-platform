@@ -255,7 +255,7 @@ export function ConfigBreakdownPanel({
   const applyAllMutation = useMutation({
     mutationFn: () => applyAllPendingChanges(billing_id, false),
     onSuccess: async (result) => {
-      await syncPretargetingConfigs();
+      await syncPretargetingConfigs({ billing_id });
       setPushResult({ success: true, message: result.message });
       setShowCommitToast(false);
       queryClient.invalidateQueries({ queryKey: ['pretargeting-detail', billing_id] });

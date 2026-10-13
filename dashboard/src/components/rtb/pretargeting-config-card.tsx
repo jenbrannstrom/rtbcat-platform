@@ -197,7 +197,7 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
     mutationFn: () => suspendPretargeting(config.billing_id),
     onSuccess: async (data) => {
       setPushResult({ success: true, message: data.message });
-      await syncPretargetingConfigs();
+      await syncPretargetingConfigs({ billing_id: config.billing_id });
       queryClient.invalidateQueries({ queryKey: ['pretargeting-detail', config.billing_id] });
       queryClient.invalidateQueries({ queryKey: ['pretargeting-configs'] });
       setShowConfirmSuspend(false);
@@ -211,7 +211,7 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
     mutationFn: () => activatePretargeting(config.billing_id),
     onSuccess: async (data) => {
       setPushResult({ success: true, message: data.message });
-      await syncPretargetingConfigs();
+      await syncPretargetingConfigs({ billing_id: config.billing_id });
       queryClient.invalidateQueries({ queryKey: ['pretargeting-detail', config.billing_id] });
       queryClient.invalidateQueries({ queryKey: ['pretargeting-configs'] });
     },
@@ -245,7 +245,7 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
     onSuccess: async (data) => {
       setPushResult({ success: true, message: data.message });
       setShowCommitToast(false);
-      await syncPretargetingConfigs();
+      await syncPretargetingConfigs({ billing_id: config.billing_id });
       queryClient.invalidateQueries({ queryKey: ['pretargeting-detail', config.billing_id] });
       queryClient.invalidateQueries({ queryKey: ['pretargeting-configs'] });
       queryClient.invalidateQueries({ queryKey: ['pretargeting-publishers', config.billing_id] });
