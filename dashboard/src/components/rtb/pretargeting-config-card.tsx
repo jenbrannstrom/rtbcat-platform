@@ -3,9 +3,10 @@
 import { useState, useRef, useEffect, type MouseEvent } from 'react';
 import Link from 'next/link';
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
-import { setPretargetingName, lookupGeoNames, suspendPretargeting, activatePretargeting, syncPretargetingConfigs, getPretargetingConfigDetail, createPendingChange, cancelPendingChange, applyAllPendingChanges, discardAllPretargetingChanges } from '@/lib/api';
+import { setPretargetingName, lookupGeoNames, suspendPretargeting, activatePretargeting, getPretargetingConfigDetail, createPendingChange, cancelPendingChange, applyAllPendingChanges, discardAllPretargetingChanges } from '@/lib/api';
 import { ChevronRight, Pencil, Check, X, AlertTriangle, AlertCircle, Pause, Play, Loader2, History, Upload } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { refreshPretargetingAfterMutation, type PretargetingPushResult } from '@/lib/pretargeting-refresh';
 import { SnapshotComparisonPanel } from './snapshot-comparison-panel';
 import { useAccount } from '@/contexts/account-context';
 import { toBuyerScopedPath } from '@/lib/buyer-routes';
@@ -165,7 +166,7 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
   const [showHistory, setShowHistory] = useState(false);
   const [showConfirmSuspend, setShowConfirmSuspend] = useState(false);
   const [showCommitToast, setShowCommitToast] = useState(false);
-  const [pushResult, setPushResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [pushResult, setPushResult] = useState<PretargetingPushResult | null>(null);
   const [changeError, setChangeError] = useState<string | null>(null);
   const [qpsInput, setQpsInput] = useState(
     config.maximum_qps === null || config.maximum_qps === undefined ? '' : String(config.maximum_qps)
@@ -196,10 +197,7 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
   const suspendMutation = useMutation({
     mutationFn: () => suspendPretargeting(config.billing_id),
     onSuccess: async (data) => {
-      setPushResult({ success: true, message: data.message });
-      await syncPretargetingConfigs();
-      queryClient.invalidateQueries({ queryKey: ['pretargeting-detail', config.billing_id] });
-      queryClient.invalidateQueries({ queryKey: ['pretargeting-configs'] });
+      setPushResult(await refreshPretargetingAfterMutation(queryClient, config.billing_id, data));
       setShowConfirmSuspend(false);
     },
     onError: (error: Error) => {
@@ -210,10 +208,7 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
   const activateMutation = useMutation({
     mutationFn: () => activatePretargeting(config.billing_id),
     onSuccess: async (data) => {
-      setPushResult({ success: true, message: data.message });
-      await syncPretargetingConfigs();
-      queryClient.invalidateQueries({ queryKey: ['pretargeting-detail', config.billing_id] });
-      queryClient.invalidateQueries({ queryKey: ['pretargeting-configs'] });
+      setPushResult(await refreshPretargetingAfterMutation(queryClient, config.billing_id, data));
     },
     onError: (error: Error) => {
       setPushResult({ success: false, message: error.message });
@@ -243,12 +238,8 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
   const applyAllMutation = useMutation({
     mutationFn: () => applyAllPendingChanges(config.billing_id, false),
     onSuccess: async (data) => {
-      setPushResult({ success: true, message: data.message });
-      setShowCommitToast(false);
-      await syncPretargetingConfigs();
-      queryClient.invalidateQueries({ queryKey: ['pretargeting-detail', config.billing_id] });
-      queryClient.invalidateQueries({ queryKey: ['pretargeting-configs'] });
-      queryClient.invalidateQueries({ queryKey: ['pretargeting-publishers', config.billing_id] });
+      setPushResult(await refreshPretargetingAfterMutation(queryClient, config.billing_id, data));
+      setShowCommitToast(data.changes_failed > 0);
     },
     onError: (error: Error) => {
       setPushResult({ success: false, message: error.message });
@@ -680,15 +671,17 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
       {pushResult && (
         <div className={cn(
           'px-4 py-2 border-t flex items-center justify-between',
-          pushResult.success ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'
+          pushResult.warning ? 'bg-amber-50 border-amber-200' : pushResult.success ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'
         )}>
           <div className="flex items-center gap-2 text-sm">
-            {pushResult.success ? (
+            {pushResult.warning ? (
+              <AlertTriangle className="h-4 w-4 text-amber-600" />
+            ) : pushResult.success ? (
               <Check className="h-4 w-4 text-green-600" />
             ) : (
               <AlertTriangle className="h-4 w-4 text-red-600" />
             )}
-            <span className={pushResult.success ? 'text-green-800' : 'text-red-800'}>
+            <span className={pushResult.warning ? 'text-amber-800' : pushResult.success ? 'text-green-800' : 'text-red-800'}>
               {pushResult.message}
             </span>
           </div>

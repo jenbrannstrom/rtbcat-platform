@@ -28,7 +28,8 @@ help:
 	@echo "  make v1-canary-balanced  # Run workflow canary with balanced preset"
 	@echo "  make v1-canary-aggressive # Run workflow canary with aggressive preset"
 	@echo "  make v1-conversion-regression # Run conversion/readiness regression tests"
-	@echo "  make v1-gate             # Run phase0 gate + conversion regression"
+	@echo "  make v1-pretargeting-regression # Run push, refresh, and bidder-access regression tests"
+	@echo "  make v1-gate             # Run phase0 gate + conversion and pretargeting regression"
 	@echo "  make phase0-regression   # Run core Phase 0 regression tests"
 	@echo "  make phase0-dashboard-build  # Build dashboard production bundle"
 	@echo "  make phase0-gate         # Run regression tests + dashboard build"
@@ -177,4 +178,16 @@ phase0-dashboard-build:
 
 phase0-gate: phase0-regression phase0-dashboard-build
 
-v1-gate: phase0-gate v1-conversion-regression
+.PHONY: v1-pretargeting-regression
+v1-pretargeting-regression:
+	pytest -q \
+	  tests/test_actions_service.py \
+	  tests/test_actions_service_apply_refresh.py \
+	  tests/test_settings_pretargeting_sync_api.py \
+	  tests/test_pretargeting_build_config_row.py \
+	  tests/test_pretargeting_repo_query_shapes.py \
+	  tests/test_pretargeting_service_cache.py \
+	  tests/test_cross_seat_authz_regression.py
+	cd dashboard && node_modules/.bin/vitest run src/__tests__/pretargeting-refresh.test.ts
+
+v1-gate: phase0-gate v1-conversion-regression v1-pretargeting-regression

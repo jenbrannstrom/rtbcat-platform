@@ -2,10 +2,43 @@
 
 from __future__ import annotations
 
+import json
 import time
 from typing import Any
 
 from storage.postgres_repositories.pretargeting_repo import PretargetingRepository
+
+
+def build_config_row(bidder_id: str, cfg: dict[str, Any]) -> dict[str, Any]:
+    """Map a Google pretargeting config payload onto a pretargeting_configs row.
+
+    Shared by the sync endpoint and by the apply path, so a config pushed to
+    Google is stored locally in exactly the shape a sync would store it.
+    """
+    sizes = []
+    for dim in cfg.get("includedCreativeDimensions", []) or []:
+        if dim.get("width") and dim.get("height"):
+            sizes.append(f"{dim['width']}x{dim['height']}")
+
+    geo_targeting = cfg.get("geoTargeting", {}) or {}
+    included_geos = geo_targeting.get("includedIds", []) or []
+    excluded_geos = geo_targeting.get("excludedIds", []) or []
+    included_os = cfg.get("includedMobileOperatingSystemIds", []) or []
+
+    return {
+        "bidder_id": str(bidder_id),
+        "config_id": cfg["configId"],
+        "billing_id": str(cfg.get("billingId") or "").strip() or None,
+        "display_name": cfg.get("displayName"),
+        "state": cfg.get("state", "ACTIVE"),
+        "included_formats": json.dumps(cfg.get("includedFormats", []) or []),
+        "included_platforms": json.dumps(cfg.get("includedPlatforms", []) or []),
+        "included_sizes": json.dumps(sizes),
+        "included_geos": json.dumps(included_geos),
+        "excluded_geos": json.dumps(excluded_geos),
+        "included_operating_systems": json.dumps(included_os) if included_os else None,
+        "raw_config": json.dumps(cfg),
+    }
 
 
 class PretargetingService:
