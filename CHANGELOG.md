@@ -13,6 +13,8 @@ All notable changes to Cat-Scan are documented in this file.
   follow-up sync use the service account that owns the config's bidder, and
   Google's post-push config is stored locally immediately instead of waiting
   for the next sync. Failed changes inside "Push to Google" are now logged.
+- Syncing pretargeting configs from Google no longer clears the custom name a
+  user gave a config in the dashboard.
 
 ## [0.9.8] - 2026-09-07
 
