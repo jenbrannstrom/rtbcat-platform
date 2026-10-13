@@ -8,12 +8,13 @@ from typing import Any, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from api.dependencies import get_current_user, require_seat_admin_or_sudo
+from api.dependencies import get_current_user, get_store, require_bidder_admin, require_seat_admin_or_sudo
 from collectors import PretargetingClient
 from services.auth_service import User
 from services.changes_service import ChangesService
 from services.pretargeting_service import PretargetingService, build_config_row
 from services.seats_service import SeatsService
+from storage.postgres_store import PostgresStore
 from utils.list_payloads import parse_list_payload
 
 from .models import (
@@ -79,6 +80,7 @@ async def sync_pretargeting_configs(
     ),
     _user: User = Depends(require_seat_admin_or_sudo),
     seats_service: SeatsService = Depends(get_seats_service),
+    store: PostgresStore = Depends(get_store),
 ) -> SyncPretargetingResponse:
     """Sync pretargeting configs from Google Authorized Buyers API.
 
@@ -104,7 +106,7 @@ async def sync_pretargeting_configs(
                 "No active service account linked to bidder %s (billing %s); "
                 "falling back to %s",
                 owning_bidder_id, billing_id,
-                f"service account {service_account_id}" if service_account_id else "the first active service account",
+                f"service account {service_account_id}" if service_account_id else "a single active service account",
             )
 
     # Get service account from new multi-account system
@@ -118,6 +120,11 @@ async def sync_pretargeting_configs(
             raise HTTPException(
                 status_code=400,
                 detail="No service account configured. Upload credentials via /setup."
+            )
+        if owning_bidder_id and len(accounts) != 1:
+            raise HTTPException(
+                status_code=400,
+                detail=f"No service account linked to bidder {owning_bidder_id}; link one before syncing.",
             )
         service_account = accounts[0]
 
@@ -146,6 +153,7 @@ async def sync_pretargeting_configs(
             status_code=400,
             detail="No buyer seats discovered. Use /seats/discover first."
         )
+    await require_bidder_admin(account_id, store=store, user=_user)
     logger.info(f"Using bidder_id: {account_id} for pretargeting sync")
 
     try:

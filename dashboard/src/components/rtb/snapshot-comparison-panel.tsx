@@ -28,6 +28,7 @@ import {
   Info,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { refreshPretargetingAfterMutation, type PretargetingPushResult } from '@/lib/pretargeting-refresh';
 import { useTranslation } from '@/contexts/i18n-context';
 
 interface SnapshotComparisonPanelProps {
@@ -312,7 +313,7 @@ export function SnapshotComparisonPanel({ billing_id, configName }: SnapshotComp
   const [restoreDryRunLoading, setRestoreDryRunLoading] = useState(false);
   const [restoreDryRunError, setRestoreDryRunError] = useState<string | null>(null);
   const [restoreReason, setRestoreReason] = useState('');
-  const [restoreSuccess, setRestoreSuccess] = useState<string | null>(null);
+  const [restoreSuccess, setRestoreSuccess] = useState<PretargetingPushResult | null>(null);
   const queryClient = useQueryClient();
 
   const { data: snapshots, isLoading: snapshotsLoading } = useQuery({
@@ -342,19 +343,15 @@ export function SnapshotComparisonPanel({ billing_id, configName }: SnapshotComp
       if (!restoreSnapshot) throw new Error(t.pretargeting.snapshotPanelNoSnapshotSelected);
       return rollbackSnapshot({ billing_id, snapshot_id: restoreSnapshot.id, dry_run: false });
     },
-    onSuccess: (result) => {
-      queryClient.invalidateQueries({ queryKey: ['snapshots', billing_id] });
-      queryClient.invalidateQueries({ queryKey: ['pretargeting-history'] });
-      queryClient.invalidateQueries({ queryKey: ['pretargeting-snapshots'] });
-      queryClient.invalidateQueries({ queryKey: ['config-breakdown'] });
-      queryClient.invalidateQueries({ queryKey: ['config-detail'] });
+    onSuccess: async (result) => {
       const name = restoreSnapshot?.snapshot_name || t.pretargeting.snapshotNumber.replace('{id}', String(restoreSnapshot?.id));
-      setRestoreSnapshot(null);
-      setRestoreSuccess(
-        t.pretargeting.snapshotPanelRestoreSuccess
+      const feedback = await refreshPretargetingAfterMutation(queryClient, billing_id, {
+        message: t.pretargeting.snapshotPanelRestoreSuccess
           .replace('{name}', name)
-          .replace('{count}', String(result.changes_made.length))
-      );
+          .replace('{count}', String(result.changes_made.length)),
+      });
+      setRestoreSnapshot(null);
+      setRestoreSuccess(feedback);
     },
   });
 
@@ -513,12 +510,16 @@ export function SnapshotComparisonPanel({ billing_id, configName }: SnapshotComp
 
           {/* Restore success banner */}
           {restoreSuccess && (
-            <div className="flex items-center justify-between rounded-lg bg-green-50 border border-green-200 p-3">
-              <div className="flex items-start gap-2 text-sm text-green-800">
-                <CheckCircle className="h-4 w-4 text-green-600 mt-0.5 flex-shrink-0" />
-                {restoreSuccess}
+            <div className={cn("flex items-center justify-between rounded-lg border p-3",
+              restoreSuccess.warning ? "bg-amber-50 border-amber-200 text-amber-800" : "bg-green-50 border-green-200 text-green-800"
+            )}>
+              <div className="flex items-start gap-2 text-sm">
+                {restoreSuccess.warning
+                  ? <AlertTriangle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                  : <CheckCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />}
+                {restoreSuccess.message}
               </div>
-              <button onClick={() => setRestoreSuccess(null)} className="text-green-600 hover:text-green-800">
+              <button onClick={() => setRestoreSuccess(null)} className="hover:opacity-80">
                 <X className="h-3.5 w-3.5" />
               </button>
             </div>

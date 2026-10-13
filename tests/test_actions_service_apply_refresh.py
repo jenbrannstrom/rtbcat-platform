@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import logging
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -190,6 +191,7 @@ async def test_apply_qps_change_stores_googles_updated_config(monkeypatch):
     result = await service.apply_pending_change("198363911721", 49, dry_run=False)
 
     assert result["status"] == "applied"
+    assert result["local_refresh_succeeded"] is True
     assert client.patch_calls == [{"config_id": "cfg-1", "body": {"maximumQps": 15000}, "mask": "maximumQps"}]
     assert changes.applied == [49]
     assert len(pretargeting.saved_rows) == 1
@@ -224,6 +226,7 @@ async def test_refresh_failure_does_not_undo_an_applied_change(monkeypatch, capl
         result = await service.apply_pending_change("b-1", 1, dry_run=False)
 
     assert result["status"] == "applied"
+    assert result["local_refresh_succeeded"] is False
     assert changes.applied == [1]
     assert pretargeting.saved_rows == []
     assert "failed to refresh the local row" in caplog.text
@@ -250,6 +253,7 @@ async def test_apply_all_refreshes_the_local_row_once_per_batch(monkeypatch):
     result = await service.apply_all_pending_changes("b-1", dry_run=False)
 
     assert (result["changes_applied"], result["changes_failed"]) == (2, 0)
+    assert result["local_refresh_succeeded"] is True
     assert changes.applied == [1, 2]
     assert len(client.patch_calls) == 2
     assert len(pretargeting.saved_rows) == 1
@@ -280,3 +284,84 @@ async def test_apply_all_logs_the_swallowed_failure(monkeypatch, caplog):
     assert result["changes_applied"] == 0
     assert "Failed to apply pending change 7 (set_maximum_qps=15000) for billing b-1" in caplog.text
     assert "403 PERMISSION_DENIED" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_apply_refuses_ambiguous_credentials_for_unlinked_bidder(monkeypatch, tmp_path):
+    first = _service_account(tmp_path, "first")
+    other = _service_account(tmp_path, "other")
+    seats = _SeatsStub(owner=None, first=first)
+    seats.get_service_accounts = AsyncMock(return_value=[first, other])
+    config = {"billing_id": "b-1", "config_id": "cfg-1", "bidder_id": "bidder-B"}
+    service = ActionsService(pretargeting_service=_PretargetingStub(config), seats_service=seats)
+
+    with pytest.raises(ValueError, match="link one before applying"):
+        await service._get_pretargeting_client("b-1")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("live", [
+    None,
+    {"configId": "cfg-1", "billingId": None},
+    {"configId": "cfg-1", "billingId": "wrong-billing"},
+    {"configId": "wrong-config", "billingId": "b-1"},
+])
+async def test_refresh_preserves_local_row_when_google_cannot_identify_target(live):
+    pretargeting = _PretargetingStub({"billing_id": "b-1", "config_id": "cfg-1", "bidder_id": "bidder-B"})
+    service = ActionsService(pretargeting_service=pretargeting, seats_service=object())
+    client = SimpleNamespace(get_pretargeting_config_by_id=AsyncMock(return_value=live))
+
+    refreshed = await service._refresh_local_config(client, "cfg-1", "bidder-B", "b-1")
+
+    assert refreshed is False
+    assert pretargeting.saved_rows == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure", ["google", "database"])
+async def test_batch_reports_refresh_failure_without_reclassifying_google_writes(monkeypatch, failure):
+    pretargeting = _PretargetingStub({"billing_id": "b-1", "config_id": "cfg-1", "bidder_id": "bidder-B"})
+    changes = _ChangesStub([_qps_change(1, "b-1")])
+    client = _GoogleClientStub(
+        {"configId": "cfg-1", "billingId": "b-1", "maximumQps": "10000"},
+        get_raises=RuntimeError("Google unavailable") if failure == "google" else None,
+    )
+    if failure == "database":
+        pretargeting.save_config = AsyncMock(side_effect=RuntimeError("Database unavailable"))
+    service = ActionsService(changes_service=changes, pretargeting_service=pretargeting,
+                             snapshots_service=_SnapshotsStub(), seats_service=object())
+    monkeypatch.setattr(service, "_get_pretargeting_client", AsyncMock(return_value=(client, "cfg-1", "bidder-B")))
+
+    result = await service.apply_all_pending_changes("b-1", dry_run=False)
+
+    assert result["changes_applied"] == 1
+    assert result["changes_failed"] == 0
+    assert result["local_refresh_succeeded"] is False
+    assert changes.applied == [1]
+    assert client.live_config["maximumQps"] == "15000"
+
+
+@pytest.mark.asyncio
+async def test_partial_batch_refreshes_only_the_confirmed_google_state(monkeypatch):
+    pretargeting = _PretargetingStub({"billing_id": "b-1", "config_id": "cfg-1", "bidder_id": "bidder-B"})
+    changes = _ChangesStub([_qps_change(1, "b-1", "12000"), _qps_change(2, "b-1", "15000")])
+    client = _GoogleClientStub({"configId": "cfg-1", "billingId": "b-1", "maximumQps": "10000"})
+    patch = client.patch_pretargeting_config
+
+    async def reject_second(*args, **kwargs):
+        if kwargs["update_body"]["maximumQps"] == 15000:
+            raise RuntimeError("Google rejected second change")
+        return await patch(*args, **kwargs)
+
+    client.patch_pretargeting_config = reject_second
+    service = ActionsService(changes_service=changes, pretargeting_service=pretargeting,
+                             snapshots_service=_SnapshotsStub(), seats_service=object())
+    monkeypatch.setattr(service, "_get_pretargeting_client", AsyncMock(return_value=(client, "cfg-1", "bidder-B")))
+
+    result = await service.apply_all_pending_changes("b-1", dry_run=False)
+
+    assert (result["changes_applied"], result["changes_failed"]) == (1, 1)
+    assert result["local_refresh_succeeded"] is True
+    assert changes.applied == [1]
+    assert len(pretargeting.saved_rows) == 1
+    assert json.loads(pretargeting.saved_rows[0]["raw_config"])["maximumQps"] == "12000"

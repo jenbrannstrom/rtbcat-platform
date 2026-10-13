@@ -94,6 +94,7 @@ export interface ApplyChangeResponse {
   dry_run: boolean;
   message: string;
   updated_config?: PretargetingConfigResponse;
+  local_refresh_succeeded?: boolean | null;
 }
 
 export interface ApplyAllResponse {
@@ -102,6 +103,7 @@ export interface ApplyAllResponse {
   changes_applied: number;
   changes_failed: number;
   message: string;
+  local_refresh_succeeded?: boolean | null;
 }
 
 export interface DiscardAllPendingChangesResponse {
@@ -126,6 +128,7 @@ export interface RollbackResponse {
   snapshot_id: number;
   changes_made: string[];
   message: string;
+  local_refresh_succeeded?: boolean | null;
 }
 
 export async function getRTBEndpoints(params?: {
