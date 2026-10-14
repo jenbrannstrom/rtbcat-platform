@@ -40,6 +40,7 @@ const SCOPE_LABELS: Record<AgentTokenScope, string> = {
   "agent:creatives:read": "Creative search and details",
   "agent:creative-performance:read": "Batch creative performance",
   "agent:assets:read": "Creative asset references",
+  "agent:publishers:read": "Publisher owners, managers and sales contacts",
 };
 
 const DEFAULT_SCOPE: AgentTokenScope = "agent:stats:read";

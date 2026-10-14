@@ -19,6 +19,7 @@ from .tools import (
     register_creative_tools,
     register_performance_tools,
     register_quality_tools,
+    register_publisher_tools,
 )
 from .tools.common import ToolRuntime
 
@@ -118,6 +119,7 @@ def create_app(
     register_asset_tools(server, runtime)
     register_performance_tools(server, runtime)
     register_quality_tools(server, runtime)
+    register_publisher_tools(server, runtime)
 
     streamable_app = server.streamable_http_app(
         streamable_http_path="/mcp",

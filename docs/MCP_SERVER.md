@@ -16,10 +16,19 @@ credential store, or credential-minting capability.
 | `rtbcat_get_daily_spend` | Returns canonical buyer-grain daily spend for an inclusive window of at most 90 days, including explicit missing-date evidence. |
 | `rtbcat_get_creative_performance` | Returns precomputed evidence for 1–100 creatives over an inclusive window of at most 90 days. |
 | `rtbcat_check_data_quality` | Compares canonical buyer spend with creative allocation for one buyer over an inclusive window of at most 90 days. |
+| `rtbcat_lookup_publisher` | Looks up live app/site ownership, declared managers, seller accounts and Google Marketplace contacts. Requires the separate `agent:publishers:read` scope. Source failures return explicit partial results. |
 
 Every buyer argument is checked by the Agent API against both the token's hard
 scope and the identity's seat grants. Creative-performance batches are rejected
 as a whole if any requested creative is outside that buyer.
+
+Publisher lookup is live metadata collection, not a precomputed analytics read.
+It accepts an Android package ID, numeric Apple app ID, website domain, or an
+explicit publisher/company name. Company-name results are search candidates.
+Google credentials remain in the API process; the MCP adapter only forwards the
+caller token. Existing tokens need explicit issuance with `agent:publishers:read`
+to use this new tool. See [Publisher lookup](PUBLISHER_LOOKUP.md) for Google API
+setup, source interpretation, limits, and the standalone CSV command.
 
 Clicks are never available in creative evidence:
 `rtbcat_get_creative_performance` always returns `clicks_available: false` and

@@ -19,12 +19,14 @@ AGENT_STATS_READ_SCOPE = "agent:stats:read"
 AGENT_CREATIVES_READ_SCOPE = "agent:creatives:read"
 AGENT_CREATIVE_PERFORMANCE_READ_SCOPE = "agent:creative-performance:read"
 AGENT_ASSETS_READ_SCOPE = "agent:assets:read"
+AGENT_PUBLISHERS_READ_SCOPE = "agent:publishers:read"
 AGENT_TOKEN_SCOPES = frozenset(
     {
         AGENT_STATS_READ_SCOPE,
         AGENT_CREATIVES_READ_SCOPE,
         AGENT_CREATIVE_PERFORMANCE_READ_SCOPE,
         AGENT_ASSETS_READ_SCOPE,
+        AGENT_PUBLISHERS_READ_SCOPE,
     }
 )
 AGENT_TOKEN_HEADER = "X-CatScan-Agent-Token"

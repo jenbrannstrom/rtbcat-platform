@@ -183,9 +183,13 @@ async def test_tool_descriptions_publish_all_limits() -> None:
     async with MCPHarness() as harness:
         tools = await harness.app.mcp_server.list_tools()
 
-    assert len(tools) == 7
+    assert len(tools) == 8
     for tool in tools:
         description = " ".join((tool.description or "").lower().split())
+        if tool.name == "rtbcat_lookup_publisher":
+            assert "agent:publishers:read" in description
+            assert "live metadata" in description
+            continue
         assert "token-scoped" in description
         assert "90 days" in description
         assert "100" in description

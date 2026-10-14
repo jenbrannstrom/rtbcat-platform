@@ -23,6 +23,7 @@ Outside agents use revocable app tokens:
   - `agent:creatives:read` — creative search and detail
   - `agent:creative-performance:read` — batch creative performance
   - `agent:assets:read` — creative asset references
+  - `agent:publishers:read` — live publisher owner/manager/seller/contact evidence
 - each read route enforces its own scope; `/me` accepts any valid token
 
 Do not give outside agents the legacy `CATSCAN_API_KEY`. That key authenticates

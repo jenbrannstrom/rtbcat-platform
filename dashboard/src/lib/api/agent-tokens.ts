@@ -10,6 +10,7 @@ export const AGENT_TOKEN_SCOPES = [
   "agent:creatives:read",
   "agent:creative-performance:read",
   "agent:assets:read",
+  "agent:publishers:read",
 ] as const;
 
 export type AgentTokenScope = (typeof AGENT_TOKEN_SCOPES)[number];
