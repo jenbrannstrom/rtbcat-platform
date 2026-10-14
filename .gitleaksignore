@@ -1,16 +1,16 @@
-465c73ada03772b32626143519971ab485968c17:tests/test_security_masking.py:generic-api-key:43
+6ae427fca8397dab9b126b6ce10d534da18e168a:tests/test_security_masking.py:generic-api-key:43
 89d5267adc432e747d9bfa2d071b2de608f2e9da:tests/test_security_masking.py:generic-api-key:43
-127fa9ffddfa9016a970f561e15f98c159b5a8f9:docs/AWS_DEPLOYMENT.md:aws-access-token:57
+445f4bcfc07e6f908e7bcc6be04d91e4ecb1f3d6:docs/AWS_DEPLOYMENT.md:aws-access-token:57
 2535b4916e32269786d70850c963e2bc1cbe4a4d:terraform/terraform.tfstate.backup:aws-access-token:193
 2535b4916e32269786d70850c963e2bc1cbe4a4d:terraform/terraform.tfstate.backup:aws-access-token:234
 2535b4916e32269786d70850c963e2bc1cbe4a4d:terraform/terraform.tfstate:aws-access-token:273
 2535b4916e32269786d70850c963e2bc1cbe4a4d:terraform/terraform.tfstate:aws-access-token:319
-7988bdbc58a49955bfc6e22de961eeda494c4466:tests/test_language_ai_config.py:generic-api-key:108
+30865968ea69611f5ac33f374e36ea02f3aea6ee:tests/test_language_ai_config.py:generic-api-key:108
 cfdfd4e9e6bdf430aa7bb280ac086e12ba2ac328:MCP_INTEGRATION.md:curl-auth-header:41
-fee4adad3ce09ceb68af23c12c3deb0ff3dd978f:scripts/hetzner/install_temp_google_oauth_proxy.sh:generic-api-key:5
+d67cb045990eabf965dc5a8d8387f193204db92b:scripts/hetzner/install_temp_google_oauth_proxy.sh:generic-api-key:5
 
 # Historical false positives, inspected 2026-10-14: public binary checksum,
 # public Google client-ID stem (not a client secret), and YOUR_API_KEY example.
-ffaafad9812201588611a0c9d5814ef2f3911c43:scripts/hetzner/install_temp_google_oauth_proxy.sh:generic-api-key:5
-57b8d7101d52778bda0a9388c091a04de8a087ed:docs/ai_logs/ai_log_2026-02-07.md:generic-api-key:321
-03d5c0e75e7d298338a5e291292ca3c3ea820b48:MCP_INTEGRATION.md:curl-auth-header:41
+cab9a39da1548770af5b3f8903c252e3d4c2d9f6:scripts/hetzner/install_temp_google_oauth_proxy.sh:generic-api-key:5
+654d677bb88d391b0072fbbfe65f66b0bfc05377:docs/ai_logs/ai_log_2026-02-07.md:generic-api-key:321
+cb62c53d1f3443e2929dc2a2f9d8ff98a00ce948:MCP_INTEGRATION.md:curl-auth-header:41
