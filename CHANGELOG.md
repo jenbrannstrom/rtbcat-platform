@@ -4,7 +4,53 @@ All notable changes to Cat-Scan are documented in this file.
 
 > Versioning note (March 5, 2026): canonical OSS release versions use `VERSION` + git tags (`vX.Y.Z`). Historical entries below with `10.x`-`17.x` were internal milestone labels and were not published semver release tags.
 
-## [Unreleased]
+## [0.10.0] - 2026-10-14
+
+### Added
+
+- Eight-tool read-only MCP server over Streamable HTTP, with a separate container
+  and token-scoped Agent API. Includes buyer discovery, creative search/detail,
+  asset references, daily spend, creative performance and data-quality evidence.
+- Dashboard agent-token administration: explicit buyer lists, separate read
+  scopes, expiry and immediate revocation. Sudo identities require a hard scope.
+- Live publisher lookup through the app API, Agent API, MCP and CSV CLI. Combines
+  app-store identity, ads.txt/app-ads.txt owner and manager declarations,
+  manager sellers.json and buyer-visible Google Marketplace profiles/contacts.
+  Results preserve sources, retrieval times, unknowns and partial/truncation flags.
+- Reusable stdio/HTTPS connector bridge and Grok Bot setup, validation, secure
+  token handling and rotation guide. Other MCP clients can connect by HTTP.
+
+### Changed
+
+- Creative evidence exposes allocation and reporting freshness; MCP withholds
+  unreconciled allocated spend. Canonical daily spend retains buyer currency.
+- Public release instructions describe the current manual digest-pinned Hetzner
+  build/deploy workflow. English and Chinese READMEs now cover MCP and publishers.
+- Release preflight also audits the MCP dependency bundle.
+
+### Security
+
+- Refresh Next.js, Sharp and compatible dashboard dependencies to address runtime
+  advisories. The production dependency audit has no findings.
+- Apply a tested local braces backport. A temporary exception for its single
+  development advisory expires on 2026-11-13 at 00:00 UTC. Release checks verify
+  patch integrity and reject all other high/critical findings. See
+  [Dependency mitigations](docs/DEPENDENCY_MITIGATIONS.md).
+- Retire exposed credentials, remove their values from published branch and tag
+  history, and archive obsolete branches. See [History cleanup](docs/HISTORY_CLEANUP.md).
+- Initialize QPS load timing once without reading refs during render. Preserve
+  full browser navigation at authentication boundaries under the updated linter.
+
+### Scope and compatibility
+
+- Publisher lookup adds no database migration. It returns live evidence rather
+  than storing a relationship directory; Google profiles are not a complete
+  mirror of the Authorized Buyers UI. No spend-based qualification is applied.
+- Existing tokens need `agent:publishers:read` to use publisher lookup.
+- This release also includes the previously deployed fixes below. Changes
+  between the last GitHub Release (0.9.5) and tags 0.9.6–0.9.8 are listed in their
+  dated sections, including multi-currency reporting and user administration.
+
 
 ### Fixed
 

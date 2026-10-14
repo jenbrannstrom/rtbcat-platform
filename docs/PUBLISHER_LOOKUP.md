@@ -76,9 +76,8 @@ The lookup does not relink accounts or update their metadata.
 distinct outcomes. Public evidence remains available when Google cannot be
 queried. A rejected filter is not an empty result.
 
-Live verification on 2026-10-14: the Marketplace API was enabled in
-`catscan-prod-202601`. The app's service account can read profiles for buyers
-`6574658621` and `6634662463`. Seller-code and company-name filters work.
+Live verification on 2026-10-14 confirmed profile access for two configured buyer
+seats. Seller-code and company-name filters work.
 Google currently rejects the documented nested app-field path and returns HTTP
 500 for domain filters. When no usable Google DIRECT account is available,
 the app/domain query still reports its explicit upstream failure. It never

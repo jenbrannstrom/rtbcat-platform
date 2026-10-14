@@ -493,8 +493,9 @@ function WasteAnalysisContent() {
 
   const initialDays = parseInt(searchParams.get("days") || "7", 10);
   const [days, setDays] = useState<number>(initialDays);
-  const loadCycleStartedAtRef = useRef<number>(Date.now());
-  const perfMarkPrefixRef = useRef<string>(`catscan:qps:${loadCycleStartedAtRef.current}`);
+  const [initialLoadStartedAt] = useState(() => Date.now());
+  const loadCycleStartedAtRef = useRef<number>(initialLoadStartedAt);
+  const perfMarkPrefixRef = useRef<string>(`catscan:qps:${initialLoadStartedAt}`);
   const firstTableRowMsRef = useRef<number | null>(null);
   const tableHydratedMsRef = useRef<number | null>(null);
   const startupApiLatencyMsRef = useRef<Record<string, number>>({});

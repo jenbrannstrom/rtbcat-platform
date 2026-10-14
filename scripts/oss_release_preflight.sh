@@ -65,7 +65,7 @@ fi
 info "Running gitleaks secret scan"
 
 if command -v gitleaks &>/dev/null; then
-  if gitleaks detect --source="$REPO_ROOT" --no-banner --exit-code 1 2>&1; then
+  if gitleaks detect --source="$REPO_ROOT" --no-banner --redact --exit-code 1 2>&1; then
     green "  gitleaks: clean"
   else
     fail "gitleaks found secrets — review output above"
@@ -81,7 +81,7 @@ if [[ "$QUICK" == false ]]; then
   info "Running pip-audit on Python requirements files"
 
   if [[ -n "$PIP_AUDIT_BIN" ]]; then
-    for req in requirements.txt requirements-ai.txt requirements-dev.txt; do
+    for req in requirements.txt requirements-ai.txt requirements-dev.txt requirements-mcp.txt; do
       if "$PIP_AUDIT_BIN" -r "$REPO_ROOT/$req" 2>&1; then
         green "  pip-audit: $req is clean"
       else
@@ -102,10 +102,10 @@ if [[ "$QUICK" == false ]]; then
   info "Running npm audit on dashboard/"
 
   if command -v npm &>/dev/null; then
-    if (cd "$REPO_ROOT/dashboard" && npm audit --audit-level=high 2>&1); then
-      green "  npm audit: no high/critical vulnerabilities"
+    if (cd "$REPO_ROOT/dashboard" && npm run test:audit-policy && npm run audit:release 2>&1); then
+      green "  npm release audit: no unapproved high/critical vulnerabilities"
     else
-      fail "npm audit found high/critical vulnerabilities"
+      fail "npm release audit failed (findings, patch integrity, tests, expiry, or audit availability)"
     fi
   else
     red "  SKIP: npm not installed"

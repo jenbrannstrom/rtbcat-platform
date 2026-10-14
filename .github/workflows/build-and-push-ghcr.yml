@@ -26,6 +26,20 @@ jobs:
       - name: Checkout exact workflow commit
         uses: actions/checkout@v6
 
+      - name: Set up Node.js for the release audit
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: dashboard/package-lock.json
+
+      - name: Check dependency policy before publishing images
+        working-directory: dashboard
+        run: |
+          npm ci
+          npm run test:audit-policy
+          npm run audit:release
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -66,6 +80,7 @@ jobs:
             tests/test_agent_creatives.py \
             tests/test_agent_creative_performance.py \
             tests/test_mcp_server_tools.py \
+            tests/test_mcp_stdio_bridge.py \
             tests/test_publisher_lookup.py \
             tests/test_mcp_server_auth_and_limits.py \
             tests/test_mcp_deployment_wiring.py \

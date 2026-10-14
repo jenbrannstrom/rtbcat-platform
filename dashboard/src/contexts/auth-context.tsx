@@ -210,6 +210,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSeatPermissions({});
     resetRedirectCount();
     // Redirect to login page
+    // A full navigation discards the previous identity's in-memory client caches.
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination
     window.location.href = "/login";
   }, []);
 
@@ -248,6 +250,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           ? `${window.location.pathname}${window.location.search}`
           : safePathname
       );
+      // Reset client state when the authenticated session is lost.
+      // eslint-disable-next-line @next/next/no-location-assign-relative-destination
       window.location.href = `/login?callbackUrl=${callbackUrl}`;
     }
   }, [initialized, isLoading, user, isPublicPage, safePathname, authError]);

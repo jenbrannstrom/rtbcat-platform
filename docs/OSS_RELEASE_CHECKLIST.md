@@ -16,8 +16,8 @@ Run locally before pushing:
 |------|------|:---------------:|
 | No secrets in repo history | `gitleaks detect` | Yes |
 | No forbidden tracked files | git ls-files pattern scan | Yes |
-| Python dependency bundles free of known CVEs | `pip-audit` on `requirements.txt`, `requirements-ai.txt`, `requirements-dev.txt` | Yes |
-| Node deps free of high/critical CVEs | `npm audit --audit-level=high` | Yes |
+| Python dependency bundles free of known CVEs | `pip-audit` on `requirements.txt`, `requirements-ai.txt`, `requirements-dev.txt`, `requirements-mcp.txt` | Yes |
+| Node deps have no unapproved high/critical findings | `cd dashboard && npm run audit:release` | Yes |
 | `SECURITY.md` present at root | file check | Yes |
 | `LICENSE` present at root | file check | Yes |
 | `.gitignore` covers `.env`, `*.db`, `*.tfstate`, `terraform.tfvars` | pattern check | Yes |
@@ -25,13 +25,23 @@ Run locally before pushing:
 | `pyproject.toml` version matches `VERSION` | metadata check | Yes |
 
 CI equivalent: `.github/workflows/oss-release-preflight.yml` (runs on PRs and manual dispatch).
+Run `npm ci` in `dashboard/` before the local preflight. The release gate includes
+both production and full audits. The only approved exception covers the exact
+patched development dependency `braces` 3.0.3 and expires on 2026-11-13 at 00:00 UTC.
+All other high/critical findings remain blockers. The patch, evidence and limits are in
+[Dependency mitigations](DEPENDENCY_MITIGATIONS.md).
+
+The PR secret-scanner action checks the PR's commit range. Before tagging, also
+run the local full-history scan and manually dispatch preflight on the exact
+release ref. A green PR secret check does not clear historical findings.
 
 ---
 
 ## Runtime Configuration Gates
 
-These must be set in the production `.env` / environment **before** the release
-is tagged. Verify with the runtime health endpoint (`/api/system/health`).
+For a release represented as deployed, verify the exact deployed image digests,
+health, auth boundary and an authenticated MCP call. Publishing source alone does
+not replace the production containers. Record deployed and source SHAs separately.
 
 ### 1. Disable public OpenAPI docs
 
@@ -48,26 +58,25 @@ application strips these routes at startup when this variable is set.
 SECRETS_HEALTH_STRICT=true
 ```
 
-Forces the `/api/system/secrets-health` endpoint to return a non-200 status
-if any required secret is missing or invalid. Prevents deploying with
-placeholder credentials.
+Makes application startup fail when required secrets are missing. Keep it enabled
+and run the host verifier; setting the flag does not validate every upstream permission.
 
-### 3. Runtime health strict pass
+### 3. Runtime verification
 
-```
-RUNTIME_HEALTH_STRICT=true
-```
-
-Makes the startup health-check fail hard if any critical subsystem
-(database, Cloud SQL Proxy, secrets) is unreachable. Prevents a
-"looks-green-but-broken" deploy.
-
-Verify all three:
+Run the maintained host verifier with the manifest, correct host posture and MCP
+setting. `SECRETS_HEALTH_STRICT` is an application startup check;
+`RUNTIME_HEALTH_STRICT` is not a substitute for the actual verifier.
 
 ```bash
-curl -sf https://YOUR_DOMAIN/api/system/health | jq .
-# configured: true, database_exists: true, status: "healthy"
+sudo scripts/hetzner/verify_app_release.sh \
+  --release-file /path/hetzner-release.env \
+  --mode production --mcp-enabled true --with-google
 ```
+
+Check `/health` for a healthy database and the expected `git_sha`, `/login` for
+access, protected routes for rejection without authentication, and MCP tool calls
+for both permitted and denied buyer access. Public MCP `/health` alone proves
+availability, not authorization or data freshness.
 
 ### 4. Runtime strict latency budget (time-boxed waiver policy)
 
@@ -90,35 +99,29 @@ If a temporary override is used for historical-rollup aging, it must include:
 
 Before tagging a release, a maintainer must confirm:
 
-- [ ] `git log --oneline --all -- '*.env' '*.tfstate' '*credentials*'` returns empty.
-- [ ] No hardcoded IPs, project IDs, or real domains outside `docs/` examples.
+- [ ] Review history matches for secret-bearing files, including deleted ones.
+  Scripts with `credentials` in their name are not credentials by themselves.
+  Every scanner finding has a documented disposition: verified non-secret, or
+  revoked/rotated credential with coordinated history cleanup. Unresolved real
+  credentials block publication; adding an ignore entry is not remediation.
+- [ ] No private infrastructure/customer identifiers or secrets in the release
+  diff. Documented public product endpoints and example/private-network defaults
+  are permitted; private operational details belong outside tracked files.
 - [ ] `docs/SECURITY.md` deployment guidance is up to date.
 - [ ] `VERSION` value matches intended release tag (`v$(cat VERSION)`).
 - [ ] CHANGELOG.md covers all user-facing changes since last release.
-- [ ] The preflight workflow is green on the release branch.
+- [ ] The preflight and required security/regression workflows are green on the
+  exact release commit. Evidence from an older commit is not sufficient.
+- [ ] Grok instructions include secure token entry, seat scope, expiry, revocation,
+  cloud-computer sharing and an authenticated tool-call acceptance check.
+- [ ] Source publication, image build and production deployment are reported separately.
 
 ---
 
-## Release Tag Sequence
+## Release sequence
 
-```bash
-# 1. Ensure preflight passes
-./scripts/oss_release_preflight.sh
-
-# 2. Bump VERSION file
-echo "1.0.0" > VERSION
-
-# 3. Update CHANGELOG.md and commit
-git add VERSION CHANGELOG.md
-git commit -m "release: v1.0.0"
-
-# 4. Create annotated release tag (must match VERSION)
-git tag -a v1.0.0 -m "v1.0.0"
-
-# 5. Push branch, then push tag (tag triggers build-and-push workflow)
-git push origin main
-git push origin v1.0.0
-
-# 6. Confirm release tag ordering
-git tag --list 'v*' --sort=-v:refname | head -n 5
-```
+Follow [VERSIONING.md](VERSIONING.md). Complete checks, update both version files
+and the changelog, review/merge, then create the matching annotated tag and GitHub
+Release. Sync the same approved refs to Gitee only with working authentication.
+The image build and production deployment are separate manual actions; a tag
+push does not trigger either.

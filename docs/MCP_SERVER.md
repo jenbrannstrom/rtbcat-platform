@@ -85,6 +85,10 @@ spend comes directly from the canonical buyer-grain lane.
 
 ## Client configuration
 
+For Grok Bot, follow [the setup and token-rotation guide](GROK_BOT.md). The
+repository includes `integrations/grok/stdio_bridge.py` for clients that require a
+command-based connector. Clients with Streamable HTTP support can connect directly.
+
 The production endpoint is `https://mcp.rtb.cat/mcp` using Streamable HTTP.
 Availability is governed by the deployment's kill switch
 (`CATSCAN_MCP_ENABLED`); when it is off the endpoint returns HTTP 503 while

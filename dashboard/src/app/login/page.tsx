@@ -220,6 +220,8 @@ export default function LoginPage() {
 
     setIsLoading(true);
     // Redirect to backend Authing auth endpoint
+    // This backend endpoint must navigate the browser through the identity provider.
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination
     window.location.href = `/api/auth/authing/login?callback_url=${encodeURIComponent(callbackUrl)}`;
   };
 
@@ -232,6 +234,8 @@ export default function LoginPage() {
 
     setIsLoading(true);
     // Redirect to OAuth2 Proxy sign-in
+    // OAuth2 Proxy is a server redirect endpoint, not a Next.js page.
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination
     window.location.href = `/oauth2/sign_in?rd=${encodeURIComponent(callbackUrl)}`;
   };
 

@@ -103,7 +103,8 @@ jobs:
         run: |
           cd dashboard
           npm ci
-          npm audit --audit-level=high
+          npm run test:audit-policy
+          npm run audit:release
 
       - name: Fail on pip-audit findings
         if: ${{ always() && env.PIP_AUDIT_FAILED == '1' }}
