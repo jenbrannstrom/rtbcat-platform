@@ -206,7 +206,7 @@ export function RecommendationCard({
         </div>
 
         {/* Impact Badge */}
-        <div className="text-right flex-shrink-0">
+        <div className="text-right shrink-0">
           {impact.wasted_spend_usd > 0 ? (
             <>
               <div className="text-lg font-bold text-gray-900">
@@ -263,19 +263,19 @@ export function RecommendationCard({
           <div>
             <h4 className="text-sm font-medium text-gray-700 mb-2">{t.recommendations.impactSectionTitle}</h4>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <div className="bg-white rounded p-2 text-center">
+              <div className="bg-white rounded-sm p-2 text-center">
                 <div className="text-lg font-semibold">{impact.wasted_queries_daily.toLocaleString()}</div>
                 <div className="text-xs text-gray-500">{t.recommendations.queriesPerDay}</div>
               </div>
-              <div className="bg-white rounded p-2 text-center">
+              <div className="bg-white rounded-sm p-2 text-center">
                 <div className="text-lg font-semibold">${impact.wasted_spend_usd.toFixed(2)}</div>
                 <div className="text-xs text-gray-500">{t.recommendations.wastedSpend}</div>
               </div>
-              <div className="bg-white rounded p-2 text-center">
+              <div className="bg-white rounded-sm p-2 text-center">
                 <div className="text-lg font-semibold">{impact.percent_of_total_waste.toFixed(1)}%</div>
                 <div className="text-xs text-gray-500">{t.recommendations.ofTotalWaste}</div>
               </div>
-              <div className="bg-white rounded p-2 text-center">
+              <div className="bg-white rounded-sm p-2 text-center">
                 <div className="text-lg font-semibold">${impact.potential_savings_monthly.toFixed(0)}</div>
                 <div className="text-xs text-gray-500">{t.recommendations.savingsPerMonth}</div>
               </div>
@@ -306,7 +306,7 @@ export function RecommendationCard({
               <h4 className="text-sm font-medium text-gray-700 mb-2">{t.recommendations.recommendedActionsSectionTitle}</h4>
               <div className="space-y-2">
                 {recommendation.actions.map((action, i) => (
-                  <div key={i} className="bg-white rounded p-3 border border-gray-200">
+                  <div key={i} className="bg-white rounded-sm p-3 border border-gray-200">
                     <div className="flex items-center justify-between">
                       <div>
                         <span className="text-sm font-medium capitalize">
@@ -317,13 +317,13 @@ export function RecommendationCard({
                         </span>
                       </div>
                       {action.pretargeting_field && (
-                        <span className="text-xs bg-gray-100 px-2 py-1 rounded">
+                        <span className="text-xs bg-gray-100 px-2 py-1 rounded-sm">
                           {action.pretargeting_field}
                         </span>
                       )}
                     </div>
                     {action.api_example && (
-                      <pre className="mt-2 text-xs bg-gray-50 p-2 rounded overflow-x-auto">
+                      <pre className="mt-2 text-xs bg-gray-50 p-2 rounded-sm overflow-x-auto">
                         {action.api_example}
                       </pre>
                     )}

@@ -123,9 +123,9 @@ export default function RetentionSettingsPage() {
     return (
       <div className="p-6 max-w-2xl mx-auto">
         <div className="animate-pulse space-y-4">
-          <div className="h-8 bg-gray-200 rounded w-1/3"></div>
-          <div className="h-4 bg-gray-200 rounded w-1/2"></div>
-          <div className="h-32 bg-gray-200 rounded"></div>
+          <div className="h-8 bg-gray-200 rounded-sm w-1/3"></div>
+          <div className="h-4 bg-gray-200 rounded-sm w-1/2"></div>
+          <div className="h-32 bg-gray-200 rounded-sm"></div>
         </div>
       </div>
     );
@@ -195,7 +195,7 @@ export default function RetentionSettingsPage() {
           <select
             value={rawDays}
             onChange={(e) => setRawDays(Number(e.target.value))}
-            className="border rounded px-3 py-2 w-full"
+            className="border rounded-sm px-3 py-2 w-full"
           >
             <option value={30}>{t.retentionPage.option30Days}</option>
             <option value={60}>{t.retentionPage.option60Days}</option>
@@ -216,7 +216,7 @@ export default function RetentionSettingsPage() {
           <select
             value={summaryDays}
             onChange={(e) => setSummaryDays(Number(e.target.value))}
-            className="border rounded px-3 py-2 w-full"
+            className="border rounded-sm px-3 py-2 w-full"
           >
             <option value={180}>{t.retentionPage.option6Months}</option>
             <option value={365}>{t.retentionPage.option1YearRecommended}</option>
@@ -236,7 +236,7 @@ export default function RetentionSettingsPage() {
           <select
             value={autoAggregateDays}
             onChange={(e) => setAutoAggregateDays(Number(e.target.value))}
-            className="border rounded px-3 py-2 w-full"
+            className="border rounded-sm px-3 py-2 w-full"
           >
             <option value={7}>{t.retentionPage.option7Days}</option>
             <option value={14}>{t.retentionPage.option14Days}</option>

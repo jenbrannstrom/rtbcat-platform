@@ -1013,7 +1013,7 @@ export default function SystemStatusPage() {
               {!systemStatus.ffmpeg_available && (
                 <div className="p-3 bg-yellow-50 rounded-lg text-sm text-yellow-800">
                   <strong>{t.settings.ffmpegNotInstalled}</strong>
-                  <code className="block mt-1 bg-yellow-100 p-2 rounded font-mono text-xs">
+                  <code className="block mt-1 bg-yellow-100 p-2 rounded-sm font-mono text-xs">
                     sudo apt install ffmpeg
                   </code>
                 </div>
@@ -1033,7 +1033,7 @@ export default function SystemStatusPage() {
             </div>
             <span
               className={cn(
-                "inline-flex items-center rounded px-2 py-1 text-xs font-medium",
+                "inline-flex items-center rounded-sm px-2 py-1 text-xs font-medium",
                 selectedBuyerId ? "bg-green-50 text-green-700" : "bg-amber-50 text-amber-700",
               )}
             >
@@ -1041,7 +1041,7 @@ export default function SystemStatusPage() {
             </span>
           </div>
           {!selectedBuyerId ? (
-            <div className="mb-4 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+            <div className="mb-4 rounded-sm border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
               Select a buyer context in the header for buyer-scoped optimizer actions and telemetry.
             </div>
           ) : null}
@@ -1207,7 +1207,7 @@ export default function SystemStatusPage() {
                             <td className="px-3 py-2">
                               <span
                                 className={cn(
-                                  "inline-flex rounded px-2 py-0.5 text-xs font-medium",
+                                  "inline-flex rounded-sm px-2 py-0.5 text-xs font-medium",
                                   row.is_active ? "bg-green-50 text-green-700" : "bg-slate-100 text-slate-700",
                                 )}
                               >
@@ -1220,7 +1220,7 @@ export default function SystemStatusPage() {
                                   type="button"
                                   onClick={() => setSelectedModelId(row.model_id)}
                                   className={cn(
-                                    "rounded px-2 py-1 text-xs font-medium",
+                                    "rounded-sm px-2 py-1 text-xs font-medium",
                                     selectedModelId === row.model_id
                                       ? "bg-indigo-50 text-indigo-700"
                                       : "bg-slate-100 text-slate-700",
@@ -1238,7 +1238,7 @@ export default function SystemStatusPage() {
                                   }
                                   disabled={modelActivationMutation.isPending}
                                   className={cn(
-                                    "rounded px-2 py-1 text-xs font-medium",
+                                    "rounded-sm px-2 py-1 text-xs font-medium",
                                     row.is_active
                                       ? "bg-amber-50 text-amber-700"
                                       : "bg-blue-50 text-blue-700",
@@ -1445,7 +1445,7 @@ export default function SystemStatusPage() {
                       <div className="rounded-lg border border-gray-200 p-2">
                         <div className="text-[11px] text-gray-500">Readiness (14d)</div>
                         <div className="mt-1">
-                          <span className={cn("rounded px-2 py-0.5 text-xs font-medium", conversionReadinessTone)}>
+                          <span className={cn("rounded-sm px-2 py-0.5 text-xs font-medium", conversionReadinessTone)}>
                             {conversionReadiness?.state || "-"}
                           </span>
                         </div>
@@ -1466,7 +1466,7 @@ export default function SystemStatusPage() {
                     </div>
 
                     {conversionReadinessReasons.length ? (
-                      <div className="space-y-1 rounded border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] text-amber-800">
+                      <div className="space-y-1 rounded-sm border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] text-amber-800">
                         {conversionReadinessReasons.slice(0, 3).map((reason) => (
                           <div key={reason}>- {reason}</div>
                         ))}
@@ -1474,12 +1474,12 @@ export default function SystemStatusPage() {
                     ) : null}
 
                     {conversionWebhookSecurityStatus ? (
-                      <div className="space-y-2 rounded border border-gray-200 p-2">
+                      <div className="space-y-2 rounded-sm border border-gray-200 p-2">
                         <div className="text-[11px] font-semibold text-gray-600">
                           Webhook Security Posture
                         </div>
                         <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
-                          <div className="rounded border border-gray-200 p-2">
+                          <div className="rounded-sm border border-gray-200 p-2">
                             <div className="text-[11px] text-gray-500">Source Coverage</div>
                             <div className="mt-1 text-sm font-semibold text-gray-900">
                               {securityEnabledSources}/{conversionWebhookSecurityStatus.sources.length}
@@ -1488,12 +1488,12 @@ export default function SystemStatusPage() {
                               sources with secret or HMAC enabled
                             </div>
                           </div>
-                          <div className="rounded border border-gray-200 p-2">
+                          <div className="rounded-sm border border-gray-200 p-2">
                             <div className="text-[11px] text-gray-500">Freshness</div>
                             <div className="mt-1">
                               <span
                                 className={cn(
-                                  "rounded px-2 py-0.5 text-xs font-medium",
+                                  "rounded-sm px-2 py-0.5 text-xs font-medium",
                                   conversionWebhookSecurityStatus.freshness_enforced
                                     ? "bg-green-50 text-green-700"
                                     : "bg-slate-100 text-slate-700",
@@ -1506,12 +1506,12 @@ export default function SystemStatusPage() {
                               max skew {conversionWebhookSecurityStatus.max_skew_seconds}s
                             </div>
                           </div>
-                          <div className="rounded border border-gray-200 p-2">
+                          <div className="rounded-sm border border-gray-200 p-2">
                             <div className="text-[11px] text-gray-500">Rate Limit</div>
                             <div className="mt-1">
                               <span
                                 className={cn(
-                                  "rounded px-2 py-0.5 text-xs font-medium",
+                                  "rounded-sm px-2 py-0.5 text-xs font-medium",
                                   conversionWebhookSecurityStatus.rate_limit_enabled
                                     ? "bg-green-50 text-green-700"
                                     : "bg-slate-100 text-slate-700",
@@ -1617,7 +1617,7 @@ export default function SystemStatusPage() {
                   <div className="flex items-center gap-2">
                     <div
                       className={cn(
-                        "rounded px-2 py-1 text-xs font-medium",
+                        "rounded-sm px-2 py-1 text-xs font-medium",
                         optimizerSetup?.effective_cpm_enabled
                           ? "bg-green-50 text-green-700"
                           : "bg-slate-100 text-slate-600",
@@ -1677,7 +1677,7 @@ export default function SystemStatusPage() {
                       onClick={() => validateModelMutation.mutate()}
                       disabled={validateModelMutation.isPending || !selectedModelId}
                       className={cn(
-                        "rounded border border-slate-300 px-3 py-2 text-xs font-medium text-slate-700",
+                        "rounded-sm border border-slate-300 px-3 py-2 text-xs font-medium text-slate-700",
                         (validateModelMutation.isPending || !selectedModelId) &&
                           "cursor-not-allowed opacity-50",
                       )}
@@ -1721,7 +1721,7 @@ export default function SystemStatusPage() {
                       onClick={() => applyWorkflowPreset(presetKey)}
                       disabled={scoreAndProposeMutation.isPending}
                       className={cn(
-                        "rounded border px-2 py-1 text-xs font-medium",
+                        "rounded-sm border px-2 py-1 text-xs font-medium",
                         workflowPreset === presetKey
                           ? "border-primary-500 bg-primary-50 text-primary-700"
                           : "border-slate-300 text-slate-700 hover:bg-slate-50",
@@ -1732,7 +1732,7 @@ export default function SystemStatusPage() {
                     </button>
                   ))}
                   {workflowPreset === "custom" ? (
-                    <span className="rounded border border-amber-300 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700">
+                    <span className="rounded-sm border border-amber-300 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700">
                       Custom
                     </span>
                   ) : null}
@@ -1822,7 +1822,7 @@ export default function SystemStatusPage() {
                     value={modelValidationPayloadInput}
                     onChange={(e) => setModelValidationPayloadInput(e.target.value)}
                     rows={5}
-                    className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 font-mono text-xs text-gray-700 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                    className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 font-mono text-xs text-gray-700 focus:border-primary-500 focus:outline-hidden focus:ring-1 focus:ring-primary-500"
                     placeholder='{"features":[{"feature_id":"f1","spend_usd":12.3}]}'
                     disabled={validateModelMutation.isPending}
                   />
@@ -1831,7 +1831,7 @@ export default function SystemStatusPage() {
                   </span>
                 </label>
                 {optimizerNotice ? (
-                  <div className="mt-3 rounded bg-slate-50 px-3 py-2 text-xs text-slate-700">
+                  <div className="mt-3 rounded-sm bg-slate-50 px-3 py-2 text-xs text-slate-700">
                     {optimizerNotice}
                   </div>
                 ) : null}
@@ -1845,7 +1845,7 @@ export default function SystemStatusPage() {
                     <select
                       value={qpsPageSloSinceHours}
                       onChange={(e) => setQpsPageSloSinceHours(Number(e.target.value))}
-                      className="rounded border border-gray-300 bg-white px-1.5 py-0.5 text-[11px] text-gray-700"
+                      className="rounded-sm border border-gray-300 bg-white px-1.5 py-0.5 text-[11px] text-gray-700"
                     >
                       <option value={24}>24h</option>
                       <option value={72}>72h</option>
@@ -1904,7 +1904,7 @@ export default function SystemStatusPage() {
                         <div className="mt-1">
                           <span
                             className={cn(
-                              "rounded px-2 py-0.5 text-xs font-medium",
+                              "rounded-sm px-2 py-0.5 text-xs font-medium",
                               qpsPageLoadSummarySloPass
                                 ? "bg-green-50 text-green-700"
                                 : qpsPageLoadSummarySloDegraded
@@ -1956,7 +1956,7 @@ export default function SystemStatusPage() {
                     )}
 
                     {qpsApiLatencyRollupRows.length ? (
-                      <div className="space-y-2 rounded border border-gray-200 p-2">
+                      <div className="space-y-2 rounded-sm border border-gray-200 p-2">
                         <div className="text-[11px] font-semibold text-gray-600">
                           API latency rollup (last 24h)
                         </div>
@@ -1992,7 +1992,7 @@ export default function SystemStatusPage() {
                     ) : null}
 
                     {qpsPageLoadSummary.time_buckets.length ? (
-                      <div className="space-y-2 rounded border border-gray-200 p-2">
+                      <div className="space-y-2 rounded-sm border border-gray-200 p-2">
                         <div className="text-[11px] font-semibold text-gray-600">
                           Latency trend buckets ({qpsPageSloBucketHours}h)
                         </div>
@@ -2115,7 +2115,7 @@ export default function SystemStatusPage() {
                             <td className="px-3 py-2">
                               <span
                                 className={cn(
-                                  "inline-flex rounded px-2 py-0.5 text-xs font-medium",
+                                  "inline-flex rounded-sm px-2 py-0.5 text-xs font-medium",
                                   row.status === "draft" && "bg-slate-100 text-slate-700",
                                   row.status === "approved" && "bg-blue-50 text-blue-700",
                                   row.status === "applied" && "bg-green-50 text-green-700",
@@ -2138,7 +2138,7 @@ export default function SystemStatusPage() {
                                     }
                                     disabled={proposalActionMutation.isPending}
                                     className={cn(
-                                      "rounded bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700",
+                                      "rounded-sm bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700",
                                       proposalActionMutation.isPending &&
                                         pendingProposalId === row.proposal_id &&
                                         "opacity-60",
@@ -2157,7 +2157,7 @@ export default function SystemStatusPage() {
                                     }
                                     disabled={proposalActionMutation.isPending}
                                     className={cn(
-                                      "rounded bg-green-50 px-2 py-1 text-xs font-medium text-green-700",
+                                      "rounded-sm bg-green-50 px-2 py-1 text-xs font-medium text-green-700",
                                       proposalActionMutation.isPending &&
                                         pendingProposalId === row.proposal_id &&
                                         "opacity-60",
@@ -2177,7 +2177,7 @@ export default function SystemStatusPage() {
                                       }
                                       disabled={proposalActionMutation.isPending}
                                       className={cn(
-                                        "rounded bg-slate-100 px-2 py-1 text-xs font-medium text-slate-700",
+                                        "rounded-sm bg-slate-100 px-2 py-1 text-xs font-medium text-slate-700",
                                         proposalActionMutation.isPending &&
                                           pendingProposalId === row.proposal_id &&
                                           "opacity-60",
@@ -2195,7 +2195,7 @@ export default function SystemStatusPage() {
                                         setRollbackReason("");
                                         setRollbackPreview(null);
                                       }}
-                                      className="rounded bg-orange-50 px-2 py-1 text-xs font-medium text-orange-700"
+                                      className="rounded-sm bg-orange-50 px-2 py-1 text-xs font-medium text-orange-700"
                                     >
                                       Rollback
                                     </button>
@@ -2207,7 +2207,7 @@ export default function SystemStatusPage() {
                                   type="button"
                                   onClick={() => setSelectedProposalHistoryId(row.proposal_id)}
                                   className={cn(
-                                    "rounded px-2 py-1 text-xs font-medium",
+                                    "rounded-sm px-2 py-1 text-xs font-medium",
                                     selectedProposalHistoryId === row.proposal_id
                                       ? "bg-indigo-50 text-indigo-700"
                                       : "bg-slate-100 text-slate-700",
@@ -2418,7 +2418,7 @@ export default function SystemStatusPage() {
                           <td className="px-3 py-2">
                             <span
                               className={cn(
-                                "inline-flex rounded px-2 py-0.5 text-xs font-medium",
+                                "inline-flex rounded-sm px-2 py-0.5 text-xs font-medium",
                                 row.availability_state === "healthy" && "bg-green-50 text-green-700",
                                 row.availability_state === "degraded" && "bg-yellow-50 text-yellow-700",
                                 row.availability_state === "unavailable" && "bg-red-50 text-red-700"
@@ -2617,7 +2617,7 @@ export default function SystemStatusPage() {
               {!thumbnailStatus.ffmpeg_available && (
                 <div className="p-3 bg-yellow-50 rounded-lg text-sm text-yellow-800">
                   <strong>{t.settings.ffmpegNotFoundInstall}</strong>
-                  <code className="block mt-1 bg-yellow-100 p-2 rounded font-mono text-xs">
+                  <code className="block mt-1 bg-yellow-100 p-2 rounded-sm font-mono text-xs">
                     sudo apt install ffmpeg
                   </code>
                 </div>
@@ -2653,7 +2653,7 @@ export default function SystemStatusPage() {
                   <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
                 </div>
               ) : rollbackSnapshotsError ? (
-                <div className="rounded bg-red-50 px-3 py-2 text-xs text-red-700">
+                <div className="rounded-sm bg-red-50 px-3 py-2 text-xs text-red-700">
                   {rollbackSnapshotsError instanceof Error
                     ? rollbackSnapshotsError.message
                     : "Failed to load snapshots."}
@@ -2677,7 +2677,7 @@ export default function SystemStatusPage() {
                   </label>
 
                   {selectedRollbackSnapshot ? (
-                    <div className="rounded border border-gray-200 px-3 py-2 text-xs text-gray-600">
+                    <div className="rounded-sm border border-gray-200 px-3 py-2 text-xs text-gray-600">
                       selected snapshot: #{selectedRollbackSnapshot.id}{" "}
                       {selectedRollbackSnapshot.snapshot_name || selectedRollbackSnapshot.snapshot_type}
                     </div>
@@ -2693,7 +2693,7 @@ export default function SystemStatusPage() {
                         !selectedRollbackSnapshotId
                       }
                       className={cn(
-                        "rounded border border-slate-300 px-3 py-2 text-xs font-medium text-slate-700",
+                        "rounded-sm border border-slate-300 px-3 py-2 text-xs font-medium text-slate-700",
                         (rollbackPreviewMutation.isPending ||
                           rollbackExecuteMutation.isPending ||
                           !selectedRollbackSnapshotId) &&
@@ -2705,7 +2705,7 @@ export default function SystemStatusPage() {
                   </div>
 
                   {rollbackPreview ? (
-                    <div className="space-y-2 rounded border border-gray-200 px-3 py-2">
+                    <div className="space-y-2 rounded-sm border border-gray-200 px-3 py-2">
                       <div className="text-xs font-medium text-gray-700">{rollbackPreview.message}</div>
                       {rollbackPreview.changes_made.length ? (
                         <div className="max-h-28 overflow-auto space-y-1">
@@ -2734,7 +2734,7 @@ export default function SystemStatusPage() {
                   </label>
                 </>
               ) : (
-                <div className="rounded bg-slate-50 px-3 py-2 text-xs text-slate-700">
+                <div className="rounded-sm bg-slate-50 px-3 py-2 text-xs text-slate-700">
                   No snapshots found for this billing ID.
                 </div>
               )}
@@ -2748,7 +2748,7 @@ export default function SystemStatusPage() {
                   setRollbackReason("");
                   setRollbackPreview(null);
                 }}
-                className="rounded px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-100"
+                className="rounded-sm px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-100"
                 disabled={rollbackExecuteMutation.isPending}
               >
                 Cancel
@@ -2762,7 +2762,7 @@ export default function SystemStatusPage() {
                   rollbackReason.trim() === ""
                 }
                 className={cn(
-                  "rounded bg-orange-600 px-3 py-2 text-xs font-medium text-white",
+                  "rounded-sm bg-orange-600 px-3 py-2 text-xs font-medium text-white",
                   (rollbackExecuteMutation.isPending ||
                     !selectedRollbackSnapshotId ||
                     rollbackReason.trim() === "") &&

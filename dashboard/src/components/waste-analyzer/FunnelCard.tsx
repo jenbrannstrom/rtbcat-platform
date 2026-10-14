@@ -122,13 +122,13 @@ export function FunnelCard({
 
           <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
             <div className="flex items-start gap-3">
-              <Upload className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
+              <Upload className="h-5 w-5 text-blue-600 shrink-0 mt-0.5" />
               <div className="text-sm text-blue-800">
                 <strong>{t.wasteAnalysis.importRtbPerformanceToSeeFunnel}</strong>
                 <p className="mt-2 text-blue-700">
                   {t.wasteAnalysis.createThisReportIn} <strong>{t.wasteAnalysis.authorizedBuyersReportingNewReport}</strong>:
                 </p>
-                <div className="mt-3 p-3 bg-white rounded border border-blue-200">
+                <div className="mt-3 p-3 bg-white rounded-sm border border-blue-200">
                   <p className="font-medium text-blue-900 mb-2">{t.wasteAnalysis.funnelReportName}</p>
                   <div className="grid grid-cols-2 gap-4 text-xs">
                     <div>

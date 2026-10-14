@@ -117,7 +117,7 @@ function RollbackModal({
             </div>
           ) : noSnapshot ? (
             <div className="bg-gray-50 rounded-lg p-4 flex items-start gap-2">
-              <AlertTriangle className="h-4 w-4 text-gray-500 mt-0.5 flex-shrink-0" />
+              <AlertTriangle className="h-4 w-4 text-gray-500 mt-0.5 shrink-0" />
               <p className="text-sm text-gray-600">
                 {t.history.noSnapshotAvailableForChange}
               </p>
@@ -129,12 +129,12 @@ function RollbackModal({
             </div>
           ) : dryRunError ? (
             <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-2">
-              <AlertTriangle className="h-4 w-4 text-red-500 mt-0.5 flex-shrink-0" />
+              <AlertTriangle className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
               <p className="text-sm text-red-700">{dryRunError}</p>
             </div>
           ) : noChanges ? (
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-start gap-2">
-              <Check className="h-4 w-4 text-blue-500 mt-0.5 flex-shrink-0" />
+              <Check className="h-4 w-4 text-blue-500 mt-0.5 shrink-0" />
               <p className="text-sm text-blue-700">
                 {t.history.noDifferencesFoundBetweenCurrentAndSnapshot}
               </p>
@@ -168,7 +168,7 @@ function RollbackModal({
               )}
 
               <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-start gap-2">
-                <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0" />
+                <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
                 <p className="text-sm text-amber-800">
                   {t.history.rollbackPushesToGoogleImmediately}
                 </p>
@@ -183,7 +183,7 @@ function RollbackModal({
                   value={reason}
                   onChange={(e) => setReason(e.target.value)}
                   placeholder={t.history.whyRollingBack}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-blue-500"
                 />
               </div>
             </>
@@ -191,7 +191,7 @@ function RollbackModal({
 
           {executeMutation.isError && (
             <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-start gap-2">
-              <AlertTriangle className="h-4 w-4 text-red-500 mt-0.5 flex-shrink-0" />
+              <AlertTriangle className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
               <p className="text-sm text-red-700">
                 {(executeMutation.error as Error)?.message || t.history.rollbackFailed}
               </p>
@@ -314,7 +314,7 @@ function HistoryCard({
             </div>
 
             <div className="mt-1 text-sm text-gray-600">
-              <span className="font-mono text-xs bg-gray-100 px-1.5 py-0.5 rounded">
+              <span className="font-mono text-xs bg-gray-100 px-1.5 py-0.5 rounded-sm">
                 {entry.config_id}
               </span>
             </div>
@@ -358,11 +358,11 @@ function HistoryCard({
         </div>
 
         {/* Actions */}
-        <div className="flex items-center gap-2 flex-shrink-0">
+        <div className="flex items-center gap-2 shrink-0">
           {!isRollback && (
             <button
               onClick={onRollback}
-              className="flex items-center gap-1 px-2 py-1 text-xs text-orange-600 hover:bg-orange-50 rounded transition-colors"
+              className="flex items-center gap-1 px-2 py-1 text-xs text-orange-600 hover:bg-orange-50 rounded-sm transition-colors"
             >
               <RotateCcw className="h-3 w-3" />
               {t.history.rollback}
@@ -446,7 +446,7 @@ export default function HistoryPage() {
             <select
               value={days}
               onChange={(e) => setDays(Number(e.target.value))}
-              className="px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="px-2 py-1 border border-gray-300 rounded-sm text-sm focus:outline-hidden focus:ring-2 focus:ring-blue-500"
             >
               <option value={7}>{t.history.lastDays.replace('{count}', '7')}</option>
               <option value={14}>{t.history.lastDays.replace('{count}', '14')}</option>
@@ -461,7 +461,7 @@ export default function HistoryPage() {
             <select
               value={billingIdFilter}
               onChange={(e) => setBillingIdFilter(e.target.value)}
-              className="px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="px-2 py-1 border border-gray-300 rounded-sm text-sm focus:outline-hidden focus:ring-2 focus:ring-blue-500"
             >
               <option value="">{t.history.allConfigs}</option>
               {uniqueBillingIds.map((id) => (
@@ -478,7 +478,7 @@ export default function HistoryPage() {
             <select
               value={changeTypeFilter}
               onChange={(e) => setChangeTypeFilter(e.target.value)}
-              className="px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="px-2 py-1 border border-gray-300 rounded-sm text-sm focus:outline-hidden focus:ring-2 focus:ring-blue-500"
             >
               <option value="">{t.history.allTypes}</option>
               {uniqueChangeTypes.map((type) => (

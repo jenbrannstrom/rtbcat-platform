@@ -146,13 +146,13 @@ function SnapshotCard({
             <Clock className="h-3 w-3" />
             {formatDate(snapshot.created_at, language)}
             {snapshot.snapshot_type === 'before_change' && (
-              <span className="ml-1 rounded bg-blue-100 px-1 py-0.5 text-[10px] text-blue-700">{t.pretargeting.snapshotPanelAutoTag}</span>
+              <span className="ml-1 rounded-sm bg-blue-100 px-1 py-0.5 text-[10px] text-blue-700">{t.pretargeting.snapshotPanelAutoTag}</span>
             )}
           </div>
         </div>
         <span
           className={cn(
-            'px-2 py-0.5 rounded text-xs font-medium',
+            'px-2 py-0.5 rounded-sm text-xs font-medium',
             snapshot.state === 'ACTIVE' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
           )}
         >
@@ -191,14 +191,14 @@ function SnapshotCard({
       )}
 
       {snapshot.notes && (
-        <div className="mt-2 text-xs text-gray-600 bg-gray-50 rounded p-2">
+        <div className="mt-2 text-xs text-gray-600 bg-gray-50 rounded-sm p-2">
           {snapshot.notes}
         </div>
       )}
 
       {/* Preview restore diff (inline) */}
       {showPreview && (
-        <div className="mt-2 rounded border border-orange-200 bg-orange-50/50 p-2">
+        <div className="mt-2 rounded-sm border border-orange-200 bg-orange-50/50 p-2">
           {previewLoading ? (
             <div className="flex items-center gap-1.5 py-2 text-xs text-gray-500 justify-center">
               <Loader2 className="h-3 w-3 animate-spin" />
@@ -208,7 +208,7 @@ function SnapshotCard({
             <div className="text-xs text-red-600">{previewError}</div>
           ) : previewResult && previewResult.changes_made.length === 0 ? (
             <div className="flex items-start gap-1.5 text-xs text-blue-700">
-              <Info className="h-3.5 w-3.5 text-blue-500 mt-0.5 flex-shrink-0" />
+              <Info className="h-3.5 w-3.5 text-blue-500 mt-0.5 shrink-0" />
               {t.pretargeting.snapshotPanelNoDifferencesCurrentMatches}
             </div>
           ) : previewResult ? (
@@ -231,7 +231,7 @@ function SnapshotCard({
         <button
           onClick={handlePreview}
           className={cn(
-            'inline-flex items-center gap-1 px-2 py-1 text-xs rounded border transition-colors',
+            'inline-flex items-center gap-1 px-2 py-1 text-xs rounded-sm border transition-colors',
             showPreview
               ? 'border-orange-300 bg-orange-100 text-orange-800'
               : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
@@ -242,7 +242,7 @@ function SnapshotCard({
         </button>
         <button
           onClick={() => onRestore(snapshot)}
-          className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded border border-orange-200 bg-orange-50 text-orange-700 hover:bg-orange-100"
+          className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded-sm border border-orange-200 bg-orange-50 text-orange-700 hover:bg-orange-100"
         >
           <RotateCcw className="h-3 w-3" />
           {t.pretargeting.snapshotPanelRestoreAction}
@@ -267,7 +267,7 @@ function ComparisonCard({ comparison }: { comparison: SnapshotComparison }) {
         </div>
         <span
           className={cn(
-            'inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium',
+            'inline-flex items-center gap-1 px-2 py-0.5 rounded-sm text-xs font-medium',
             isComplete ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
           )}
         >
@@ -294,7 +294,7 @@ function ComparisonCard({ comparison }: { comparison: SnapshotComparison }) {
       )}
 
       {comparison.conclusion && (
-        <div className="mt-2 text-xs text-gray-600 bg-gray-50 rounded p-2">
+        <div className="mt-2 text-xs text-gray-600 bg-gray-50 rounded-sm p-2">
           {comparison.conclusion}
         </div>
       )}
@@ -387,13 +387,13 @@ export function SnapshotComparisonPanel({ billing_id, configName }: SnapshotComp
     <div className="border-t pt-2">
       <button
         onClick={() => setShowDialog(true)}
-        className="w-full px-4 py-2 flex items-center justify-between text-sm text-gray-600 hover:bg-gray-50 rounded"
+        className="w-full px-4 py-2 flex items-center justify-between text-sm text-gray-600 hover:bg-gray-50 rounded-sm"
       >
         <span className="flex items-center gap-2">
           <History className="h-4 w-4" />
           {t.pretargeting.historyShort}
           {snapshots && snapshots.length > 0 && (
-            <span className="bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded text-xs">
+            <span className="bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded-sm text-xs">
               {t.pretargeting.snapshotPanelSnapshotsCount.replace('{count}', String(snapshots.length))}
             </span>
           )}
@@ -414,7 +414,7 @@ export function SnapshotComparisonPanel({ billing_id, configName }: SnapshotComp
               </h3>
               <button
                 onClick={closeDialog}
-                className="rounded p-1 text-gray-500 hover:bg-gray-100"
+                className="rounded-sm p-1 text-gray-500 hover:bg-gray-100"
                 aria-label={t.pretargeting.snapshotPanelCloseHistoryDialogAria}
               >
                 <X className="h-4 w-4" />
@@ -442,19 +442,19 @@ export function SnapshotComparisonPanel({ billing_id, configName }: SnapshotComp
                   placeholder={t.pretargeting.snapshotPanelSnapshotNamePlaceholder}
                   value={snapshotName}
                   onChange={(e) => setSnapshotName(e.target.value)}
-                  className="w-full px-3 py-1.5 text-sm border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-1.5 text-sm border rounded-sm focus:outline-hidden focus:ring-2 focus:ring-blue-500"
                 />
                 <textarea
                   placeholder={t.pretargeting.snapshotPanelSnapshotNotesPlaceholder}
                   value={snapshotNotes}
                   onChange={(e) => setSnapshotNotes(e.target.value)}
                   rows={2}
-                  className="w-full px-3 py-1.5 text-sm border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-1.5 text-sm border rounded-sm focus:outline-hidden focus:ring-2 focus:ring-blue-500"
                 />
                 <button
                   onClick={handleCreateSnapshot}
                   disabled={createSnapshotMutation.isPending}
-                  className="w-full py-1.5 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+                  className="w-full py-1.5 bg-blue-600 text-white rounded-sm text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
                 >
                   {createSnapshotMutation.isPending ? t.pretargeting.snapshotPanelCreatingSnapshot : t.pretargeting.snapshotPanelCreateSnapshot}
                 </button>
@@ -481,7 +481,7 @@ export function SnapshotComparisonPanel({ billing_id, configName }: SnapshotComp
                 ))}
               </div>
             ) : (
-              <div className="text-sm text-gray-500 bg-gray-50 rounded p-3">
+              <div className="text-sm text-gray-500 bg-gray-50 rounded-sm p-3">
                 {t.pretargeting.snapshotPanelNoSnapshots}
               </div>
             )}
@@ -502,7 +502,7 @@ export function SnapshotComparisonPanel({ billing_id, configName }: SnapshotComp
                 ))}
               </div>
             ) : (
-              <div className="text-sm text-gray-500 bg-gray-50 rounded p-3">
+              <div className="text-sm text-gray-500 bg-gray-50 rounded-sm p-3">
                 {t.pretargeting.snapshotPanelNoComparisons}
               </div>
             )}
@@ -515,8 +515,8 @@ export function SnapshotComparisonPanel({ billing_id, configName }: SnapshotComp
             )}>
               <div className="flex items-start gap-2 text-sm">
                 {restoreSuccess.warning
-                  ? <AlertTriangle className="h-4 w-4 mt-0.5 flex-shrink-0" />
-                  : <CheckCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />}
+                  ? <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+                  : <CheckCircle className="h-4 w-4 mt-0.5 shrink-0" />}
                 {restoreSuccess.message}
               </div>
               <button onClick={() => setRestoreSuccess(null)} className="hover:opacity-80">
@@ -530,7 +530,7 @@ export function SnapshotComparisonPanel({ billing_id, configName }: SnapshotComp
 
       {/* Restore Confirmation Modal */}
       {restoreSnapshot && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center">
+        <div className="fixed inset-0 z-60 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/40" onClick={() => setRestoreSnapshot(null)} />
           <div className="relative mx-4 w-full max-w-lg rounded-lg border bg-white p-4 shadow-xl">
             <div className="flex items-center justify-between mb-3">
@@ -549,12 +549,12 @@ export function SnapshotComparisonPanel({ billing_id, configName }: SnapshotComp
                 {t.pretargeting.previewingRollback}
               </div>
             ) : restoreDryRunError ? (
-              <div className="rounded bg-red-50 border border-red-200 p-3 text-xs text-red-700">
+              <div className="rounded-sm bg-red-50 border border-red-200 p-3 text-xs text-red-700">
                 {restoreDryRunError}
               </div>
             ) : restoreDryRunResult && restoreDryRunResult.changes_made.length === 0 ? (
-              <div className="rounded bg-blue-50 border border-blue-200 p-3 flex items-start gap-2 text-xs text-blue-700">
-                <Info className="h-3.5 w-3.5 text-blue-500 mt-0.5 flex-shrink-0" />
+              <div className="rounded-sm bg-blue-50 border border-blue-200 p-3 flex items-start gap-2 text-xs text-blue-700">
+                <Info className="h-3.5 w-3.5 text-blue-500 mt-0.5 shrink-0" />
                 {t.pretargeting.noDifferencesFromSnapshot}
               </div>
             ) : (
@@ -573,15 +573,15 @@ export function SnapshotComparisonPanel({ billing_id, configName }: SnapshotComp
                     <p className="text-xs font-medium text-gray-700 mb-1">
                       {t.pretargeting.snapshotPanelRestoreChangesWillBeApplied.replace('{count}', String(restoreDryRunResult.changes_made.length))}
                     </p>
-                    <div className="max-h-32 overflow-y-auto rounded border bg-gray-50 p-2 space-y-0.5">
+                    <div className="max-h-32 overflow-y-auto rounded-sm border bg-gray-50 p-2 space-y-0.5">
                       {restoreDryRunResult.changes_made.map((desc, i) => (
                         <div key={i} className="text-[11px] font-mono text-gray-700">{desc}</div>
                       ))}
                     </div>
                   </div>
                 )}
-                <div className="mb-3 rounded bg-amber-50 border border-amber-200 p-2 flex items-start gap-2 text-xs text-amber-800">
-                  <AlertTriangle className="h-3.5 w-3.5 text-amber-500 mt-0.5 flex-shrink-0" />
+                <div className="mb-3 rounded-sm bg-amber-50 border border-amber-200 p-2 flex items-start gap-2 text-xs text-amber-800">
+                  <AlertTriangle className="h-3.5 w-3.5 text-amber-500 mt-0.5 shrink-0" />
                   <span>{t.pretargeting.rollbackImmediateWarning}</span>
                 </div>
                 <div className="mb-3">
@@ -593,7 +593,7 @@ export function SnapshotComparisonPanel({ billing_id, configName }: SnapshotComp
                     value={restoreReason}
                     onChange={(e) => setRestoreReason(e.target.value)}
                     placeholder={t.pretargeting.snapshotPanelRestoreReasonPlaceholder}
-                    className="w-full rounded border border-gray-300 px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-orange-300"
+                    className="w-full rounded-sm border border-gray-300 px-2 py-1.5 text-xs focus:outline-hidden focus:ring-1 focus:ring-orange-300"
                   />
                   <span className="text-[10px] text-gray-400">{t.pretargeting.requiredLabel}</span>
                 </div>
@@ -601,7 +601,7 @@ export function SnapshotComparisonPanel({ billing_id, configName }: SnapshotComp
             )}
 
             {restoreExecuteMutation.isError && (
-              <div className="mb-3 rounded bg-red-50 border border-red-200 p-2 text-xs text-red-700">
+              <div className="mb-3 rounded-sm bg-red-50 border border-red-200 p-2 text-xs text-red-700">
                 {(restoreExecuteMutation.error as Error)?.message || t.pretargeting.rollbackFailed}
               </div>
             )}
@@ -610,7 +610,7 @@ export function SnapshotComparisonPanel({ billing_id, configName }: SnapshotComp
               <button
                 onClick={() => setRestoreSnapshot(null)}
                 disabled={restoreExecuteMutation.isPending}
-                className="rounded border px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                className="rounded-sm border px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50"
               >
                 {(!restoreDryRunResult || restoreDryRunResult.changes_made.length === 0) && !restoreDryRunLoading ? t.common.close : t.common.cancel}
               </button>
@@ -618,7 +618,7 @@ export function SnapshotComparisonPanel({ billing_id, configName }: SnapshotComp
                 <button
                   onClick={() => restoreExecuteMutation.mutate()}
                   disabled={restoreExecuteMutation.isPending || !restoreReason.trim()}
-                  className="inline-flex items-center gap-1 rounded bg-orange-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-orange-700 disabled:opacity-50"
+                  className="inline-flex items-center gap-1 rounded-sm bg-orange-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-orange-700 disabled:opacity-50"
                 >
                   {restoreExecuteMutation.isPending ? (
                     <Loader2 className="h-3 w-3 animate-spin" />

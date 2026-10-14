@@ -251,7 +251,7 @@ export function ClusterCard({ campaign, creatives, onRename, onDelete, selectedI
                   setIsEditing(false);
                 }
               }}
-              className="text-lg font-semibold w-full border-b-2 border-blue-500 outline-none bg-transparent"
+              className="text-lg font-semibold w-full border-b-2 border-blue-500 outline-hidden bg-transparent"
             />
           ) : (
             <h3
@@ -259,14 +259,14 @@ export function ClusterCard({ campaign, creatives, onRename, onDelete, selectedI
               onDoubleClick={() => setIsEditing(true)}
             >
               {campaign.name}
-              <Pencil className="h-4 w-4 opacity-0 group-hover:opacity-50 transition-opacity flex-shrink-0" />
+              <Pencil className="h-4 w-4 opacity-0 group-hover:opacity-50 transition-opacity shrink-0" />
             </h3>
           )}
 
           {/* Phase 29: Disapproval badge */}
           {campaign.has_disapproved && campaign.disapproved_count && campaign.disapproved_count > 0 && (
             <div
-              className="flex items-center gap-1 bg-red-100 text-red-700 text-xs px-2 py-0.5 rounded-full flex-shrink-0"
+              className="flex items-center gap-1 bg-red-100 text-red-700 text-xs px-2 py-0.5 rounded-full shrink-0"
               title={
                 campaign.disapproved_count === 1
                   ? t.campaigns.disapprovedCreativeTitle.replace('{count}', String(campaign.disapproved_count))
@@ -283,7 +283,7 @@ export function ClusterCard({ campaign, creatives, onRename, onDelete, selectedI
           {/* Sort button */}
           <button
             onClick={cycleSort}
-            className="flex items-center gap-1 px-2 py-1 text-xs text-gray-500 hover:bg-gray-200 rounded transition-colors"
+            className="flex items-center gap-1 px-2 py-1 text-xs text-gray-500 hover:bg-gray-200 rounded-sm transition-colors"
             title={t.campaigns.sortByFieldDirection
               .replace('{field}', getSortLabel())
               .replace('{direction}', sortDirection === 'desc' ? '↓' : '↑')}

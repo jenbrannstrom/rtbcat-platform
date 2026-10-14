@@ -124,10 +124,10 @@ export function CountrySection({ creativeId, detectedLanguage, detectedLanguageC
 
       {/* Mismatch Alert */}
       {showMismatchAlert && (
-        <div className="mb-2 p-2 bg-amber-50 border border-amber-200 rounded text-xs">
+        <div className="mb-2 p-2 bg-amber-50 border border-amber-200 rounded-sm text-xs">
           <div className="flex items-start justify-between gap-2">
             <div className="flex items-start gap-1.5">
-              <AlertTriangle className="h-3.5 w-3.5 text-amber-600 mt-0.5 flex-shrink-0" />
+              <AlertTriangle className="h-3.5 w-3.5 text-amber-600 mt-0.5 shrink-0" />
               <div className="text-amber-800">
                 <span className="font-medium">{t.previewModal.geoMismatchLabel}</span>{" "}
                 {t.previewModal.geoMismatchServingCountries

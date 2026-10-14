@@ -150,10 +150,10 @@ export function CreativeCard({
           </div>
 
           {/* Action buttons */}
-          <div className="flex items-center gap-1 flex-shrink-0">
+          <div className="flex items-center gap-1 shrink-0">
             <button
               onClick={handleCopy}
-              className="p-1 text-gray-400 hover:text-gray-600 rounded"
+              className="p-1 text-gray-400 hover:text-gray-600 rounded-sm"
               title={copied ? t.common.copied : t.creatives.copyId}
             >
               {copied ? <Check className="h-3.5 w-3.5 text-green-500" /> : <Copy className="h-3.5 w-3.5" />}
@@ -161,7 +161,7 @@ export function CreativeCard({
             {creative.format === "HTML" && (
               <button
                 onClick={handleCopyHtml}
-                className="p-1 text-gray-400 hover:text-gray-600 rounded"
+                className="p-1 text-gray-400 hover:text-gray-600 rounded-sm"
                 title={htmlCopied ? t.common.copied : t.creatives.copyHtml}
               >
                 {htmlCopied ? <Check className="h-3.5 w-3.5 text-green-500" /> : <FileCode className="h-3.5 w-3.5" />}
@@ -172,7 +172,7 @@ export function CreativeCard({
                 href={googleUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="p-1 text-gray-400 hover:text-primary-600 rounded"
+                className="p-1 text-gray-400 hover:text-primary-600 rounded-sm"
                 title={t.previewModal.viewInGoogleConsole}
                 onClick={(e) => e.stopPropagation()}
               >

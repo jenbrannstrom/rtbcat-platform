@@ -174,8 +174,8 @@ export default function CampaignDetailPage() {
     return (
       <div className="p-8">
         <div className="animate-pulse">
-          <div className="h-8 bg-gray-200 rounded w-1/4 mb-4" />
-          <div className="h-4 bg-gray-200 rounded w-1/3 mb-8" />
+          <div className="h-8 bg-gray-200 rounded-sm w-1/4 mb-4" />
+          <div className="h-4 bg-gray-200 rounded-sm w-1/3 mb-8" />
           <div className="grid grid-cols-4 gap-4 mb-8">
             {[1, 2, 3, 4].map((i) => (
               <div key={i} className="h-24 bg-gray-100 rounded-lg" />
@@ -234,13 +234,13 @@ export default function CampaignDetailPage() {
                   type="text"
                   value={editName}
                   onChange={(e) => setEditName(e.target.value)}
-                  className="text-2xl font-bold w-full border rounded px-3 py-2"
+                  className="text-2xl font-bold w-full border rounded-sm px-3 py-2"
                   placeholder={t.campaigns.campaignNamePlaceholder}
                 />
                 <textarea
                   value={editDescription}
                   onChange={(e) => setEditDescription(e.target.value)}
-                  className="w-full border rounded px-3 py-2 text-sm"
+                  className="w-full border rounded-sm px-3 py-2 text-sm"
                   placeholder={t.campaigns.descriptionOptionalPlaceholder}
                   rows={2}
                 />
@@ -254,7 +254,7 @@ export default function CampaignDetailPage() {
                       setEditName(campaign.name);
                       setEditDescription(campaign.description || "");
                     }}
-                    className="px-4 py-2 border rounded text-sm hover:bg-gray-50"
+                    className="px-4 py-2 border rounded-sm text-sm hover:bg-gray-50"
                   >
                     {t.common.cancel}
                   </button>
@@ -265,7 +265,7 @@ export default function CampaignDetailPage() {
                 <div className="flex items-center gap-3">
                   <h1 className="text-2xl font-bold text-gray-900">{campaign.name}</h1>
                   {campaign.ai_generated && (
-                    <span className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded bg-purple-100 text-purple-700">
+                    <span className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-sm bg-purple-100 text-purple-700">
                       <Sparkles className="h-3 w-3" />
                       {t.campaigns.aiGenerated}
                       {campaign.ai_confidence && (
@@ -276,7 +276,7 @@ export default function CampaignDetailPage() {
                     </span>
                   )}
                   {campaign.status !== "active" && (
-                    <span className="text-xs px-2 py-1 rounded bg-gray-100 text-gray-600">
+                    <span className="text-xs px-2 py-1 rounded-sm bg-gray-100 text-gray-600">
                       {formatCampaignStatus(campaign.status)}
                     </span>
                   )}
@@ -299,7 +299,7 @@ export default function CampaignDetailPage() {
               <select
                 value={period}
                 onChange={(e) => setPeriod(e.target.value)}
-                className="border rounded px-3 py-2 text-sm"
+                className="border rounded-sm px-3 py-2 text-sm"
               >
                 <option value="1d">{t.campaigns.periodYesterday}</option>
                 <option value="7d">{t.campaigns.periodLast7Days}</option>
@@ -308,14 +308,14 @@ export default function CampaignDetailPage() {
               </select>
               <button
                 onClick={() => setEditing(true)}
-                className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded"
+                className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-sm"
                 title={t.campaigns.editCampaign}
               >
                 <Pencil className="h-4 w-4" />
               </button>
               <button
                 onClick={handleDeleteCampaign}
-                className="p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded"
+                className="p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-sm"
                 title={t.campaigns.deleteCampaign}
               >
                 <Trash2 className="h-4 w-4" />
@@ -423,7 +423,7 @@ export default function CampaignDetailPage() {
               <button
                 onClick={() => handleRemoveCreative(creative.id)}
                 disabled={removingId === creative.id}
-                className="absolute top-2 right-2 p-1.5 bg-white/90 hover:bg-red-50 text-gray-500 hover:text-red-600 rounded-full shadow-sm border border-gray-200 transition-colors disabled:opacity-50"
+                className="absolute top-2 right-2 p-1.5 bg-white/90 hover:bg-red-50 text-gray-500 hover:text-red-600 rounded-full shadow-xs border border-gray-200 transition-colors disabled:opacity-50"
                 title={t.campaigns.removeFromCampaign}
               >
                 <X className="h-4 w-4" />

@@ -223,7 +223,7 @@ function ValuePill({
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium transition-all',
+        'inline-flex items-center gap-1 px-2 py-0.5 rounded-sm text-xs font-medium transition-all',
         isRemoved && 'bg-red-100 text-red-700 line-through opacity-60',
         isPending && !isRemoved && 'bg-yellow-100 text-yellow-800 border border-yellow-300',
         !isPending && !isRemoved && 'bg-gray-100 text-gray-700 hover:bg-gray-200'
@@ -316,7 +316,7 @@ function PendingChangeCard({
   const label = describePendingChange(change, publisherMode, t);
 
   return (
-    <div className="flex items-center justify-between p-2 bg-yellow-50 border border-yellow-200 rounded text-sm">
+    <div className="flex items-center justify-between p-2 bg-yellow-50 border border-yellow-200 rounded-sm text-sm">
       <div className="flex items-center gap-2">
         <Icon className={cn('h-4 w-4', isRemove ? 'text-red-500' : 'text-green-500')} />
         <span className="font-medium">{label}</span>
@@ -327,14 +327,14 @@ function PendingChangeCard({
       <div className="flex items-center gap-1">
         <button
           onClick={onMarkApplied}
-          className="px-2 py-0.5 text-xs bg-green-100 text-green-700 rounded hover:bg-green-200"
+          className="px-2 py-0.5 text-xs bg-green-100 text-green-700 rounded-sm hover:bg-green-200"
           title={t.pretargeting.markAsAppliedInGoogle}
         >
           {t.pretargeting.applied}
         </button>
         <button
           onClick={onCancel}
-          className="px-2 py-0.5 text-xs bg-gray-100 text-gray-600 rounded hover:bg-gray-200"
+          className="px-2 py-0.5 text-xs bg-gray-100 text-gray-600 rounded-sm hover:bg-gray-200"
           title={t.pretargeting.cancelChange}
         >
           {t.common.cancel}
@@ -399,12 +399,12 @@ function TargetingSection({
             ({t.pretargeting.valuesCount.replace('{count}', String(effectiveValues.length))})
           </span>
           {pendingAdds.length > 0 && (
-            <span className="px-1.5 py-0.5 bg-green-100 text-green-700 text-xs rounded">
+            <span className="px-1.5 py-0.5 bg-green-100 text-green-700 text-xs rounded-sm">
               +{pendingAdds.length}
             </span>
           )}
           {pendingRemoves.length > 0 && (
-            <span className="px-1.5 py-0.5 bg-red-100 text-red-700 text-xs rounded">
+            <span className="px-1.5 py-0.5 bg-red-100 text-red-700 text-xs rounded-sm">
               -{pendingRemoves.length}
             </span>
           )}
@@ -428,12 +428,12 @@ function TargetingSection({
                     ? t.pretargeting.addGeoPlaceholder
                     : t.pretargeting.addFormatPlaceholder
               }
-              className="flex-1 px-3 py-1.5 text-sm border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="flex-1 px-3 py-1.5 text-sm border rounded-sm focus:outline-hidden focus:ring-2 focus:ring-blue-500"
             />
             <button
               onClick={handleAdd}
               disabled={!newValue.trim()}
-              className="px-3 py-1.5 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-3 py-1.5 bg-blue-600 text-white rounded-sm text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Plus className="h-4 w-4" />
             </button>
@@ -446,7 +446,7 @@ function TargetingSection({
               {onSelectAll && (
                 <button
                   onClick={onSelectAll}
-                  className="px-2 py-1 text-xs bg-red-50 text-red-600 rounded hover:bg-red-100 transition-colors"
+                  className="px-2 py-1 text-xs bg-red-50 text-red-600 rounded-sm hover:bg-red-100 transition-colors"
                 >
                   {t.pretargeting.removeAll}
                 </button>
@@ -454,7 +454,7 @@ function TargetingSection({
               {onInvertAll && (
                 <button
                   onClick={onInvertAll}
-                  className="px-2 py-1 text-xs bg-blue-50 text-blue-600 rounded hover:bg-blue-100 transition-colors"
+                  className="px-2 py-1 text-xs bg-blue-50 text-blue-600 rounded-sm hover:bg-blue-100 transition-colors"
                 >
                   {t.pretargeting.invertSelection}
                 </button>
@@ -696,11 +696,11 @@ function PublisherTargetingSection({
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
             placeholder={t.pretargeting.filterPublishersPlaceholder}
-            className="flex-1 px-3 py-1.5 text-sm border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="flex-1 px-3 py-1.5 text-sm border rounded-sm focus:outline-hidden focus:ring-2 focus:ring-blue-500"
           />
         </div>
 
-        <div className="overflow-hidden rounded border">
+        <div className="overflow-hidden rounded-sm border">
           <div className="grid grid-cols-[1fr_80px_100px_100px] gap-2 px-3 py-2 bg-gray-50 text-xs font-medium text-gray-500">
             <span>{t.pretargeting.publisherIdHeader}</span>
             <span>{t.pretargeting.typeHeader}</span>
@@ -737,7 +737,7 @@ function PublisherTargetingSection({
                       {isPendingAdd || isPendingRemove ? (
                         <button
                           onClick={() => onUndoPublisher(pub.publisher_id)}
-                          className="px-2 py-1 text-xs rounded bg-yellow-100 text-yellow-700 hover:bg-yellow-200"
+                          className="px-2 py-1 text-xs rounded-sm bg-yellow-100 text-yellow-700 hover:bg-yellow-200"
                           disabled={disabled}
                         >
                           {t.pretargeting.undo}
@@ -745,7 +745,7 @@ function PublisherTargetingSection({
                       ) : (
                         <button
                           onClick={() => onRemovePublisher(pub.publisher_id)}
-                          className="px-2 py-1 text-xs rounded bg-gray-100 text-gray-600 hover:bg-gray-200"
+                          className="px-2 py-1 text-xs rounded-sm bg-gray-100 text-gray-600 hover:bg-gray-200"
                           disabled={disabled}
                         >
                           {t.pretargeting.remove}
@@ -773,12 +773,12 @@ function PublisherTargetingSection({
               }}
               onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
               placeholder={t.pretargeting.publisherInputPlaceholder}
-              className="flex-1 px-3 py-1.5 text-sm border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="flex-1 px-3 py-1.5 text-sm border rounded-sm focus:outline-hidden focus:ring-2 focus:ring-blue-500"
             />
             <button
               onClick={handleAdd}
               disabled={!newPublisher.trim() || disabled}
-              className="px-3 py-1.5 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+              className="px-3 py-1.5 bg-blue-600 text-white rounded-sm text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
             >
               {actionLabel}
             </button>
@@ -791,21 +791,21 @@ function PublisherTargetingSection({
         <div className="flex items-center gap-2">
           <button
             onClick={() => setShowBulkImport(true)}
-            className="flex items-center gap-1 px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded hover:bg-gray-200"
+            className="flex items-center gap-1 px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded-sm hover:bg-gray-200"
           >
             <Upload className="h-3 w-3" />
             {t.pretargeting.bulkImport}
           </button>
           <button
             onClick={handleExport}
-            className="flex items-center gap-1 px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded hover:bg-gray-200"
+            className="flex items-center gap-1 px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded-sm hover:bg-gray-200"
           >
             <Download className="h-3 w-3" />
             {t.pretargeting.exportCsv}
           </button>
           <button
             onClick={onShowHistory}
-            className="flex items-center gap-1 px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded hover:bg-gray-200"
+            className="flex items-center gap-1 px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded-sm hover:bg-gray-200"
           >
             <History className="h-3 w-3" />
             {t.pretargeting.viewHistory}
@@ -815,7 +815,7 @@ function PublisherTargetingSection({
         {/* Pending Changes Bar (sticky) */}
         {totalPendingCount > 0 && (
           <div className="sticky bottom-4 z-10">
-            <div className="border rounded-lg p-3 bg-yellow-50 border-yellow-200 shadow-sm">
+            <div className="border rounded-lg p-3 bg-yellow-50 border-yellow-200 shadow-xs">
               <div className="flex items-center gap-2">
                 <AlertTriangle className="h-4 w-4 text-yellow-600" />
                 <span className="text-sm font-medium text-yellow-800">
@@ -840,14 +840,14 @@ function PublisherTargetingSection({
                 <button
                   onClick={onDiscardPending}
                   disabled={disabled}
-                  className="px-3 py-1.5 text-xs bg-white text-gray-700 rounded border hover:bg-gray-50 disabled:opacity-50"
+                  className="px-3 py-1.5 text-xs bg-white text-gray-700 rounded-sm border hover:bg-gray-50 disabled:opacity-50"
                 >
                   {t.pretargeting.discardAll}
                 </button>
                 <button
                   onClick={onApplyPending}
                   disabled={disabled}
-                  className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+                  className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded-sm hover:bg-blue-700 disabled:opacity-50"
                 >
                   {t.pretargeting.pushToGoogle}
                 </button>
@@ -870,13 +870,13 @@ function PublisherTargetingSection({
             <div className="flex gap-2">
               <button
                 onClick={confirmModeChange}
-                className="px-3 py-1.5 bg-yellow-600 text-white text-xs rounded hover:bg-yellow-700"
+                className="px-3 py-1.5 bg-yellow-600 text-white text-xs rounded-sm hover:bg-yellow-700"
               >
                 {t.pretargeting.switchToModeAction.replace('{mode}', nextModeLabel)}
               </button>
               <button
                 onClick={() => setShowModeConfirm(false)}
-                className="px-3 py-1.5 bg-white text-gray-700 text-xs rounded border hover:bg-gray-50"
+                className="px-3 py-1.5 bg-white text-gray-700 text-xs rounded-sm border hover:bg-gray-50"
               >
                 {t.common.cancel}
               </button>
@@ -885,7 +885,7 @@ function PublisherTargetingSection({
         )}
 
         {showBulkImport && (
-          <div className="border rounded-lg p-3 bg-white shadow-sm">
+          <div className="border rounded-lg p-3 bg-white shadow-xs">
             <div className="flex items-center justify-between mb-2">
               <h4 className="text-sm font-medium text-gray-900">{t.pretargeting.bulkImportPublishersTitle}</h4>
               <button
@@ -905,7 +905,7 @@ function PublisherTargetingSection({
                   value={bulkInput}
                   onChange={(e) => setBulkInput(e.target.value)}
                   rows={5}
-                  className="w-full px-3 py-2 text-sm border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 text-sm border rounded-sm focus:outline-hidden focus:ring-2 focus:ring-blue-500"
                   placeholder={t.pretargeting.bulkImportTextareaPlaceholder}
                 />
                 <div className="flex justify-end gap-2 mt-3">
@@ -914,14 +914,14 @@ function PublisherTargetingSection({
                       setShowBulkImport(false);
                       setBulkInput('');
                     }}
-                    className="px-3 py-1.5 text-xs bg-gray-100 text-gray-600 rounded hover:bg-gray-200"
+                    className="px-3 py-1.5 text-xs bg-gray-100 text-gray-600 rounded-sm hover:bg-gray-200"
                   >
                     {t.common.cancel}
                   </button>
                   <button
                     onClick={parseBulkInput}
                     disabled={!bulkInput.trim()}
-                    className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+                    className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded-sm hover:bg-blue-700 disabled:opacity-50"
                   >
                     {t.pretargeting.previewImport}
                   </button>
@@ -955,14 +955,14 @@ function PublisherTargetingSection({
                 <div className="flex justify-end gap-2 mt-3">
                   <button
                     onClick={() => setBulkPreview(null)}
-                    className="px-3 py-1.5 text-xs bg-gray-100 text-gray-600 rounded hover:bg-gray-200"
+                    className="px-3 py-1.5 text-xs bg-gray-100 text-gray-600 rounded-sm hover:bg-gray-200"
                   >
                     {t.common.back}
                   </button>
                   <button
                     onClick={handleBulkImport}
                     disabled={bulkPreview.valid.length === 0}
-                    className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+                    className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded-sm hover:bg-blue-700 disabled:opacity-50"
                   >
                     {t.pretargeting.importPublishersCount.replace('{count}', String(bulkPreview.valid.length))}
                   </button>
@@ -996,7 +996,7 @@ function HistoryEntry({ entry }: { entry: PretargetingHistoryItem }) {
           <p className="text-xs text-gray-600 mt-0.5 truncate">{entry.new_value}</p>
         )}
         {commitChanges.length > 0 && (
-          <div className="mt-1 max-h-24 overflow-y-auto rounded bg-gray-50 p-2">
+          <div className="mt-1 max-h-24 overflow-y-auto rounded-sm bg-gray-50 p-2">
             {commitChanges.map((change, index) => (
               <div key={`${entry.id}-${change.change_id || index}`} className="text-xs text-gray-600">
                 • {formatCodeLabel(String(change.change_type || 'change'))}: {String(change.value || '')}
@@ -1439,11 +1439,11 @@ export function PretargetingSettingsEditor({
   if (configLoading) {
     return (
       <div className="p-4 animate-pulse">
-        <div className="h-6 bg-gray-200 rounded w-1/3 mb-4" />
+        <div className="h-6 bg-gray-200 rounded-sm w-1/3 mb-4" />
         <div className="space-y-3">
-          <div className="h-12 bg-gray-100 rounded" />
-          <div className="h-12 bg-gray-100 rounded" />
-          <div className="h-12 bg-gray-100 rounded" />
+          <div className="h-12 bg-gray-100 rounded-sm" />
+          <div className="h-12 bg-gray-100 rounded-sm" />
+          <div className="h-12 bg-gray-100 rounded-sm" />
         </div>
       </div>
     );
@@ -1494,7 +1494,7 @@ export function PretargetingSettingsEditor({
                 refetchDetail();
                 refetchPublishers();
               }}
-              className="flex items-center gap-1 px-2 py-1 text-xs rounded bg-gray-100 text-gray-600 hover:bg-gray-200"
+              className="flex items-center gap-1 px-2 py-1 text-xs rounded-sm bg-gray-100 text-gray-600 hover:bg-gray-200"
             >
               <RefreshCw className="h-3 w-3" />
               {t.pretargeting.syncFromGoogle}
@@ -1506,7 +1506,7 @@ export function PretargetingSettingsEditor({
               setShowHistory(!showHistory);
             }}
             className={cn(
-              'flex items-center gap-1 px-2 py-1 text-xs rounded transition-colors',
+              'flex items-center gap-1 px-2 py-1 text-xs rounded-sm transition-colors',
               showHistory ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
             )}
           >
@@ -1527,7 +1527,7 @@ export function PretargetingSettingsEditor({
           <button
             onClick={() => setActiveTab('publishers')}
             className={cn(
-              'px-3 py-1.5 text-xs font-medium rounded transition-colors',
+              'px-3 py-1.5 text-xs font-medium rounded-sm transition-colors',
               activeTab === 'publishers'
                 ? 'bg-blue-600 text-white'
                 : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
@@ -1538,7 +1538,7 @@ export function PretargetingSettingsEditor({
           <button
             onClick={() => setActiveTab('settings')}
             className={cn(
-              'px-3 py-1.5 text-xs font-medium rounded transition-colors',
+              'px-3 py-1.5 text-xs font-medium rounded-sm transition-colors',
               activeTab === 'settings'
                 ? 'bg-blue-600 text-white'
                 : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
@@ -1581,7 +1581,7 @@ export function PretargetingSettingsEditor({
         <div className="px-4 py-2 bg-gray-50 border-b flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className={cn(
-              "px-2 py-0.5 text-xs font-medium rounded",
+              "px-2 py-0.5 text-xs font-medium rounded-sm",
               configDetail.state === 'ACTIVE' ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800"
             )}>
               {formatConfigStateLabel(configDetail.state, t)}
@@ -1595,7 +1595,7 @@ export function PretargetingSettingsEditor({
               <button
                 onClick={() => setShowConfirmSuspend(true)}
                 disabled={isPushing}
-                className="flex items-center gap-1 px-2 py-1 text-xs bg-yellow-100 text-yellow-700 rounded hover:bg-yellow-200 disabled:opacity-50"
+                className="flex items-center gap-1 px-2 py-1 text-xs bg-yellow-100 text-yellow-700 rounded-sm hover:bg-yellow-200 disabled:opacity-50"
               >
                 <Pause className="h-3 w-3" />
                 {t.pretargeting.suspendAction}
@@ -1604,7 +1604,7 @@ export function PretargetingSettingsEditor({
               <button
                 onClick={() => activateMutation.mutate()}
                 disabled={isPushing}
-                className="flex items-center gap-1 px-2 py-1 text-xs bg-green-100 text-green-700 rounded hover:bg-green-200 disabled:opacity-50"
+                className="flex items-center gap-1 px-2 py-1 text-xs bg-green-100 text-green-700 rounded-sm hover:bg-green-200 disabled:opacity-50"
               >
                 {activateMutation.isPending ? (
                   <Loader2 className="h-3 w-3 animate-spin" />
@@ -1616,7 +1616,7 @@ export function PretargetingSettingsEditor({
             )}
             <button
               onClick={() => refetchDetail()}
-              className="flex items-center gap-1 px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded hover:bg-gray-200"
+              className="flex items-center gap-1 px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded-sm hover:bg-gray-200"
               title={t.pretargeting.refreshFromGoogle}
             >
               <RefreshCw className="h-3 w-3" />
@@ -1630,7 +1630,7 @@ export function PretargetingSettingsEditor({
       {showConfirmSuspend && (
         <div className="px-4 py-3 bg-yellow-50 border-b border-yellow-200">
           <div className="flex items-start gap-2">
-            <AlertTriangle className="h-5 w-5 text-yellow-600 flex-shrink-0" />
+            <AlertTriangle className="h-5 w-5 text-yellow-600 shrink-0" />
             <div className="flex-1">
               <p className="text-sm font-medium text-yellow-900">
                 {t.pretargeting.suspendConfigConfirmTitle}
@@ -1642,7 +1642,7 @@ export function PretargetingSettingsEditor({
                 <button
                   onClick={() => suspendMutation.mutate()}
                   disabled={suspendMutation.isPending}
-                  className="flex items-center gap-1 px-3 py-1.5 bg-yellow-600 text-white text-sm rounded hover:bg-yellow-700 disabled:opacity-50"
+                  className="flex items-center gap-1 px-3 py-1.5 bg-yellow-600 text-white text-sm rounded-sm hover:bg-yellow-700 disabled:opacity-50"
                 >
                   {suspendMutation.isPending ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
@@ -1654,7 +1654,7 @@ export function PretargetingSettingsEditor({
                 <button
                   onClick={() => setShowConfirmSuspend(false)}
                   disabled={suspendMutation.isPending}
-                  className="px-3 py-1.5 bg-white text-gray-700 text-sm rounded border hover:bg-gray-50 disabled:opacity-50"
+                  className="px-3 py-1.5 bg-white text-gray-700 text-sm rounded-sm border hover:bg-gray-50 disabled:opacity-50"
                 >
                   {t.common.cancel}
                 </button>
@@ -1678,7 +1678,7 @@ export function PretargetingSettingsEditor({
                 <button
                   onClick={openCommitToast}
                   disabled={isPushing}
-                  className="flex items-center gap-1 px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 font-medium"
+                  className="flex items-center gap-1 px-3 py-1 text-xs bg-blue-600 text-white rounded-sm hover:bg-blue-700 disabled:opacity-50 font-medium"
                 >
                   <Upload className="h-3 w-3" />
                   {t.pretargeting.pushToGoogle}
@@ -1686,7 +1686,7 @@ export function PretargetingSettingsEditor({
                 <button
                   onClick={() => discardAllMutation.mutate()}
                   disabled={isPushing}
-                  className="px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded hover:bg-gray-200 transition-colors disabled:opacity-50"
+                  className="px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded-sm hover:bg-gray-200 transition-colors disabled:opacity-50"
                 >
                   {t.pretargeting.discardAll}
                 </button>
@@ -1781,7 +1781,7 @@ export function PretargetingSettingsEditor({
                   {configDetail.excluded_geos.map((geo) => (
                     <span
                       key={geo}
-                      className="px-2 py-0.5 bg-red-50 text-red-700 rounded text-xs"
+                      className="px-2 py-0.5 bg-red-50 text-red-700 rounded-sm text-xs"
                     >
                       {geo}
                     </span>
@@ -1822,14 +1822,14 @@ export function PretargetingSettingsEditor({
             <button
               onClick={() => setShowCommitToast(false)}
               disabled={applyAllMutation.isPending || discardAllMutation.isPending}
-              className="rounded border px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              className="rounded-sm border px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50"
             >
               {t.common.back}
             </button>
             <button
               onClick={() => discardAllMutation.mutate()}
               disabled={applyAllMutation.isPending || discardAllMutation.isPending}
-              className="inline-flex items-center gap-1 rounded border border-red-200 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"
+              className="inline-flex items-center gap-1 rounded-sm border border-red-200 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"
             >
               {discardAllMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
               {t.pretargeting.discardAll}
@@ -1837,7 +1837,7 @@ export function PretargetingSettingsEditor({
             <button
               onClick={() => applyAllMutation.mutate()}
               disabled={applyAllMutation.isPending || discardAllMutation.isPending}
-              className="inline-flex items-center gap-1 rounded bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+              className="inline-flex items-center gap-1 rounded-sm bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
             >
               {applyAllMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
               {t.pretargeting.yesPushToGoogle}
@@ -1858,7 +1858,7 @@ export function PretargetingSettingsEditor({
               <button
                 onClick={() => setHistoryView('audit')}
                 className={cn(
-                  'px-2 py-1 text-xs rounded',
+                  'px-2 py-1 text-xs rounded-sm',
                   historyView === 'audit'
                     ? 'bg-blue-100 text-blue-700'
                     : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
@@ -1869,7 +1869,7 @@ export function PretargetingSettingsEditor({
               <button
                 onClick={() => setHistoryView('snapshots')}
                 className={cn(
-                  'px-2 py-1 text-xs rounded',
+                  'px-2 py-1 text-xs rounded-sm',
                   historyView === 'snapshots'
                     ? 'bg-blue-100 text-blue-700'
                     : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
@@ -1885,7 +1885,7 @@ export function PretargetingSettingsEditor({
               {historyLoading ? (
                 <div className="space-y-2">
                   {[1, 2, 3].map(i => (
-                    <div key={i} className="h-12 bg-gray-200 rounded animate-pulse" />
+                    <div key={i} className="h-12 bg-gray-200 rounded-sm animate-pulse" />
                   ))}
                 </div>
               ) : history && history.length > 0 ? (
@@ -1905,7 +1905,7 @@ export function PretargetingSettingsEditor({
               {snapshotsLoading ? (
                 <div className="space-y-2">
                   {[1, 2].map(i => (
-                    <div key={i} className="h-16 bg-gray-200 rounded animate-pulse" />
+                    <div key={i} className="h-16 bg-gray-200 rounded-sm animate-pulse" />
                   ))}
                 </div>
               ) : snapshots && snapshots.length > 0 ? (
@@ -1923,7 +1923,7 @@ export function PretargetingSettingsEditor({
                         </div>
                         <button
                           onClick={() => handleRollbackPreview(snapshot)}
-                          className="px-2 py-1 text-xs bg-gray-100 text-gray-700 rounded hover:bg-gray-200"
+                          className="px-2 py-1 text-xs bg-gray-100 text-gray-700 rounded-sm hover:bg-gray-200"
                         >
                           {t.pretargeting.rollback}
                         </button>
@@ -1954,13 +1954,13 @@ export function PretargetingSettingsEditor({
                 <button
                   onClick={() => rollbackMutation.mutate(rollbackPreview.snapshot.id)}
                   disabled={rollbackMutation.isPending}
-                  className="px-3 py-1.5 bg-yellow-600 text-white text-xs rounded hover:bg-yellow-700 disabled:opacity-50"
+                  className="px-3 py-1.5 bg-yellow-600 text-white text-xs rounded-sm hover:bg-yellow-700 disabled:opacity-50"
                 >
                   {rollbackMutation.isPending ? t.pretargeting.rollingBack : t.pretargeting.rollbackNow}
                 </button>
                 <button
                   onClick={() => setRollbackPreview(null)}
-                  className="px-3 py-1.5 bg-white text-gray-700 text-xs rounded border hover:bg-gray-50"
+                  className="px-3 py-1.5 bg-white text-gray-700 text-xs rounded-sm border hover:bg-gray-50"
                 >
                   {t.common.cancel}
                 </button>

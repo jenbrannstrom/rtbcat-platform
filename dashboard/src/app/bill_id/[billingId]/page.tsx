@@ -24,7 +24,7 @@ export default function PretargetingBillingDetailPage() {
   if (!billingId) {
     return (
       <div className="p-6">
-        <div className="rounded border bg-white p-6 text-sm text-gray-500">
+        <div className="rounded-sm border bg-white p-6 text-sm text-gray-500">
           {t.pretargeting.missingConfigId}
         </div>
       </div>

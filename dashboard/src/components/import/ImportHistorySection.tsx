@@ -68,7 +68,7 @@ export function ImportHistorySection({
         <button
           onClick={onRefresh}
           disabled={loading}
-          className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded"
+          className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-sm"
           title={t.common.refresh}
         >
           <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
@@ -104,9 +104,9 @@ export function ImportHistorySection({
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3 min-w-0">
                       {item.status === "complete" ? (
-                        <CheckCircle className="h-5 w-5 text-green-500 flex-shrink-0" />
+                        <CheckCircle className="h-5 w-5 text-green-500 shrink-0" />
                   ) : (
-                    <XCircle className="h-5 w-5 text-red-500 flex-shrink-0" />
+                    <XCircle className="h-5 w-5 text-red-500 shrink-0" />
                   )}
                   <div className="min-w-0">
                     <p className="font-medium text-gray-900 truncate">
@@ -122,7 +122,7 @@ export function ImportHistorySection({
                     </p>
                   </div>
                 </div>
-                <div className="text-right flex-shrink-0 ml-4">
+                <div className="text-right shrink-0 ml-4">
                   <p className="font-medium text-gray-900">
                     {item.rows_imported.toLocaleString()}
                   </p>

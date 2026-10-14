@@ -37,7 +37,7 @@ export function CreativeThumb({
     ? "bg-green-100 text-green-700 border-green-200"
     : "bg-amber-100 text-amber-700 border-amber-200";
   const badge = showSourceBadge ? (
-    <span className={cn("absolute top-1 right-1 text-[10px] px-1.5 py-0.5 rounded border", sourceClass)}>
+    <span className={cn("absolute top-1 right-1 text-[10px] px-1.5 py-0.5 rounded-sm border", sourceClass)}>
       {sourceLabel}
     </span>
   ) : null;
@@ -46,7 +46,7 @@ export function CreativeThumb({
     const thumbnailUrl = creative.video?.thumbnail_url;
 
     return (
-      <div className={cn("relative bg-gradient-to-br from-gray-800 to-gray-900 flex items-center justify-center overflow-hidden group/thumb", heightClass)}>
+      <div className={cn("relative bg-linear-to-br from-gray-800 to-gray-900 flex items-center justify-center overflow-hidden group/thumb", heightClass)}>
         {thumbnailUrl ? (
           <>
             <img
@@ -65,7 +65,7 @@ export function CreativeThumb({
             {size === "md" && (
               <div className="absolute top-1 left-1 opacity-0 group-hover/thumb:opacity-100 transition-opacity">
                 <div className="relative group/info">
-                  <div className="flex items-center gap-1 px-1.5 py-0.5 bg-black/70 rounded text-[10px] text-gray-300">
+                  <div className="flex items-center gap-1 px-1.5 py-0.5 bg-black/70 rounded-sm text-[10px] text-gray-300">
                     <Info className="h-3 w-3" />
                     {t.creatives.previewBadge}
                   </div>
@@ -83,7 +83,7 @@ export function CreativeThumb({
           </div>
         )}
         {creative.video?.duration && (
-          <span className="absolute bottom-1 right-1 bg-black/70 text-white text-[10px] px-1 py-0.5 rounded">
+          <span className="absolute bottom-1 right-1 bg-black/70 text-white text-[10px] px-1 py-0.5 rounded-sm">
             {creative.video.duration}
           </span>
         )}
@@ -95,7 +95,7 @@ export function CreativeThumb({
   if (creative.format === "NATIVE") {
     const imageUrl = creative.native?.logo?.url || creative.native?.image?.url;
     return (
-      <div className={cn("relative bg-gradient-to-br from-green-50 to-green-100 flex items-center justify-center overflow-hidden", heightClass)}>
+      <div className={cn("relative bg-linear-to-br from-green-50 to-green-100 flex items-center justify-center overflow-hidden", heightClass)}>
         {imageUrl ? (
           <img
             src={imageUrl}
@@ -116,7 +116,7 @@ export function CreativeThumb({
   if (creative.format === "HTML") {
     const thumbnailUrl = creative.html?.thumbnail_url;
     return (
-      <div className={cn("relative bg-gradient-to-br from-blue-50 to-blue-100 flex items-center justify-center", heightClass)}>
+      <div className={cn("relative bg-linear-to-br from-blue-50 to-blue-100 flex items-center justify-center", heightClass)}>
         {thumbnailUrl ? (
           <img
             src={thumbnailUrl}
@@ -138,7 +138,7 @@ export function CreativeThumb({
     const candidateUrl = creative.display_url || creative.final_url || "";
     const isImageUrl = /\.(png|jpe?g|gif|webp)(\?.*)?$/i.test(candidateUrl);
     return (
-      <div className={cn("relative bg-gradient-to-br from-blue-50 to-blue-100 flex items-center justify-center", heightClass)}>
+      <div className={cn("relative bg-linear-to-br from-blue-50 to-blue-100 flex items-center justify-center", heightClass)}>
         {isImageUrl ? (
           <img
             src={candidateUrl}

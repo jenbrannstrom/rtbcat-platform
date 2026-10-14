@@ -294,7 +294,7 @@ export function Sidebar() {
 
   return (
     <div className={cn(
-      "flex min-h-0 flex-shrink-0 flex-col overflow-hidden bg-white border-r border-gray-200 transition-all duration-300",
+      "flex min-h-0 shrink-0 flex-col overflow-hidden bg-white border-r border-gray-200 transition-all duration-300",
       collapsed ? "w-16" : "w-64"
     )}>
       {/* Header with logo */}
@@ -304,7 +304,7 @@ export function Sidebar() {
           alt={t.auth.catScan}
           width={40}
           height={40}
-          className="h-10 w-10 rounded-lg flex-shrink-0"
+          className="h-10 w-10 rounded-lg shrink-0"
           priority
         />
         {!collapsed && (
@@ -329,7 +329,7 @@ export function Sidebar() {
             <p className="font-medium">{t.sidebar.unableToLoadSeats}</p>
             <button
               onClick={() => refetchSeats()}
-              className="mt-2 px-2 py-1 text-xs font-medium rounded bg-red-100 hover:bg-red-200"
+              className="mt-2 px-2 py-1 text-xs font-medium rounded-sm bg-red-100 hover:bg-red-200"
             >
               {t.common.retry}
             </button>
@@ -341,7 +341,7 @@ export function Sidebar() {
             <p className="text-xs mt-1">{t.sidebar.goToSettingsToConnect}</p>
             <button
               onClick={() => refetchSeats()}
-              className="mt-2 px-2 py-1 text-xs font-medium rounded bg-gray-100 hover:bg-gray-200 text-gray-700"
+              className="mt-2 px-2 py-1 text-xs font-medium rounded-sm bg-gray-100 hover:bg-gray-200 text-gray-700"
             >
               {t.common.retry}
             </button>
@@ -364,7 +364,7 @@ export function Sidebar() {
                   disabled={isSyncing}
                   className={cn(
                     "p-1.5 rounded-md text-gray-500 hover:text-primary-600 hover:bg-primary-50",
-                    "disabled:opacity-50 flex-shrink-0"
+                    "disabled:opacity-50 shrink-0"
                   )}
                   title={t.common.syncAll}
                 >
@@ -375,7 +375,7 @@ export function Sidebar() {
 
             {syncMessage && (
               <div className={cn(
-                "mt-2 px-2 py-1 rounded text-xs flex items-center gap-1",
+                "mt-2 px-2 py-1 rounded-sm text-xs flex items-center gap-1",
                 syncMessage.type === "success" ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"
               )}>
                 {syncMessage.type === "success" ? <Check className="h-3 w-3" /> : <AlertCircle className="h-3 w-3" />}
@@ -397,7 +397,7 @@ export function Sidebar() {
               <span className="truncate">
                 {selectedSeat ? selectedSeat.display_name || `${t.sidebar.buyer} ${selectedSeat.buyer_id}` : t.sidebar.allSeats}
               </span>
-              <ChevronDown className={cn("h-4 w-4 text-gray-400 transition-transform flex-shrink-0", seatDropdownOpen && "rotate-180")} />
+              <ChevronDown className={cn("h-4 w-4 text-gray-400 transition-transform shrink-0", seatDropdownOpen && "rotate-180")} />
             </button>
 
             {seatDropdownOpen && (
@@ -456,7 +456,7 @@ export function Sidebar() {
 
             {syncMessage && (
               <div className={cn(
-                "mt-2 px-2 py-1 rounded text-xs flex items-center gap-1",
+                "mt-2 px-2 py-1 rounded-sm text-xs flex items-center gap-1",
                 syncMessage.type === "success" ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"
               )}>
                 {syncMessage.type === "success" ? <Check className="h-3 w-3" /> : <AlertCircle className="h-3 w-3" />}
@@ -491,7 +491,7 @@ export function Sidebar() {
             >
               <TrendingDown
                 className={cn(
-                  "h-5 w-5 flex-shrink-0",
+                  "h-5 w-5 shrink-0",
                   (pathWithoutBuyer === "/" || isInQps) ? "text-primary-600" : "text-gray-400"
                 )}
               />
@@ -511,7 +511,7 @@ export function Sidebar() {
               >
                 <TrendingDown
                   className={cn(
-                    "h-5 w-5 flex-shrink-0 mr-3",
+                    "h-5 w-5 shrink-0 mr-3",
                     (pathWithoutBuyer === "/" || isInQps) ? "text-primary-600" : "text-gray-400"
                   )}
                 />
@@ -583,7 +583,7 @@ export function Sidebar() {
             >
               <item.icon
                 className={cn(
-                  "h-5 w-5 flex-shrink-0",
+                  "h-5 w-5 shrink-0",
                   isActive ? "text-primary-600" : "text-gray-400",
                   !collapsed && "mr-3"
                 )}
@@ -607,7 +607,7 @@ export function Sidebar() {
           >
             <Shield
               className={cn(
-                "h-5 w-5 flex-shrink-0",
+                "h-5 w-5 shrink-0",
                 pathWithoutBuyer.startsWith("/creatives/click-macros")
                   ? "text-primary-600"
                   : "text-gray-400",
@@ -632,7 +632,7 @@ export function Sidebar() {
           >
             <Globe
               className={cn(
-                "h-5 w-5 flex-shrink-0",
+                "h-5 w-5 shrink-0",
                 pathWithoutBuyer.startsWith("/creatives/language-flags")
                   ? "text-primary-600"
                   : "text-gray-400",
@@ -657,7 +657,7 @@ export function Sidebar() {
           >
             <Activity
               className={cn(
-                "h-5 w-5 flex-shrink-0",
+                "h-5 w-5 shrink-0",
                 pathWithoutBuyer.startsWith("/creatives/attribution-readiness")
                   ? "text-primary-600"
                   : "text-gray-400",
@@ -690,7 +690,7 @@ export function Sidebar() {
           >
             <Settings
               className={cn(
-                "h-5 w-5 flex-shrink-0",
+                "h-5 w-5 shrink-0",
                 isInSettings ? "text-primary-600" : "text-gray-400",
                 !collapsed && "mr-3"
               )}
@@ -725,7 +725,7 @@ export function Sidebar() {
                   >
                     <item.icon
                       className={cn(
-                        "h-4 w-4 flex-shrink-0 mr-3",
+                        "h-4 w-4 shrink-0 mr-3",
                         isActive ? "text-primary-600" : "text-gray-400"
                       )}
                     />
@@ -760,7 +760,7 @@ export function Sidebar() {
             >
               <Shield
                 className={cn(
-                  "h-5 w-5 flex-shrink-0",
+                  "h-5 w-5 shrink-0",
                   isInAdmin ? "text-primary-600" : "text-gray-400",
                   !collapsed && "mr-3"
                 )}
@@ -795,7 +795,7 @@ export function Sidebar() {
                     >
                       <item.icon
                         className={cn(
-                          "h-4 w-4 flex-shrink-0 mr-3",
+                          "h-4 w-4 shrink-0 mr-3",
                           isActive ? "text-primary-600" : "text-gray-400"
                         )}
                       />
@@ -830,7 +830,7 @@ export function Sidebar() {
       </nav>
 
       {/* Footer with user info and collapse */}
-      <div className="flex-shrink-0 overflow-hidden px-2 py-3 border-t border-gray-200">
+      <div className="shrink-0 overflow-hidden px-2 py-3 border-t border-gray-200">
         {/* User info, version, docs, and collapse toggle in a clean row */}
         {!collapsed ? (
           <div className="flex min-w-0 items-center gap-1 px-2">
@@ -846,12 +846,12 @@ export function Sidebar() {
                   release={versionRelease}
                   build={versionBuild}
                 />
-                <span className="flex-shrink-0" aria-hidden="true">·</span>
+                <span className="shrink-0" aria-hidden="true">·</span>
                 <a
                   href={getDocsHomeUrl()}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex-shrink-0 whitespace-nowrap hover:text-primary-600 transition-colors"
+                  className="shrink-0 whitespace-nowrap hover:text-primary-600 transition-colors"
                 >
                   {t.navigation.docs}
                 </a>
@@ -859,7 +859,7 @@ export function Sidebar() {
             </div>
             <button
               onClick={toggleCollapsed}
-              className="flex items-center justify-center p-1.5 text-gray-400 hover:text-gray-600 rounded-md hover:bg-gray-50 transition-colors flex-shrink-0"
+              className="flex items-center justify-center p-1.5 text-gray-400 hover:text-gray-600 rounded-md hover:bg-gray-50 transition-colors shrink-0"
               title={t.navigation.collapse}
             >
               <ChevronLeft className="h-4 w-4" />

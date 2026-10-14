@@ -163,7 +163,7 @@ export default function ClickMacroCoveragePage() {
                     <div className="space-y-1">
                       <span
                         className={cn(
-                          "inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium",
+                          "inline-flex items-center gap-1 rounded-sm px-2 py-1 text-xs font-medium",
                           row.has_click_macro ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
                         )}
                       >
@@ -201,7 +201,7 @@ export default function ClickMacroCoveragePage() {
                   </td>
                   <td className="px-3 py-2 align-top text-xs">
                     {row.is_active ? (
-                      <span className="inline-flex items-center gap-1 rounded bg-green-50 px-1.5 py-0.5 text-green-700">{row.last_active_date}</span>
+                      <span className="inline-flex items-center gap-1 rounded-sm bg-green-50 px-1.5 py-0.5 text-green-700">{row.last_active_date}</span>
                     ) : (
                       <span className="text-gray-400">Inactive</span>
                     )}
@@ -231,7 +231,7 @@ export default function ClickMacroCoveragePage() {
                         href={row.sample_url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="block max-w-[26rem] truncate font-mono text-xs text-primary-700 hover:text-primary-800"
+                        className="block max-w-104 truncate font-mono text-xs text-primary-700 hover:text-primary-800"
                         title={row.sample_url}
                       >
                         {row.sample_url}
@@ -262,14 +262,14 @@ export default function ClickMacroCoveragePage() {
           <button
             onClick={() => setPageIndex((prev) => Math.max(prev - 1, 0))}
             disabled={pageIndex === 0}
-            className="rounded border border-gray-300 px-2 py-1 disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-sm border border-gray-300 px-2 py-1 disabled:cursor-not-allowed disabled:opacity-50"
           >
             Previous
           </button>
           <button
             onClick={() => setPageIndex((prev) => prev + 1)}
             disabled={!hasMore}
-            className="rounded border border-gray-300 px-2 py-1 disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-sm border border-gray-300 px-2 py-1 disabled:cursor-not-allowed disabled:opacity-50"
           >
             Next
           </button>

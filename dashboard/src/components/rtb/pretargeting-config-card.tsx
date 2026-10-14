@@ -80,7 +80,7 @@ function GeoSettingPill({
   });
 
   return (
-    <div className="inline-flex items-center gap-1 px-2 py-0.5 bg-gray-100 rounded text-xs text-gray-600">
+    <div className="inline-flex items-center gap-1 px-2 py-0.5 bg-gray-100 rounded-sm text-xs text-gray-600">
       <span className="text-gray-400">{t.pretargeting.cardGeosLabel}:</span>
       <span>{displayNames.join(', ')}</span>
       {remaining > 0 && <span className="text-gray-400">+{remaining}</span>}
@@ -102,7 +102,7 @@ function SettingPill({ label, values, max = 3, formatValue }: {
   const formatter = formatValue || ((v: string) => v);
 
   return (
-    <div className="inline-flex items-center gap-1 px-2 py-0.5 bg-gray-100 rounded text-xs text-gray-600">
+    <div className="inline-flex items-center gap-1 px-2 py-0.5 bg-gray-100 rounded-sm text-xs text-gray-600">
       <span className="text-gray-400">{label}:</span>
       <span>{displayValues.map(formatter).join(', ')}</span>
       {remaining > 0 && <span className="text-gray-400">+{remaining}</span>}
@@ -513,20 +513,20 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
                 onChange={(e) => setEditValue(e.target.value)}
                 onKeyDown={handleKeyDown}
                 onBlur={handleSave}
-                className="flex-1 px-2 py-0.5 text-sm font-medium border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="flex-1 px-2 py-0.5 text-sm font-medium border rounded-sm focus:outline-hidden focus:ring-2 focus:ring-blue-500"
                 disabled={nameMutation.isPending}
               />
               <button
                 onClick={handleSave}
                 disabled={nameMutation.isPending}
-                className="p-1 text-green-600 hover:bg-green-50 rounded"
+                className="p-1 text-green-600 hover:bg-green-50 rounded-sm"
               >
                 <Check className="h-4 w-4" />
               </button>
               <button
                 onClick={handleCancel}
                 disabled={nameMutation.isPending}
-                className="p-1 text-gray-400 hover:bg-gray-100 rounded"
+                className="p-1 text-gray-400 hover:bg-gray-100 rounded-sm"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -537,7 +537,7 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
                 {config.name}
               </span>
               {hasPendingChanges && (
-                <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800">
+                <span className="rounded-sm bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800">
                   {pendingChangesCount} pending
                 </span>
               )}
@@ -571,7 +571,7 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
                           setQpsInput(qpsValue === null || qpsValue === undefined ? '' : String(qpsValue));
                         }
                       }}
-                      className="w-20 rounded border border-gray-300 bg-white px-1.5 py-0.5 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                      className="w-20 rounded-sm border border-gray-300 bg-white px-1.5 py-0.5 text-xs text-gray-700 focus:outline-hidden focus:ring-1 focus:ring-blue-400"
                       placeholder={t.pretargeting.cardQpsUnsetPlaceholder}
                       disabled={!configDetail}
                     />
@@ -581,7 +581,7 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
                     <button
                       onClick={() => { applyQpsChange(); setIsEditingQps(false); }}
                       disabled={qpsMutationPending || !configDetail}
-                      className="p-0.5 text-green-600 hover:bg-green-50 rounded"
+                      className="p-0.5 text-green-600 hover:bg-green-50 rounded-sm"
                     >
                       <Check className="h-3.5 w-3.5" />
                     </button>
@@ -594,7 +594,7 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
                           config.maximum_qps;
                         setQpsInput(qpsValue === null || qpsValue === undefined ? '' : String(qpsValue));
                       }}
-                      className="p-0.5 text-gray-400 hover:bg-gray-100 rounded"
+                      className="p-0.5 text-gray-400 hover:bg-gray-100 rounded-sm"
                     >
                       <X className="h-3.5 w-3.5" />
                     </button>
@@ -603,7 +603,7 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
                   <div className="flex items-center gap-1">
                     <span className="text-xs font-medium text-gray-700">{qpsInput || '—'}</span>
                     {latestPendingQpsChange && (
-                      <span className="rounded bg-amber-100 px-1 py-0.5 text-[10px] text-amber-800">
+                      <span className="rounded-sm bg-amber-100 px-1 py-0.5 text-[10px] text-amber-800">
                         {t.pretargeting.cardPendingLabel}: {latestPendingQpsChange.value}
                       </span>
                     )}
@@ -622,7 +622,7 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
 
         {/* State badge */}
         {config.state === 'SUSPENDED' && (
-          <span className="px-2 py-0.5 bg-gray-200 text-gray-600 text-xs rounded">
+          <span className="px-2 py-0.5 bg-gray-200 text-gray-600 text-xs rounded-sm">
             {t.pretargeting.cardPausedBadge}
           </span>
         )}
@@ -701,7 +701,7 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
       {showConfirmSuspend && (
         <div className="px-4 py-3 bg-yellow-50 border-t border-yellow-200">
           <div className="flex items-start gap-2">
-            <AlertTriangle className="h-5 w-5 text-yellow-600 flex-shrink-0" />
+            <AlertTriangle className="h-5 w-5 text-yellow-600 shrink-0" />
             <div className="flex-1">
               <p className="text-sm font-medium text-yellow-900">
                 {t.pretargeting.suspendConfigConfirmTitle}
@@ -713,7 +713,7 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
                 <button
                   onClick={() => suspendMutation.mutate()}
                   disabled={suspendMutation.isPending}
-                  className="flex items-center gap-1 px-3 py-1.5 bg-yellow-600 text-white text-sm rounded hover:bg-yellow-700 disabled:opacity-50"
+                  className="flex items-center gap-1 px-3 py-1.5 bg-yellow-600 text-white text-sm rounded-sm hover:bg-yellow-700 disabled:opacity-50"
                 >
                   {suspendMutation.isPending ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
@@ -725,7 +725,7 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
                 <button
                   onClick={() => setShowConfirmSuspend(false)}
                   disabled={suspendMutation.isPending}
-                  className="px-3 py-1.5 bg-white text-gray-700 text-sm rounded border hover:bg-gray-50 disabled:opacity-50"
+                  className="px-3 py-1.5 bg-white text-gray-700 text-sm rounded-sm border hover:bg-gray-50 disabled:opacity-50"
                 >
                   {t.common.cancel}
                 </button>
@@ -750,14 +750,14 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
               <button
                 onClick={() => discardAllMutation.mutate()}
                 disabled={isPushing}
-                className="px-2 py-1 text-xs bg-white text-gray-600 rounded border hover:bg-gray-50 disabled:opacity-50"
+                className="px-2 py-1 text-xs bg-white text-gray-600 rounded-sm border hover:bg-gray-50 disabled:opacity-50"
               >
                 {t.pretargeting.discardAll}
               </button>
               <button
                 onClick={() => setShowCommitToast(true)}
                 disabled={isPushing}
-                className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+                className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-sm bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
               >
                 <Upload className="h-3 w-3" />
                 {t.pretargeting.pushToGoogle}
@@ -792,7 +792,7 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
                       checked={isFormatEnabled(formatOption.value)}
                       disabled={formatMutationPending}
                       onChange={(event) => setFormatEnabledState(formatOption.value, event.target.checked)}
-                      className="h-3.5 w-3.5 rounded border-gray-300"
+                      className="h-3.5 w-3.5 rounded-sm border-gray-300"
                     />
                     <span className="text-[11px]">{formatOption.label}</span>
                   </label>
@@ -804,7 +804,7 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
                 <button
                   onClick={() => setShowConfirmSuspend(true)}
                   disabled={stateMutationPending}
-                  className="flex items-center gap-1 px-2 py-1 text-xs font-medium rounded bg-yellow-100 text-yellow-700 hover:bg-yellow-200 disabled:opacity-50"
+                  className="flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-sm bg-yellow-100 text-yellow-700 hover:bg-yellow-200 disabled:opacity-50"
                 >
                   {suspendMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Pause className="h-3 w-3" />}
                   {t.pretargeting.suspendAction}
@@ -813,7 +813,7 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
                 <button
                   onClick={() => activateMutation.mutate()}
                   disabled={stateMutationPending}
-                  className="flex items-center gap-1 px-2 py-1 text-xs font-medium rounded bg-green-100 text-green-700 hover:bg-green-200 disabled:opacity-50"
+                  className="flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-sm bg-green-100 text-green-700 hover:bg-green-200 disabled:opacity-50"
                 >
                   {activateMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Play className="h-3 w-3" />}
                   {t.pretargeting.activateAction}
@@ -823,7 +823,7 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
               <button
                 onClick={() => setShowHistory(!showHistory)}
                 className={cn(
-                  'flex items-center gap-1 px-2 py-1 text-xs font-medium rounded transition-colors',
+                  'flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-sm transition-colors',
                   showHistory
                     ? 'bg-blue-100 text-blue-700'
                     : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
@@ -859,7 +859,7 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
             <button
               onClick={() => setShowCommitToast(true)}
               disabled={isPushing}
-              className="inline-flex items-center gap-1 rounded bg-amber-500 px-2.5 py-1 text-xs font-medium text-white hover:bg-amber-600"
+              className="inline-flex items-center gap-1 rounded-sm bg-amber-500 px-2.5 py-1 text-xs font-medium text-white hover:bg-amber-600"
             >
               <Upload className="h-3 w-3" />
               Review
@@ -901,14 +901,14 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
             <button
               onClick={() => setShowCommitToast(false)}
               disabled={applyAllMutation.isPending || discardAllMutation.isPending}
-              className="rounded border px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              className="rounded-sm border px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50"
             >
               {t.common.back}
             </button>
             <button
               onClick={() => discardAllMutation.mutate()}
               disabled={applyAllMutation.isPending || discardAllMutation.isPending}
-              className="inline-flex items-center gap-1 rounded border border-red-200 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"
+              className="inline-flex items-center gap-1 rounded-sm border border-red-200 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"
             >
               {discardAllMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
               {t.pretargeting.discardAll}
@@ -916,7 +916,7 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
             <button
               onClick={() => applyAllMutation.mutate()}
               disabled={applyAllMutation.isPending || discardAllMutation.isPending}
-              className="inline-flex items-center gap-1 rounded bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+              className="inline-flex items-center gap-1 rounded-sm bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
             >
               {applyAllMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
               {t.pretargeting.yesPushToGoogle}

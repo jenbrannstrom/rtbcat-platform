@@ -1,0 +1,9 @@
+{
+  "name": "@rtbcat/next-eslint-glob",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Next.js ESLint root-directory lookup using tinyglobby, without fast-glob or braces",
+  "main": "index.cjs",
+  "license": "MIT",
+  "dependencies": { "tinyglobby": "0.2.17" }
+}

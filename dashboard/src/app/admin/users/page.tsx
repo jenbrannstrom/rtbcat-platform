@@ -407,16 +407,16 @@ function UsersPage() {
         >
           <div className="flex items-start gap-2 text-sm">
             {actionNotice.type === "success" ? (
-              <CheckCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
+              <CheckCircle className="mt-0.5 h-4 w-4 shrink-0" />
             ) : (
-              <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
             )}
             <span>{actionNotice.message}</span>
           </div>
           <button
             type="button"
             onClick={() => setActionNotice(null)}
-            className="rounded p-0.5 hover:bg-black/5"
+            className="rounded-sm p-0.5 hover:bg-black/5"
             aria-label={t.common.close}
           >
             <XCircle className="h-4 w-4" />
@@ -425,7 +425,7 @@ function UsersPage() {
       )}
 
       {/* Users Table */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+      <div className="bg-white rounded-xl shadow-xs border border-gray-200 overflow-hidden">
         {isLoading ? (
           <div className="p-12 text-center">
             <div className="w-8 h-8 border-4 border-primary-600 border-t-transparent rounded-full animate-spin mx-auto" />
@@ -465,7 +465,7 @@ function UsersPage() {
                 <tr key={user.id} className="hover:bg-gray-50">
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center">
-                      <div className="h-10 w-10 flex-shrink-0">
+                      <div className="h-10 w-10 shrink-0">
                         <div
                           className={cn(
                             "h-10 w-10 rounded-full flex items-center justify-center",
@@ -543,7 +543,7 @@ function UsersPage() {
                       {activeDropdown === user.id && (
                         <div
                           className={cn(
-                            "absolute right-0 w-56 bg-white rounded-md shadow-lg ring-1 ring-black ring-opacity-5 z-10",
+                            "absolute right-0 w-56 bg-white rounded-md shadow-lg ring-1 ring-black/5 z-10",
                             index >= users.length - 2 ? "bottom-full mb-2" : "top-full mt-2"
                           )}
                         >
@@ -616,9 +616,9 @@ function UsersPage() {
 
       {/* Create User Modal */}
       {showCreateModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl shadow-xl max-w-lg w-full mx-4 max-h-[90vh] flex flex-col">
-            <div className="flex-shrink-0 px-6 pt-6 pb-4">
+            <div className="shrink-0 px-6 pt-6 pb-4">
               <h2 className="text-xl font-semibold text-gray-900">
                 {t.admin.createNewUser}
               </h2>
@@ -626,7 +626,7 @@ function UsersPage() {
 
             {error && (
               <div className="mx-6 mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2">
-                <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
+                <AlertCircle className="h-5 w-5 text-red-600 shrink-0 mt-0.5" />
                 <p className="text-sm text-red-700">{error}</p>
               </div>
             )}
@@ -747,7 +747,7 @@ function UsersPage() {
               </div>
               {createRole === "sudo" ? (
                 <div className="p-3 bg-purple-50 border border-purple-200 rounded-lg flex items-start gap-2">
-                  <Shield className="h-5 w-5 text-purple-600 flex-shrink-0 mt-0.5" />
+                  <Shield className="h-5 w-5 text-purple-600 shrink-0 mt-0.5" />
                   <p className="text-sm text-purple-800">{t.admin.sudoAccessHelp}</p>
                 </div>
               ) : (
@@ -778,7 +778,7 @@ function UsersPage() {
                               [seat.buyer_id]: level,
                             }));
                           }}
-                          className="px-2 py-1 border border-gray-300 rounded text-sm"
+                          className="px-2 py-1 border border-gray-300 rounded-sm text-sm"
                         >
                           <option value="none">{t.admin.noAccess}</option>
                           <option value="read">{t.admin.readAccess}</option>
@@ -800,7 +800,7 @@ function UsersPage() {
                   : t.admin.oauthInviteNote}
               </p>
               </div>
-              <div className="flex-shrink-0 px-6 pb-6 pt-4 border-t flex gap-3">
+              <div className="shrink-0 px-6 pb-6 pt-4 border-t flex gap-3">
                 <button
                   type="button"
                   onClick={resetCreateModalState}
@@ -823,7 +823,7 @@ function UsersPage() {
 
       {/* Change Password Modal */}
       {passwordUser && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl shadow-xl max-w-md w-full mx-4">
             <div className="px-6 pt-6 pb-4 flex items-start justify-between gap-4">
               <div>
@@ -848,7 +848,7 @@ function UsersPage() {
 
             {error && (
               <div className="mx-6 mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2">
-                <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
+                <AlertCircle className="h-5 w-5 text-red-600 shrink-0 mt-0.5" />
                 <p className="text-sm text-red-700">{error}</p>
               </div>
             )}
@@ -941,9 +941,9 @@ function UsersPage() {
 
       {/* Permissions Modal */}
       {permissionsUser && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] flex flex-col">
-            <div className="flex-shrink-0 px-6 pt-6 pb-4 flex items-center justify-between">
+            <div className="shrink-0 px-6 pt-6 pb-4 flex items-center justify-between">
               <div>
                 <h2 className="text-xl font-semibold text-gray-900">
                   {t.admin.permissionsFor.replace("{email}", permissionsUser.email)}
@@ -964,14 +964,14 @@ function UsersPage() {
             <div className="overflow-y-auto flex-1 px-6 space-y-3">
               {permissionError && (
                 <div className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2" role="alert">
-                  <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
+                  <AlertCircle className="h-5 w-5 text-red-600 shrink-0 mt-0.5" />
                   <p className="text-sm text-red-700">{permissionError}</p>
                 </div>
               )}
 
               {pendingSudoPromotion && (
                 <div className="p-3 bg-orange-50 border border-orange-300 rounded-lg flex items-start gap-2" role="status">
-                  <AlertCircle className="h-5 w-5 text-orange-600 flex-shrink-0 mt-0.5" />
+                  <AlertCircle className="h-5 w-5 text-orange-600 shrink-0 mt-0.5" />
                   <p className="text-sm text-orange-900">{t.admin.sudoConfirmationHelp}</p>
                 </div>
               )}
@@ -979,7 +979,7 @@ function UsersPage() {
               {permissionsUserIsSudo ? (
                 <div className="p-3 bg-purple-50 border border-purple-200 rounded-lg flex items-start justify-between gap-3">
                   <div className="flex items-start gap-2">
-                    <Shield className="h-5 w-5 text-purple-600 flex-shrink-0 mt-0.5" />
+                    <Shield className="h-5 w-5 text-purple-600 shrink-0 mt-0.5" />
                     <p className="text-sm text-purple-800">{t.admin.sudoAccessHelp}</p>
                   </div>
                   {!!seats?.length && (
@@ -987,7 +987,7 @@ function UsersPage() {
                       type="button"
                       onClick={() => makeReadOnlyAllSeatsMutation.mutate(permissionsUser.id)}
                       disabled={makeReadOnlyAllSeatsMutation.isPending}
-                      className="flex-shrink-0 px-2.5 py-1.5 text-xs font-medium text-purple-800 bg-white border border-purple-300 rounded-md hover:bg-purple-100 disabled:opacity-50"
+                      className="shrink-0 px-2.5 py-1.5 text-xs font-medium text-purple-800 bg-white border border-purple-300 rounded-md hover:bg-purple-100 disabled:opacity-50"
                     >
                       {t.admin.makeReadOnlyAllSeats}
                     </button>
@@ -995,7 +995,7 @@ function UsersPage() {
                 </div>
               ) : !seatPermissionsLoading && (userSeatPermissions || []).length === 0 ? (
                 <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-2">
-                  <AlertCircle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                  <AlertCircle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
                   <p className="text-sm text-amber-800">{t.admin.noSeatAccessWarning}</p>
                 </div>
               ) : null}
@@ -1211,7 +1211,7 @@ function UsersPage() {
               </div>
             </div>
 
-            <div className="flex-shrink-0 px-6 pb-6 pt-4 border-t flex justify-end">
+            <div className="shrink-0 px-6 pb-6 pt-4 border-t flex justify-end">
               <button
                 onClick={() => {
                   if (pendingSudoPromotion) {

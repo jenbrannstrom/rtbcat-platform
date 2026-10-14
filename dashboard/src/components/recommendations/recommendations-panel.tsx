@@ -273,7 +273,7 @@ export function RecommendationsPanel({
   return (
     <div>
       {/* Summary Bar */}
-      <div className="mb-6 p-4 bg-white rounded-lg border border-gray-200 shadow-sm">
+      <div className="mb-6 p-4 bg-white rounded-lg border border-gray-200 shadow-xs">
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div className="flex items-center gap-6">
             <div>
@@ -349,8 +349,8 @@ export function RecommendationsPanel({
                 <div
                   className={
                     applyFeedback[rec.id].error
-                      ? "px-3 py-2 rounded border border-red-200 bg-red-50 text-xs text-red-700"
-                      : "px-3 py-2 rounded border border-amber-200 bg-amber-50 text-xs text-amber-800"
+                      ? "px-3 py-2 rounded-sm border border-red-200 bg-red-50 text-xs text-red-700"
+                      : "px-3 py-2 rounded-sm border border-amber-200 bg-amber-50 text-xs text-amber-800"
                   }
                 >
                   {applyFeedback[rec.id].message}

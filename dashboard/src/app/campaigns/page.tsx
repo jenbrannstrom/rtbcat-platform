@@ -657,9 +657,9 @@ export default function CampaignsPage() {
             <button
               onClick={() => handleViewModeChange('grid')}
               className={cn(
-                "p-2 rounded transition-colors",
+                "p-2 rounded-sm transition-colors",
                 viewMode === 'grid'
-                  ? "bg-white shadow-sm text-blue-600"
+                  ? "bg-white shadow-xs text-blue-600"
                   : "text-gray-500 hover:text-gray-700"
               )}
               title={t.campaigns.gridView}
@@ -669,9 +669,9 @@ export default function CampaignsPage() {
             <button
               onClick={() => handleViewModeChange('list')}
               className={cn(
-                "p-2 rounded transition-colors",
+                "p-2 rounded-sm transition-colors",
                 viewMode === 'list'
-                  ? "bg-white shadow-sm text-blue-600"
+                  ? "bg-white shadow-xs text-blue-600"
                   : "text-gray-500 hover:text-gray-700"
               )}
               title={t.campaigns.listView}

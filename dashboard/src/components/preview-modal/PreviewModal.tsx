@@ -154,7 +154,7 @@ export function PreviewModal({
               {isLoadingFull && <Loader2 className="h-4 w-4 animate-spin" />}
               {isLoadingFull ? t.creatives.loadingCreativePreview : t.creatives.creativePreviewUnavailable}
             </div>
-            <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded">
+            <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded-sm">
               <X className="h-5 w-5" />
             </button>
           </div>
@@ -305,14 +305,14 @@ export function PreviewModal({
       {/* Modal */}
       <div className="relative bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-hidden flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b flex-shrink-0">
+        <div className="flex items-center justify-between p-4 border-b shrink-0">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
               <h2 className="text-lg font-semibold text-gray-900 font-mono truncate max-w-[400px]" title={creative.id}>#{creative.id}</h2>
-              <CopyButton text={creative.id} className="flex-shrink-0" />
+              <CopyButton text={creative.id} className="shrink-0" />
               <span
                 className={cn(
-                  "text-[10px] px-1.5 py-0.5 rounded border",
+                  "text-[10px] px-1.5 py-0.5 rounded-sm border",
                   effectiveSource === "live"
                     ? "bg-green-100 text-green-700 border-green-200"
                     : "bg-amber-100 text-amber-700 border-amber-200"
@@ -347,7 +347,7 @@ export function PreviewModal({
               )}
             </div>
           </div>
-          <button onClick={onClose} className="ml-4 p-2 hover:bg-gray-100 rounded-full flex-shrink-0">
+          <button onClick={onClose} className="ml-4 p-2 hover:bg-gray-100 rounded-full shrink-0">
             <X className="h-5 w-5" />
           </button>
         </div>
@@ -402,7 +402,7 @@ export function PreviewModal({
                   type="button"
                   onClick={refetchLive}
                   disabled={isRefetchingLive}
-                  className="ml-3 inline-flex items-center gap-1 rounded border border-amber-300 bg-white px-2 py-0.5 text-amber-700 hover:bg-amber-50 disabled:opacity-60"
+                  className="ml-3 inline-flex items-center gap-1 rounded-sm border border-amber-300 bg-white px-2 py-0.5 text-amber-700 hover:bg-amber-50 disabled:opacity-60"
                 >
                   {isRefetchingLive ? (
                     <>
@@ -440,7 +440,7 @@ export function PreviewModal({
                       {showHtmlCode ? t.previewModal.hideHtml : t.previewModal.showHtml}
                     </button>
                     {showHtmlCode && (
-                      <pre className="mt-2 max-h-40 overflow-auto rounded border bg-white p-2 text-[11px] text-gray-700">
+                      <pre className="mt-2 max-h-40 overflow-auto rounded-sm border bg-white p-2 text-[11px] text-gray-700">
                         {creative.html.snippet}
                       </pre>
                     )}
@@ -552,7 +552,7 @@ export function PreviewModal({
                       <span className="text-gray-500 text-xs">{t.previewModal.disapprovalReasons}</span>
                       <div className="mt-1 space-y-1">
                         {creative.disapproval_reasons.map((r: { reason: string; details?: string }, i: number) => (
-                          <div key={i} className="text-xs text-red-600 bg-red-50 px-2 py-1 rounded">
+                          <div key={i} className="text-xs text-red-600 bg-red-50 px-2 py-1 rounded-sm">
                             {r.reason?.replace(/_/g, " ")}{r.details ? <>{" — "}<a href={r.details} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">{t.previewModal.readMore}</a></> : ""}
                           </div>
                         ))}
@@ -622,7 +622,7 @@ export function PreviewModal({
                         <div className="flex items-center gap-2">
                           <span className="text-xs font-medium text-gray-500">{url.label}</span>
                           {url.isPrimary && (
-                            <span className="text-[10px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded">{t.previewModal.primary}</span>
+                            <span className="text-[10px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded-sm">{t.previewModal.primary}</span>
                           )}
                         </div>
                         <div className="flex items-start gap-2 min-w-0">
@@ -635,7 +635,7 @@ export function PreviewModal({
                           >
                             {url.url}
                           </a>
-                          <CopyButton text={url.url} className="flex-shrink-0 mt-0.5" />
+                          <CopyButton text={url.url} className="shrink-0 mt-0.5" />
                         </div>
                       </div>
                     ))}
@@ -670,14 +670,14 @@ export function PreviewModal({
                     <p className="mt-2 text-xs text-amber-700">{destinationDiagnosticsError}</p>
                   ) : destinationDiagnostics ? (
                     <div className="mt-2 space-y-2">
-                      <div className="rounded border border-gray-200 bg-white px-2 py-2">
+                      <div className="rounded-sm border border-gray-200 bg-white px-2 py-2">
                         <div className="flex items-center justify-between gap-2">
                           <span className="text-[10px] font-medium text-gray-600">
                             Click-path macro compliance
                           </span>
                           <span
                             className={cn(
-                              "text-[10px] px-1.5 py-0.5 rounded",
+                              "text-[10px] px-1.5 py-0.5 rounded-sm",
                               destinationDiagnostics.has_click_macro
                                 ? "bg-green-100 text-green-700"
                                 : "bg-red-100 text-red-700"
@@ -695,7 +695,7 @@ export function PreviewModal({
                           </div>
                         )}
                         {destinationDiagnostics.has_payload_only_click_macro && (
-                          <div className="mt-2 rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-[10px] text-amber-800">
+                          <div className="mt-2 rounded-sm border border-amber-200 bg-amber-50 px-2 py-1.5 text-[10px] text-amber-800">
                             Raw payload tokens were found outside the detected click path.
                             {destinationDiagnostics.payload_click_macro_tokens.length > 0 && (
                               <span className="block break-all">
@@ -721,7 +721,7 @@ export function PreviewModal({
                         {destinationDiagnostics.candidates.map((candidate: CreativeDestinationCandidate, idx: number) => (
                           <div
                             key={`${candidate.source}-${idx}`}
-                            className="rounded border border-gray-200 bg-white px-2 py-1.5"
+                            className="rounded-sm border border-gray-200 bg-white px-2 py-1.5"
                           >
                             <div className="flex items-center justify-between gap-2">
                               <span className="text-[10px] font-medium text-gray-600">
@@ -729,7 +729,7 @@ export function PreviewModal({
                               </span>
                               <span
                                 className={cn(
-                                  "text-[10px] px-1.5 py-0.5 rounded",
+                                  "text-[10px] px-1.5 py-0.5 rounded-sm",
                                   candidate.eligible
                                     ? "bg-green-100 text-green-700"
                                     : "bg-gray-100 text-gray-600"
@@ -763,12 +763,12 @@ export function PreviewModal({
                   <div className="space-y-1 text-sm">
                     {Object.entries(trackingParams).map(([key, value]) => (
                       <div key={key} className="flex items-center justify-between gap-2 text-xs">
-                        <span className="text-gray-500 font-mono flex-shrink-0">{key}</span>
+                        <span className="text-gray-500 font-mono shrink-0">{key}</span>
                         <div className="flex items-center gap-1 min-w-0">
                           <span className="text-gray-700 truncate" title={value}>
                             {value}
                           </span>
-                          <CopyButton text={value} className="flex-shrink-0" />
+                          <CopyButton text={value} className="shrink-0" />
                         </div>
                       </div>
                     ))}

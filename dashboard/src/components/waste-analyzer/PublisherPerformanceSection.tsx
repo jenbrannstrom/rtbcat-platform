@@ -51,13 +51,13 @@ export function PublisherPerformanceSection({ publishers, seatName }: PublisherP
 
         <div className="p-6 border-2 border-dashed border-gray-200 rounded-lg">
           <div className="flex items-start gap-4">
-            <Upload className="h-8 w-8 text-gray-400 flex-shrink-0" />
+            <Upload className="h-8 w-8 text-gray-400 shrink-0" />
             <div>
               <h4 className="font-medium text-gray-700 mb-2">{t.wasteAnalysis.publisherDataNotAvailable}</h4>
               <p className="text-sm text-gray-600 mb-4">
                 {t.wasteAnalysis.importPublisherPerformanceReportPrompt}
               </p>
-              <div className="p-3 bg-gray-50 rounded border border-gray-200 text-xs">
+              <div className="p-3 bg-gray-50 rounded-sm border border-gray-200 text-xs">
                 <p className="font-semibold text-gray-700 mb-2">{t.wasteAnalysis.publisherPerfReportName}</p>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
@@ -106,7 +106,7 @@ export function PublisherPerformanceSection({ publishers, seatName }: PublisherP
           <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
             <BarChart3 className="h-5 w-5 text-blue-600" />
             {t.wasteAnalysis.publisherPerformance}
-            <span className="text-xs font-normal bg-blue-100 text-blue-700 px-2 py-0.5 rounded">
+            <span className="text-xs font-normal bg-blue-100 text-blue-700 px-2 py-0.5 rounded-sm">
               {seatName
                 ? t.wasteAnalysis.overallForSeat.replace("{seatName}", seatName)
                 : t.wasteAnalysis.seatOverall}
@@ -221,7 +221,7 @@ export function PublisherPerformanceSection({ publishers, seatName }: PublisherP
                 {blocked.slice(0, 10).map(pub => (
                   <span
                     key={pub.publisher_id}
-                    className="px-2 py-1 bg-red-100 text-red-800 rounded text-xs"
+                    className="px-2 py-1 bg-red-100 text-red-800 rounded-sm text-xs"
                     title={t.wasteAnalysis.bidRequestsTitle.replace("{count}", formatNumber(pub.bid_requests ?? 0))}
                   >
                     {pub.publisher_name.length > 25 ? pub.publisher_name.slice(0, 25) + '...' : pub.publisher_name}

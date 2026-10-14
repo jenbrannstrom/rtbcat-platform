@@ -75,7 +75,7 @@ function ConfigCard({ config, index }: { config: PretargetingConfig; index: numb
         {config.targeting.formats.map(fmt => {
           const Icon = formatIcons[fmt] || FileText;
           return (
-            <span key={fmt} className="inline-flex items-center gap-1 px-2 py-1 bg-purple-100 text-purple-700 rounded text-xs font-medium">
+            <span key={fmt} className="inline-flex items-center gap-1 px-2 py-1 bg-purple-100 text-purple-700 rounded-sm text-xs font-medium">
               <Icon className="h-3 w-3" />
               {fmt}
             </span>
@@ -84,14 +84,14 @@ function ConfigCard({ config, index }: { config: PretargetingConfig; index: numb
 
         {/* Sizes */}
         {config.targeting.sizes.total_count > 0 && (
-          <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs font-medium">
+          <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-700 rounded-sm text-xs font-medium">
             <LayoutGrid className="h-3 w-3" />
             {t.pretargeting.pretargetingPanelSizesCount.replace('{count}', String(config.targeting.sizes.total_count))}
           </span>
         )}
 
         {/* Geos */}
-        <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-700 rounded text-xs font-medium">
+        <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-700 rounded-sm text-xs font-medium">
           <Globe className="h-3 w-3" />
           {t.pretargeting.pretargetingPanelGeosIncludedCount.replace(
             '{count}',
@@ -100,7 +100,7 @@ function ConfigCard({ config, index }: { config: PretargetingConfig; index: numb
         </span>
 
         {config.targeting.geos.excluded.length > 0 && (
-          <span className="inline-flex items-center gap-1 px-2 py-1 bg-red-100 text-red-700 rounded text-xs font-medium">
+          <span className="inline-flex items-center gap-1 px-2 py-1 bg-red-100 text-red-700 rounded-sm text-xs font-medium">
             <Globe className="h-3 w-3" />
             {t.pretargeting.pretargetingPanelExcludedCount.replace(
               '{count}',
@@ -137,7 +137,7 @@ function ConfigCard({ config, index }: { config: PretargetingConfig; index: numb
               <h5 className="text-sm font-medium text-gray-700 mb-2">{t.pretargeting.pretargetingPanelIncludedSizes}</h5>
               <div className="flex flex-wrap gap-1">
                 {config.targeting.sizes.included.map(size => (
-                  <span key={size} className="px-2 py-0.5 bg-gray-100 text-gray-700 rounded text-xs font-mono">
+                  <span key={size} className="px-2 py-0.5 bg-gray-100 text-gray-700 rounded-sm text-xs font-mono">
                     {size}
                   </span>
                 ))}
@@ -158,7 +158,7 @@ function ConfigCard({ config, index }: { config: PretargetingConfig; index: numb
             <h5 className="text-sm font-medium text-gray-700 mb-2">{t.pretargeting.pretargetingPanelIncludedGeos}</h5>
             <div className="flex flex-wrap gap-1">
               {config.targeting.geos.included.map(geo => (
-                <span key={geo} className="px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs font-medium">
+                <span key={geo} className="px-2 py-0.5 bg-green-100 text-green-700 rounded-sm text-xs font-medium">
                   {geo}
                 </span>
               ))}
@@ -171,7 +171,7 @@ function ConfigCard({ config, index }: { config: PretargetingConfig; index: numb
               <h5 className="text-sm font-medium text-gray-700 mb-2">{t.pretargeting.pretargetingPanelExcludedGeos}</h5>
               <div className="flex flex-wrap gap-1">
                 {config.targeting.geos.excluded.map(geo => (
-                  <span key={geo} className="px-2 py-0.5 bg-red-100 text-red-700 rounded text-xs font-medium">
+                  <span key={geo} className="px-2 py-0.5 bg-red-100 text-red-700 rounded-sm text-xs font-medium">
                     {geo}
                   </span>
                 ))}
@@ -182,7 +182,7 @@ function ConfigCard({ config, index }: { config: PretargetingConfig; index: numb
           {/* Copy Button */}
           <button
             onClick={copyGeoConfig}
-            className="flex items-center gap-2 px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded text-sm text-gray-700"
+            className="flex items-center gap-2 px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-sm text-sm text-gray-700"
           >
             {copied ? (
               <>
@@ -213,10 +213,10 @@ export function PretargetingPanel({ days = 7 }: PretargetingPanelProps) {
     return (
       <div className="bg-white rounded-lg border border-gray-200 p-6">
         <div className="animate-pulse space-y-4">
-          <div className="h-6 bg-gray-200 rounded w-1/3" />
+          <div className="h-6 bg-gray-200 rounded-sm w-1/3" />
           <div className="space-y-3">
             {[1, 2, 3].map(i => (
-              <div key={i} className="h-24 bg-gray-100 rounded" />
+              <div key={i} className="h-24 bg-gray-100 rounded-sm" />
             ))}
           </div>
         </div>

@@ -1,73 +1,50 @@
-# Development dependency mitigation
+# Dependency security
 
-## braces / GHSA-vfj7-8cjw-p6xm
+## Release policy
 
-As of 2026-10-14, npm publishes `braces` 3.0.3 with no official fixed release.
-The dashboard receives it through Tailwind and the Next.js ESLint plugin.
-`patch-package`, used to apply the fix, also has a dependency path to the same
-deduplicated package. These are development dependencies.
+Run `npm ci` and `npm run audit:release` in `dashboard/` before release.
+The release check runs dependency contract tests and standard `npm audit`.
+All reported vulnerabilities block release. There is no advisory allowlist,
+patched-package exception or expiry date. An audit service error also fails the
+check. CI and the manual image build use the same command.
 
-`dashboard/patches/braces+3.0.3.patch` backports the five library changes from
-[upstream PR 72](https://github.com/micromatch/braces/pull/72), reviewed at commit
-`28d440b5dd449dbf1fe6f3506cf94ecca4d02660`. The PR is closed and unmerged; this is
-a local mitigation, not an upstream release or maintainer endorsement.
+## Removal of braces in 0.10.1
 
-The patch limits parser and AST traversal depth to 100, caps caller-supplied
-depth limits, preserves the published `escapeInvalid` behavior, and rejects
-cyclic parent chains in expansion. Normal patterns remain compatible. Very
-deep patterns now fail with an explicit exception instead of exhausting the
-JavaScript call stack. This does not establish unlimited expansion safety.
+Version 0.10.0 included a local `braces` patch and a temporary exception for
+[GHSA-vfj7-8cjw-p6xm](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm).
+Version 0.10.1 removes the dependency, patch and exception. It does not rename
+`braces` or change its version to hide an audit finding.
 
-The patch runs during `npm ci` through a failing-on-error postinstall hook.
-Docker copies the patch before installation. Installations using
-`--ignore-scripts` must run `npm run postinstall` before using the toolchain.
-Run `npm run test:dependency-security` to verify the attack cases and ordinary
-consumer behavior. The release audit runs these tests before it applies the
-exception below.
+Two dependency changes remove the affected code:
 
-The original package name and version remain unchanged. Raw `npm audit` still
-reports the advisory. The project owner approved a temporary release exception
-on 2026-10-14. It expires at **2026-11-13 00:00 UTC**. This exception covers only
-`GHSA-vfj7-8cjw-p6xm` in the patched development copy of `braces` 3.0.3 and its
-indirect dependency paths. It does not certify the package as free of defects.
+1. Tailwind CSS 4.3.3 and its PostCSS plugin replace Tailwind 3. The class names
+   and CSS configuration use the new syntax. The existing colour palette,
+   border defaults, placeholder colours and button cursors are preserved.
+   `tailwind-merge` 3.7.0 handles the new utility names.
+2. A scoped npm override replaces only the directory-search dependency of
+   `@next/eslint-plugin-next` 16.4.0. The local package at
+   `dashboard/vendor/next-eslint-glob` calls official `tinyglobby` 0.2.17. It
+   preserves the directory matching and path format used by the Next.js rule.
+   It contains no `fast-glob`, `micromatch` or `braces` code. This small adapter
+   is maintained by RTBcat, not by Next.js. Other fast-glob APIs are not supported.
 
-Run `npm run audit:release` from `dashboard/` after `npm ci`. This command:
+All Next.js lint rules remain enabled as configured before this change.
+Contract tests verify directory patterns, multiple roots, path normalization,
+and detection of an invalid internal HTML link. They also check that the removed
+packages do not return to the lock file. Review this adapter when upgrading the
+Next.js ESLint plugin; keep the override scoped to the tested version.
 
-1. Checks the expiry date and the reviewed dependency lock and patch hashes.
-2. Checks every installed braces JavaScript file and its package metadata.
-3. Runs the attack and compatibility tests.
-4. Runs a production audit. No high or critical finding is allowed.
-5. Runs the full audit. Each excepted finding must trace only to the specified
-   advisory. Every affected package must be marked as development-only.
+The old patch installer is no longer needed and is removed. Install scripts do
+not modify third-party source files.
 
-All other high or critical findings block release. Audit errors, missing patch
-files, changed dependencies, extra braces copies and expired approval also block
-release. The gate prints the findings and the exception expiry. CI and the
-manual image build use this same gate. Expiry blocks future releases and builds;
-it does not stop the running app.
+## Browser requirements
 
-The review record is `dashboard/security/braces-exception.json`. Tests in
-`dashboard/tests/audit-release.mjs` check that unsafe and incomplete inputs fail.
-The patch limits stack exhaustion from nested patterns. It does not establish
-unlimited expansion safety. Development tools must use trusted build inputs.
-Remove the exception and backport when an official compatible fix is available.
-Before expiry, update the dependency or complete a new explicit risk review.
+Tailwind 4 requires Safari 16.4 or later, Chrome 111 or later, and Firefox 128 or
+later. See the [Tailwind upgrade guide](https://tailwindcss.com/docs/upgrade-guide).
+Older browsers require a separate compatibility decision.
 
-## postcss-selector-parser
+## Validation
 
-An override selects official version 7.1.6 throughout the development tree.
-This removes the advisory for the old parser used by Tailwind/PostCSS. Dashboard
-tests, lint, type checking and the production build verify compatibility.
-
-## Validation on 2026-10-14
-
-- Clean `npm ci` applies the patch successfully.
-- Published braces 3.0.3 suite at `74b2db2938fad48a2ea54a9c8bf27a37a62c350d`:
-  764 tests pass with the patched library files.
-- Local attack and compatibility regressions: 12 tests pass.
-- Dashboard: 204 tests pass; lint with zero warnings, TypeScript and the
-  production build pass.
-- Production-only npm audit: zero findings. Raw full audit reports nine affected
-  development packages from the one braces advisory. The release gate accepts
-  only those paths under the temporary exception. All nine audit-policy tests
-  pass. The parser advisory is resolved by official version 7.1.6.
+The release requires a clean install, dependency contract tests, the full npm
+audit, dashboard tests, lint, TypeScript, a production build, and browser checks
+of the migrated styles. Python bundles retain their existing `pip-audit` gates.

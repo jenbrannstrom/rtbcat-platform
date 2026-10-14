@@ -442,7 +442,7 @@ export default function LanguageFlagCoveragePage() {
           type="button"
           onClick={() => refreshAllMutation.mutate()}
           disabled={refreshAllMutation.isPending}
-          className="inline-flex items-center gap-2 rounded border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+          className="inline-flex items-center gap-2 rounded-sm border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
         >
           <RefreshCw className={cn("h-4 w-4", refreshAllMutation.isPending && "animate-spin")} />
           {t.creatives.languageFlagsRefreshAll}
@@ -452,7 +452,7 @@ export default function LanguageFlagCoveragePage() {
           type="button"
           onClick={downloadCsv}
           disabled={isExportingCsv || total === 0}
-          className="inline-flex items-center gap-2 rounded border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+          className="inline-flex items-center gap-2 rounded-sm border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {isExportingCsv ? (
             <RefreshCw className="h-4 w-4 animate-spin" />
@@ -464,7 +464,7 @@ export default function LanguageFlagCoveragePage() {
       </div>
 
       {data?.scan_limit_reached && (
-        <div className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+        <div className="rounded-sm border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
           {t.creatives.languageFlagsCoverageNote.replace(
             "{count}",
             data.scan_limit.toLocaleString(language)
@@ -519,13 +519,13 @@ export default function LanguageFlagCoveragePage() {
                     !row.is_active && "opacity-75"
                   )}
                 >
-                  <div className="overflow-hidden rounded border border-gray-200">
+                  <div className="overflow-hidden rounded-sm border border-gray-200">
                     <CreativeThumb creative={thumbCreative} size="sm" showSourceBadge={false} />
                   </div>
 
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className={cn("inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs font-medium", config.badge)}>
+                      <span className={cn("inline-flex items-center gap-1 rounded-sm px-2 py-0.5 text-xs font-medium", config.badge)}>
                         <Icon className="h-3.5 w-3.5" />
                         {severityKey === "confirmed"
                           ? t.creatives.languageFlagsConfirmedWrong
@@ -570,7 +570,7 @@ export default function LanguageFlagCoveragePage() {
                             refreshRowMutation.mutate(row.creative_id);
                           }}
                           disabled={rowRefreshing}
-                          className="inline-flex items-center gap-1 rounded border border-gray-200 bg-white px-2 py-1 text-xs text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+                          className="inline-flex items-center gap-1 rounded-sm border border-gray-200 bg-white px-2 py-1 text-xs text-gray-600 hover:bg-gray-50 disabled:opacity-50"
                         >
                           <RefreshCw className={cn("h-3.5 w-3.5", rowRefreshing && "animate-spin")} />
                           {t.creatives.languageFlagsRefreshRow}
@@ -582,7 +582,7 @@ export default function LanguageFlagCoveragePage() {
                           event.stopPropagation();
                           openPreview();
                         }}
-                        className="rounded border border-gray-200 bg-white px-2 py-1 text-xs font-medium text-primary-700 hover:bg-primary-50"
+                        className="rounded-sm border border-gray-200 bg-white px-2 py-1 text-xs font-medium text-primary-700 hover:bg-primary-50"
                       >
                         {t.creatives.languageFlagsView}
                       </button>
@@ -607,7 +607,7 @@ export default function LanguageFlagCoveragePage() {
             type="button"
             onClick={() => setPageIndex((value) => Math.max(value - 1, 0))}
             disabled={pageIndex === 0}
-            className="rounded border border-gray-300 px-2 py-1 disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-sm border border-gray-300 px-2 py-1 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {t.common.previous}
           </button>
@@ -615,7 +615,7 @@ export default function LanguageFlagCoveragePage() {
             type="button"
             onClick={() => setPageIndex((value) => value + 1)}
             disabled={!hasMore}
-            className="rounded border border-gray-300 px-2 py-1 disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-sm border border-gray-300 px-2 py-1 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {t.common.next}
           </button>

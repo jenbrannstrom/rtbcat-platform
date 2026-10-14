@@ -1019,7 +1019,7 @@ export function ConfigBreakdownPanel({
               className={cn(
                 'px-3 py-1.5 text-xs font-medium rounded-md transition-colors',
                 activeTab === tab
-                  ? 'bg-white text-gray-900 shadow-sm border'
+                  ? 'bg-white text-gray-900 shadow-xs border'
                   : 'text-gray-500 hover:text-gray-700 hover:bg-white/50'
               )}
             >
@@ -1046,7 +1046,7 @@ export function ConfigBreakdownPanel({
           <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm">
             {activeTab === 'publisher' ? (
               <div className="flex items-start gap-3">
-                <AlertCircle className="h-5 w-5 text-gray-400 flex-shrink-0 mt-0.5" />
+                <AlertCircle className="h-5 w-5 text-gray-400 shrink-0 mt-0.5" />
                 <div>
                   <p className="font-medium text-gray-700">
                     {t.pretargeting.noPublisherBreakdownForConfig}
@@ -1065,7 +1065,7 @@ export function ConfigBreakdownPanel({
               </div>
             ) : (
               <div className="flex items-start gap-3">
-                <AlertCircle className="h-5 w-5 text-gray-400 flex-shrink-0 mt-0.5" />
+                <AlertCircle className="h-5 w-5 text-gray-400 shrink-0 mt-0.5" />
                 <div>
                   <p className="font-medium text-gray-700">
                     {t.pretargeting.noTabDataForConfig.replace('{tab}', activeTab)}
@@ -1090,14 +1090,14 @@ export function ConfigBreakdownPanel({
         {!isLoading && !error && sortedBreakdown.length > 0 && (
           <>
             <div className="mb-3 flex items-center gap-2">
-              <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[11px] text-gray-600">
+              <span className="rounded-sm bg-gray-100 px-1.5 py-0.5 text-[11px] text-gray-600">
                 {t.pretargeting.windowLabel}: {data?.requested_days ?? days}d
                 {data?.fallback_applied && data?.effective_days != null && (
                   <> ({t.pretargeting.effectiveLabel}: {data.effective_days}d)</>
                 )}
               </span>
               {data?.fallback_applied && (
-                <span className="flex items-center gap-1 rounded bg-amber-50 border border-amber-200 px-1.5 py-0.5 text-[11px] text-amber-700">
+                <span className="flex items-center gap-1 rounded-sm bg-amber-50 border border-amber-200 px-1.5 py-0.5 text-[11px] text-amber-700">
                   <AlertTriangle className="h-3 w-3 text-amber-500" />
                   {t.pretargeting.fallbackAppliedNoDataRequestedWindow}
                 </span>
@@ -1105,8 +1105,8 @@ export function ConfigBreakdownPanel({
             </div>
             {activeTab === 'publisher' && (
               <div className="mb-2 space-y-1.5">
-                <div className="flex items-center gap-2 px-2 py-1.5 bg-amber-50 border border-amber-200 rounded text-xs text-amber-700">
-                  <Info className="h-3.5 w-3.5 text-amber-500 flex-shrink-0" />
+                <div className="flex items-center gap-2 px-2 py-1.5 bg-amber-50 border border-amber-200 rounded-sm text-xs text-amber-700">
+                  <Info className="h-3.5 w-3.5 text-amber-500 shrink-0" />
                   <span className="flex-1">
                     {t.pretargeting.modeLabel}: <span className="font-semibold">{publisherModeLabel}</span>.
                     {effectivePublisherMode === 'INCLUSIVE'
@@ -1134,13 +1134,13 @@ export function ConfigBreakdownPanel({
                   </a>
                 </div>
                 <div className="flex items-center gap-2 px-2">
-                  <Search className="h-3.5 w-3.5 text-gray-400 flex-shrink-0" />
+                  <Search className="h-3.5 w-3.5 text-gray-400 shrink-0" />
                   <input
                     type="text"
                     value={publisherFilter}
                     onChange={(e) => setPublisherFilter(e.target.value)}
                     placeholder={t.pretargeting.filterPublishersPlaceholder}
-                    className="w-1/3 rounded border border-gray-200 bg-white px-2 py-1 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-amber-300"
+                    className="w-1/3 rounded-sm border border-gray-200 bg-white px-2 py-1 text-xs text-gray-700 focus:outline-hidden focus:ring-1 focus:ring-amber-300"
                   />
                   {publisherFilter && (
                     <button
@@ -1224,7 +1224,7 @@ export function ConfigBreakdownPanel({
                         <div
                           key={group.key}
                           className={cn(
-                            'rounded border p-2 text-xs',
+                            'rounded-sm border p-2 text-xs',
                             isRollback && 'bg-orange-50 border-orange-200',
                             isPush && 'bg-white border-gray-200',
                             isSync && 'bg-gray-50 border-gray-200',
@@ -1235,7 +1235,7 @@ export function ConfigBreakdownPanel({
                             <span className="text-gray-500">{dateStr}</span>
                             <span
                               className={cn(
-                                'rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase',
+                                'rounded-sm px-1.5 py-0.5 text-[10px] font-semibold uppercase',
                                 isPush && 'bg-blue-100 text-blue-700',
                                 isSync && 'bg-gray-200 text-gray-600',
                                 isRollback && 'bg-orange-200 text-orange-700',
@@ -1257,7 +1257,7 @@ export function ConfigBreakdownPanel({
                                 <div key={e.id} className="flex items-center gap-1.5 font-mono text-[11px]">
                                   <span
                                     className={cn(
-                                      'rounded px-1 py-0.5 text-[9px] font-bold uppercase',
+                                      'rounded-sm px-1 py-0.5 text-[9px] font-bold uppercase',
                                       e.change_type.includes('add')
                                         ? 'bg-red-100 text-red-700'
                                         : 'bg-green-100 text-green-700'
@@ -1308,7 +1308,7 @@ export function ConfigBreakdownPanel({
                               <button
                                 onClick={() => handleUndoPush(group.snapshot!)}
                                 disabled={changeActionBusy}
-                                className="inline-flex items-center gap-0.5 rounded border border-orange-200 bg-orange-50 px-1.5 py-0.5 text-[10px] font-medium text-orange-700 hover:bg-orange-100 disabled:opacity-50"
+                                className="inline-flex items-center gap-0.5 rounded-sm border border-orange-200 bg-orange-50 px-1.5 py-0.5 text-[10px] font-medium text-orange-700 hover:bg-orange-100 disabled:opacity-50"
                               >
                                 <RotateCcw className="h-3 w-3" />
                                 {t.pretargeting.undoPush}
@@ -1331,41 +1331,41 @@ export function ConfigBreakdownPanel({
             )}
 
             {activeTab === 'size' && (
-              <div className="mb-2 space-y-1.5 px-2 py-1.5 bg-blue-50 border border-blue-200 rounded text-xs text-blue-700">
+              <div className="mb-2 space-y-1.5 px-2 py-1.5 bg-blue-50 border border-blue-200 rounded-sm text-xs text-blue-700">
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex flex-wrap items-center gap-2">
                     <button
                       onClick={selectAllVisibleSizes}
                       disabled={changeActionBusy || visibleSizeRows.length === 0}
-                      className="rounded border border-blue-300 bg-white px-2 py-0.5 text-[11px] font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-50"
+                      className="rounded-sm border border-blue-300 bg-white px-2 py-0.5 text-[11px] font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-50"
                     >
                       {t.pretargeting.selectAll}
                     </button>
                     <button
                       onClick={invertVisibleSizeSelection}
                       disabled={changeActionBusy || visibleSizeRows.length === 0}
-                      className="rounded border border-blue-300 bg-white px-2 py-0.5 text-[11px] font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-50"
+                      className="rounded-sm border border-blue-300 bg-white px-2 py-0.5 text-[11px] font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-50"
                     >
                       {t.pretargeting.invertSelection}
                     </button>
                     <button
                       onClick={clearSelectedSizes}
                       disabled={changeActionBusy || selectedSizes.size === 0}
-                      className="rounded border border-blue-300 bg-white px-2 py-0.5 text-[11px] font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-50"
+                      className="rounded-sm border border-blue-300 bg-white px-2 py-0.5 text-[11px] font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-50"
                     >
                       {t.pretargeting.clearCount.replace('{count}', String(selectedSizes.size))}
                     </button>
                     <button
                       onClick={() => applySelectionState(false)}
                       disabled={changeActionBusy || selectedSizes.size === 0}
-                      className="rounded border border-red-300 bg-red-50 px-2 py-0.5 text-[11px] font-medium text-red-700 hover:bg-red-100 disabled:opacity-50"
+                      className="rounded-sm border border-red-300 bg-red-50 px-2 py-0.5 text-[11px] font-medium text-red-700 hover:bg-red-100 disabled:opacity-50"
                     >
                       {t.pretargeting.blockSelected}
                     </button>
                     <button
                       onClick={() => applySelectionState(true)}
                       disabled={changeActionBusy || selectedSizes.size === 0}
-                      className="rounded border border-green-300 bg-green-50 px-2 py-0.5 text-[11px] font-medium text-green-700 hover:bg-green-100 disabled:opacity-50"
+                      className="rounded-sm border border-green-300 bg-green-50 px-2 py-0.5 text-[11px] font-medium text-green-700 hover:bg-green-100 disabled:opacity-50"
                     >
                       {t.pretargeting.allowSelected}
                     </button>
@@ -1374,7 +1374,7 @@ export function ConfigBreakdownPanel({
                     {(hiddenLowVolumeSizeCount > 0 || showLowVolumeSizes) && (
                       <button
                         onClick={() => setShowLowVolumeSizes((prev) => !prev)}
-                        className="rounded border border-blue-300 bg-white px-2 py-0.5 text-[11px] font-medium text-blue-700 hover:bg-blue-100"
+                        className="rounded-sm border border-blue-300 bg-white px-2 py-0.5 text-[11px] font-medium text-blue-700 hover:bg-blue-100"
                       >
                         {showLowVolumeSizes
                           ? t.pretargeting.lowVolumeOnly1kImp
@@ -1392,13 +1392,13 @@ export function ConfigBreakdownPanel({
             )}
             {activeTab === 'geo' && (
               <div className="mb-2 flex items-center gap-2 px-2">
-                <Search className="h-3.5 w-3.5 text-gray-400 flex-shrink-0" />
+                <Search className="h-3.5 w-3.5 text-gray-400 shrink-0" />
                 <input
                   type="text"
                   value={geoFilter}
                   onChange={(e) => setGeoFilter(e.target.value)}
                   placeholder={t.pretargeting.filterGeosPlaceholder}
-                  className="w-1/3 rounded border border-gray-200 bg-white px-2 py-1 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-teal-300"
+                  className="w-1/3 rounded-sm border border-gray-200 bg-white px-2 py-1 text-xs text-gray-700 focus:outline-hidden focus:ring-1 focus:ring-teal-300"
                 />
                 {geoFilter && (
                   <button
@@ -1411,19 +1411,19 @@ export function ConfigBreakdownPanel({
               </div>
             )}
             {activeTab === 'geo' && (
-              <div className="mb-2 flex flex-wrap items-center gap-2 px-2 py-1.5 bg-teal-50 border border-teal-200 rounded text-xs text-teal-800">
+              <div className="mb-2 flex flex-wrap items-center gap-2 px-2 py-1.5 bg-teal-50 border border-teal-200 rounded-sm text-xs text-teal-800">
                 <Search className="h-3.5 w-3.5 text-teal-600 shrink-0" />
                 <input
                   type="text"
                   value={geoSearchQuery}
                   onChange={(event) => setGeoSearchQuery(event.target.value)}
                   placeholder={t.pretargeting.searchGeoPlaceholder}
-                  className="w-44 rounded border border-teal-300 bg-white px-2 py-1 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-teal-300"
+                  className="w-44 rounded-sm border border-teal-300 bg-white px-2 py-1 text-xs text-gray-700 focus:outline-hidden focus:ring-1 focus:ring-teal-300"
                 />
                 <select
                   value={geoSearchType}
                   onChange={(event) => setGeoSearchType(event.target.value as 'all' | 'country' | 'city')}
-                  className="rounded border border-teal-300 bg-white px-2 py-1 text-xs text-gray-700"
+                  className="rounded-sm border border-teal-300 bg-white px-2 py-1 text-xs text-gray-700"
                 >
                   <option value="all">{t.pretargeting.geoSearchTypeAll}</option>
                   <option value="country">{t.pretargeting.geoSearchTypeCountry}</option>
@@ -1432,7 +1432,7 @@ export function ConfigBreakdownPanel({
                 <select
                   value={selectedGeoId}
                   onChange={(event) => setSelectedGeoId(event.target.value)}
-                  className="min-w-[14rem] rounded border border-teal-300 bg-white px-2 py-1 text-xs text-gray-700"
+                  className="min-w-56 rounded-sm border border-teal-300 bg-white px-2 py-1 text-xs text-gray-700"
                   disabled={isGeoSearchLoading || geoSearchResults.length === 0}
                 >
                   {isGeoSearchLoading && <option value="">{t.pretargeting.searchingEllipsis}</option>}
@@ -1448,7 +1448,7 @@ export function ConfigBreakdownPanel({
                 <button
                   onClick={addGeoFromSearch}
                   disabled={changeActionBusy || !selectedGeoId}
-                  className="rounded border border-teal-300 bg-teal-100 px-2 py-1 text-[11px] font-medium text-teal-800 hover:bg-teal-200 disabled:opacity-50"
+                  className="rounded-sm border border-teal-300 bg-teal-100 px-2 py-1 text-[11px] font-medium text-teal-800 hover:bg-teal-200 disabled:opacity-50"
                 >
                   {t.pretargeting.addGeo}
                 </button>
@@ -1456,7 +1456,7 @@ export function ConfigBreakdownPanel({
             )}
             {pushResult && (
               <div className={cn(
-                "mb-3 rounded border px-3 py-2 text-xs flex items-center justify-between",
+                "mb-3 rounded-sm border px-3 py-2 text-xs flex items-center justify-between",
                 pushResult.warning
                   ? "bg-amber-50 border-amber-200 text-amber-800"
                   : pushResult.success
@@ -1475,7 +1475,7 @@ export function ConfigBreakdownPanel({
                 <button
                   onClick={() => setPushResult(null)}
                   className={cn(
-                    "ml-2 flex-shrink-0",
+                    "ml-2 shrink-0",
                     pushResult.success ? "text-green-600 hover:text-green-800" : "text-red-600 hover:text-red-800"
                   )}
                   title={t.campaigns.dismiss}
@@ -1490,11 +1490,11 @@ export function ConfigBreakdownPanel({
               className={cn(
                 "grid gap-2 px-3 py-2 border-b bg-gray-50 text-xs font-medium text-gray-500",
                 activeTab === "creative"
-                  ? "grid-cols-[repeat(14,minmax(0,1fr))]"
+                  ? "grid-cols-14"
                   : activeTab === "size"
-                  ? "grid-cols-[repeat(15,minmax(0,1fr))]"
+                  ? "grid-cols-15"
                   : activeTab === "publisher"
-                  ? "grid-cols-[repeat(14,minmax(0,1fr))]"
+                  ? "grid-cols-14"
                   : "grid-cols-12"
               )}
             >
@@ -1516,7 +1516,7 @@ export function ConfigBreakdownPanel({
                       }
                     }}
                     disabled={changeActionBusy || visibleSizeRows.length === 0}
-                    className="h-3.5 w-3.5 rounded border-gray-300"
+                    className="h-3.5 w-3.5 rounded-sm border-gray-300"
                     title={t.pretargeting.selectVisibleSizes}
                   />
                 </div>
@@ -1644,11 +1644,11 @@ export function ConfigBreakdownPanel({
 	                      className={cn(
 	                        'grid gap-2 px-3 py-2 text-sm items-center',
 	                        activeTab === 'creative'
-	                          ? 'grid-cols-[repeat(14,minmax(0,1fr))]'
+	                          ? 'grid-cols-14'
 	                          : activeTab === 'size'
-	                          ? 'grid-cols-[repeat(15,minmax(0,1fr))]'
+	                          ? 'grid-cols-15'
 	                          : activeTab === 'publisher'
-	                          ? 'grid-cols-[repeat(14,minmax(0,1fr))]'
+	                          ? 'grid-cols-14'
 	                          : 'grid-cols-12',
 	                        'hover:bg-gray-50 transition-colors',
 	                        isClickable && 'cursor-pointer hover:bg-blue-50',
@@ -1664,7 +1664,7 @@ export function ConfigBreakdownPanel({
                             checked={selectedForBulk}
                             onChange={() => toggleSizeSelection(item.name)}
                             disabled={changeActionBusy}
-                            className="h-3.5 w-3.5 rounded border-gray-300"
+                            className="h-3.5 w-3.5 rounded-sm border-gray-300"
                             title={`${t.common.select} ${item.name}`}
                           />
                         </div>
@@ -1723,7 +1723,7 @@ export function ConfigBreakdownPanel({
                           </button>
                         )}
                         {isClickable && (
-                          <ChevronRight className="h-3 w-3 text-gray-400 flex-shrink-0" />
+                          <ChevronRight className="h-3 w-3 text-gray-400 shrink-0" />
                         )}
                       </div>
                       <div className="col-span-2 text-right text-gray-600 font-mono text-xs">
@@ -1764,7 +1764,7 @@ export function ConfigBreakdownPanel({
                           <div className="col-span-1 text-right text-xs">
                             <span
                               className={cn(
-                                'rounded px-1.5 py-0.5 font-medium',
+                                'rounded-sm px-1.5 py-0.5 font-medium',
                                 sizeStatus === 'Allowed' && 'bg-green-50 text-green-700',
                                 sizeStatus === 'Blocked' && 'bg-gray-100 text-gray-700',
                                 sizeStatus === 'Pending allow' && 'bg-amber-100 text-amber-800',
@@ -1782,7 +1782,7 @@ export function ConfigBreakdownPanel({
                             }}
                             disabled={changeActionBusy}
                             className={cn(
-                              'inline-flex items-center gap-1 rounded border px-2 py-1 text-[11px] font-medium transition-colors disabled:opacity-50',
+                              'inline-flex items-center gap-1 rounded-sm border px-2 py-1 text-[11px] font-medium transition-colors disabled:opacity-50',
                               includedInConfig
                                 ? 'border-red-200 bg-red-50 text-red-700 hover:bg-red-100'
                                 : 'border-green-200 bg-green-50 text-green-700 hover:bg-green-100'
@@ -1800,7 +1800,7 @@ export function ConfigBreakdownPanel({
 	                          <div className="col-span-1 text-right text-xs">
 	                            <span
 	                              className={cn(
-	                                'rounded px-1.5 py-0.5 font-medium',
+	                                'rounded-sm px-1.5 py-0.5 font-medium',
 	                                publisherStatus === 'Blocked' && 'bg-red-50 text-red-700',
 	                                publisherStatus === 'Allowed' && 'bg-green-50 text-green-700',
 	                                publisherStatus.startsWith('Pending') && 'bg-amber-100 text-amber-800'
@@ -1817,7 +1817,7 @@ export function ConfigBreakdownPanel({
 	                              }}
 	                              disabled={changeActionBusy || !publisherTargetValue}
 	                              className={cn(
-	                                'inline-flex items-center gap-1 rounded border px-2 py-1 text-[11px] font-medium transition-colors disabled:opacity-50',
+	                                'inline-flex items-center gap-1 rounded-sm border px-2 py-1 text-[11px] font-medium transition-colors disabled:opacity-50',
 	                                nextPublisherActionWillBlock
 	                                  ? 'border-red-200 bg-red-50 text-red-700 hover:bg-red-100'
 	                                  : 'border-green-200 bg-green-50 text-green-700 hover:bg-green-100'
@@ -1931,13 +1931,13 @@ export function ConfigBreakdownPanel({
                     }
                   }}
                   placeholder={t.pretargeting.publisherInputPlaceholder}
-                  className="flex-1 rounded border border-gray-200 bg-gray-50 px-2 py-1.5 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-red-300 focus:border-red-300"
+                  className="flex-1 rounded-sm border border-gray-200 bg-gray-50 px-2 py-1.5 text-xs text-gray-700 focus:outline-hidden focus:ring-1 focus:ring-red-300 focus:border-red-300"
                   disabled={changeActionBusy}
                 />
                 <button
                   onClick={handleBlockPublisher}
                   disabled={changeActionBusy || !publisherBlockInput.trim()}
-                  className="inline-flex items-center gap-1 rounded border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-100 disabled:opacity-50"
+                  className="inline-flex items-center gap-1 rounded-sm border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-100 disabled:opacity-50"
                 >
                   <X className="h-3 w-3" />
                   {t.pretargeting.block}
@@ -1988,7 +1988,7 @@ export function ConfigBreakdownPanel({
                         <button
                           onClick={handleBlockAllSuggestions}
                           disabled={changeActionBusy}
-                          className="inline-flex items-center gap-1 rounded border border-red-200 bg-red-50 px-2 py-1 text-[10px] font-medium text-red-700 hover:bg-red-100 disabled:opacity-50"
+                          className="inline-flex items-center gap-1 rounded-sm border border-red-200 bg-red-50 px-2 py-1 text-[10px] font-medium text-red-700 hover:bg-red-100 disabled:opacity-50"
                         >
                           <Ban className="h-3 w-3" />
                           {t.pretargeting.blockAllSuggestions.replace('{count}', String(availableSuggestions.length))}
@@ -2029,7 +2029,7 @@ export function ConfigBreakdownPanel({
                                       <button
                                         onClick={() => handleBlockSuggestion(s)}
                                         disabled={changeActionBusy}
-                                        className="inline-flex items-center gap-0.5 rounded border border-red-200 bg-red-50 px-1.5 py-0.5 text-[10px] font-medium text-red-700 hover:bg-red-100 disabled:opacity-50"
+                                        className="inline-flex items-center gap-0.5 rounded-sm border border-red-200 bg-red-50 px-1.5 py-0.5 text-[10px] font-medium text-red-700 hover:bg-red-100 disabled:opacity-50"
                                       >
                                         <X className="h-3 w-3" /> {t.pretargeting.block}
                                       </button>
@@ -2050,7 +2050,7 @@ export function ConfigBreakdownPanel({
 
           {activeTab !== 'creative' && hasPendingChanges && (
             <div className="sticky bottom-3 mt-3 flex justify-end">
-              <div className="w-full max-w-md rounded-lg border border-yellow-300 bg-yellow-50 p-3 shadow-sm">
+              <div className="w-full max-w-md rounded-lg border border-yellow-300 bg-yellow-50 p-3 shadow-xs">
                 <div className="flex items-center gap-2 text-sm font-medium text-yellow-900">
                   <Clock className="h-4 w-4" />
                   {t.pretargeting.pendingChangesTitle.replace('{count}', String(pendingChanges.length))}
@@ -2081,7 +2081,7 @@ export function ConfigBreakdownPanel({
                   <button
                     onClick={openCommitToast}
                     disabled={changeActionBusy}
-                    className="inline-flex items-center gap-1 rounded bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                    className="inline-flex items-center gap-1 rounded-sm bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
                   >
                     <Upload className="h-3 w-3" />
                     {t.pretargeting.reviewAndPushToGoogle}
@@ -2112,7 +2112,7 @@ export function ConfigBreakdownPanel({
             </div>
             <div className="border-t border-gray-100 px-3 py-2">
               <div className="flex items-start gap-2 text-xs text-blue-700">
-                <Info className="h-3.5 w-3.5 text-blue-500 mt-0.5 flex-shrink-0" />
+                <Info className="h-3.5 w-3.5 text-blue-500 mt-0.5 shrink-0" />
                 <span>{t.pretargeting.snapshotSavedUndoHint}</span>
               </div>
             </div>
@@ -2120,14 +2120,14 @@ export function ConfigBreakdownPanel({
               <button
                 onClick={() => setShowCommitToast(false)}
                 disabled={applyAllMutation.isPending || discardAllMutation.isPending}
-                className="rounded border px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                className="rounded-sm border px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50"
               >
                 {t.common.back}
               </button>
               <button
                 onClick={() => discardAllMutation.mutate()}
                 disabled={applyAllMutation.isPending || discardAllMutation.isPending}
-                className="inline-flex items-center gap-1 rounded border border-red-200 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"
+                className="inline-flex items-center gap-1 rounded-sm border border-red-200 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"
               >
                 {discardAllMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
                 {t.pretargeting.discardAll}
@@ -2135,7 +2135,7 @@ export function ConfigBreakdownPanel({
               <button
                 onClick={() => applyAllMutation.mutate()}
                 disabled={applyAllMutation.isPending || discardAllMutation.isPending}
-                className="inline-flex items-center gap-1 rounded bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                className="inline-flex items-center gap-1 rounded-sm bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
               >
                 {applyAllMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
                 {t.pretargeting.pushToGoogle}
@@ -2165,12 +2165,12 @@ export function ConfigBreakdownPanel({
                   {t.pretargeting.previewingRollback}
                 </div>
               ) : undoDryRunError ? (
-                <div className="rounded bg-red-50 border border-red-200 p-3 text-xs text-red-700">
+                <div className="rounded-sm bg-red-50 border border-red-200 p-3 text-xs text-red-700">
                   {undoDryRunError}
                 </div>
               ) : undoDryRunResult && undoDryRunResult.changes_made.length === 0 ? (
-                <div className="rounded bg-blue-50 border border-blue-200 p-3 flex items-start gap-2 text-xs text-blue-700">
-                  <Info className="h-3.5 w-3.5 text-blue-500 mt-0.5 flex-shrink-0" />
+                <div className="rounded-sm bg-blue-50 border border-blue-200 p-3 flex items-start gap-2 text-xs text-blue-700">
+                  <Info className="h-3.5 w-3.5 text-blue-500 mt-0.5 shrink-0" />
                   {t.pretargeting.noDifferencesFromSnapshot}
                 </div>
               ) : (
@@ -2185,20 +2185,20 @@ export function ConfigBreakdownPanel({
                   {undoDryRunResult && undoDryRunResult.changes_made.length > 0 && (
                     <div className="mb-3">
                       <p className="text-xs font-medium text-gray-700 mb-1">{t.pretargeting.rollbackChangesWillBeReversed}</p>
-                      <div className="max-h-32 overflow-y-auto rounded border bg-gray-50 p-2 space-y-0.5">
+                      <div className="max-h-32 overflow-y-auto rounded-sm border bg-gray-50 p-2 space-y-0.5">
                         {undoDryRunResult.changes_made.map((desc, i) => (
                           <div key={i} className="text-[11px] font-mono text-gray-700">{desc}</div>
                         ))}
                       </div>
                     </div>
                   )}
-                  <div className="mb-3 rounded bg-amber-50 border border-amber-200 p-2 flex items-start gap-2 text-xs text-amber-800">
-                    <AlertTriangle className="h-3.5 w-3.5 text-amber-500 mt-0.5 flex-shrink-0" />
+                  <div className="mb-3 rounded-sm bg-amber-50 border border-amber-200 p-2 flex items-start gap-2 text-xs text-amber-800">
+                    <AlertTriangle className="h-3.5 w-3.5 text-amber-500 mt-0.5 shrink-0" />
                     <span>{t.pretargeting.rollbackImmediateWarning}</span>
                   </div>
                   {hasPendingChanges && (
-                    <div className="mb-3 rounded bg-blue-50 border border-blue-200 p-2 flex items-start gap-2 text-xs text-blue-700">
-                      <Info className="h-3.5 w-3.5 text-blue-500 mt-0.5 flex-shrink-0" />
+                    <div className="mb-3 rounded-sm bg-blue-50 border border-blue-200 p-2 flex items-start gap-2 text-xs text-blue-700">
+                      <Info className="h-3.5 w-3.5 text-blue-500 mt-0.5 shrink-0" />
                       <span>
                         {t.pretargeting.rollbackPendingChangesUnaffected.replace('{count}', String(pendingChanges.length))}
                       </span>
@@ -2213,7 +2213,7 @@ export function ConfigBreakdownPanel({
                       value={undoReason}
                       onChange={(e) => setUndoReason(e.target.value)}
                       placeholder={t.pretargeting.undoReasonPlaceholder}
-                      className="w-full rounded border border-gray-300 px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-orange-300"
+                      className="w-full rounded-sm border border-gray-300 px-2 py-1.5 text-xs focus:outline-hidden focus:ring-1 focus:ring-orange-300"
                     />
                     <span className="text-[10px] text-gray-400">{t.pretargeting.requiredLabel}</span>
                   </div>
@@ -2221,7 +2221,7 @@ export function ConfigBreakdownPanel({
               )}
 
               {undoExecuteMutation.isError && (
-                <div className="mb-3 rounded bg-red-50 border border-red-200 p-2 text-xs text-red-700">
+                <div className="mb-3 rounded-sm bg-red-50 border border-red-200 p-2 text-xs text-red-700">
                   {(undoExecuteMutation.error as Error)?.message || t.pretargeting.rollbackFailed}
                 </div>
               )}
@@ -2230,7 +2230,7 @@ export function ConfigBreakdownPanel({
                 <button
                   onClick={() => setUndoPushSnapshot(null)}
                   disabled={undoExecuteMutation.isPending}
-                  className="rounded border px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                  className="rounded-sm border px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50"
                 >
                   {(!undoDryRunResult || undoDryRunResult.changes_made.length === 0) && !undoDryRunLoading ? t.common.close : t.common.cancel}
                 </button>
@@ -2238,7 +2238,7 @@ export function ConfigBreakdownPanel({
                   <button
                     onClick={() => undoExecuteMutation.mutate()}
                     disabled={undoExecuteMutation.isPending || !undoReason.trim()}
-                    className="inline-flex items-center gap-1 rounded bg-orange-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-orange-700 disabled:opacity-50"
+                    className="inline-flex items-center gap-1 rounded-sm bg-orange-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-orange-700 disabled:opacity-50"
                   >
                     {undoExecuteMutation.isPending ? (
                       <Loader2 className="h-3 w-3 animate-spin" />
@@ -2278,13 +2278,13 @@ export function ConfigBreakdownPanel({
               <p className="text-sm text-gray-600 mb-4">{creativeLoadError}</p>
               <div className="flex justify-end gap-2">
                 <button
-                  className="px-3 py-1.5 text-sm rounded border border-gray-300 hover:bg-gray-50"
+                  className="px-3 py-1.5 text-sm rounded-sm border border-gray-300 hover:bg-gray-50"
                   onClick={() => setSelectedCreative(null)}
                 >
                   {t.common.close}
                 </button>
                 <button
-                  className="px-3 py-1.5 text-sm rounded bg-blue-600 text-white hover:bg-blue-700"
+                  className="px-3 py-1.5 text-sm rounded-sm bg-blue-600 text-white hover:bg-blue-700"
                   onClick={() => setSelectedCreative({ ...selectedCreative })}
                 >
                   {t.import.tryAgain}

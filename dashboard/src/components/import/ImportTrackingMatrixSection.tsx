@@ -115,7 +115,7 @@ export function ImportTrackingMatrixSection({
           <button
             onClick={onRefresh}
             disabled={loading}
-            className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded"
+            className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-sm"
             title={t.common.refresh}
           >
             <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
@@ -123,16 +123,16 @@ export function ImportTrackingMatrixSection({
         </div>
         {matrix && (
           <div className="mt-3 flex flex-wrap gap-2 text-xs">
-            <span className="px-2 py-1 rounded border border-gray-200 text-gray-700">
+            <span className="px-2 py-1 rounded-sm border border-gray-200 text-gray-700">
               {t.import.importCoverageAccounts}: {matrix.total_accounts}
             </span>
-            <span className={`px-2 py-1 rounded border ${getStatusStyles("pass")}`}>
+            <span className={`px-2 py-1 rounded-sm border ${getStatusStyles("pass")}`}>
               {t.import.matrixStatusPass}: {matrix.pass_count}
             </span>
-            <span className={`px-2 py-1 rounded border ${getStatusStyles("fail")}`}>
+            <span className={`px-2 py-1 rounded-sm border ${getStatusStyles("fail")}`}>
               {t.import.matrixStatusFail}: {matrix.fail_count}
             </span>
-            <span className={`px-2 py-1 rounded border ${getStatusStyles("not_imported")}`}>
+            <span className={`px-2 py-1 rounded-sm border ${getStatusStyles("not_imported")}`}>
               {t.import.matrixStatusNotImported}: {matrix.not_imported_count}
             </span>
           </div>

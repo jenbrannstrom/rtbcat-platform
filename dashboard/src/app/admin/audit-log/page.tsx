@@ -118,7 +118,7 @@ function AuditLogPage() {
 
       {/* Filters */}
       {showFilters && (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-6">
+        <div className="bg-white rounded-xl shadow-xs border border-gray-200 p-4 mb-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -158,7 +158,7 @@ function AuditLogPage() {
       )}
 
       {/* Audit Log Table */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+      <div className="bg-white rounded-xl shadow-xs border border-gray-200 overflow-hidden">
         {isLoading ? (
           <div className="p-12 text-center">
             <div className="w-8 h-8 border-4 border-primary-600 border-t-transparent rounded-full animate-spin mx-auto" />
@@ -227,7 +227,7 @@ function AuditLogPage() {
                       <td className="px-6 py-4 text-sm text-gray-500 max-w-xs truncate">
                         {details ? (
                           typeof details === "object" ? (
-                            <code className="text-xs bg-gray-100 px-2 py-1 rounded">
+                            <code className="text-xs bg-gray-100 px-2 py-1 rounded-sm">
                               {Object.entries(details)
                                 .map(([k, v]) => `${k}: ${v}`)
                                 .join(", ")}
@@ -240,7 +240,7 @@ function AuditLogPage() {
                         )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        <code className="text-xs bg-gray-100 px-2 py-1 rounded">
+                        <code className="text-xs bg-gray-100 px-2 py-1 rounded-sm">
                           {log.ip_address || "-"}
                         </code>
                       </td>

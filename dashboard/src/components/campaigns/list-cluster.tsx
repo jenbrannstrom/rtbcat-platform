@@ -221,14 +221,14 @@ export function ListCluster({
     <div
       ref={setNodeRef}
       className={cn(
-        "w-80 flex-shrink-0 rounded-lg border bg-white flex flex-col",
+        "w-80 shrink-0 rounded-lg border bg-white flex flex-col",
         isOver && "border-blue-500 bg-blue-50",
         isUnclustered && "bg-gray-50"
       )}
       style={{ maxHeight: '70vh' }}
     >
       {/* Header - sticky with proper z-index */}
-      <div className="p-3 border-b bg-gray-50 rounded-t-lg flex-shrink-0 sticky top-0 z-10">
+      <div className="p-3 border-b bg-gray-50 rounded-t-lg shrink-0 sticky top-0 z-10">
         {/* Title row */}
         <div className="flex items-center justify-between mb-1">
           {isEditing && !isUnclustered ? (
@@ -244,7 +244,7 @@ export function ListCluster({
                   setIsEditing(false);
                 }
               }}
-              className="flex-1 font-medium border-b-2 border-blue-500 outline-none bg-transparent text-sm"
+              className="flex-1 font-medium border-b-2 border-blue-500 outline-hidden bg-transparent text-sm"
             />
           ) : (
             <div
@@ -300,7 +300,7 @@ export function ListCluster({
           <div className="relative" ref={sortDropdownRef}>
             <button
               onClick={() => setShowSortDropdown(!showSortDropdown)}
-              className="flex items-center gap-1 px-2 py-1 text-xs bg-white border rounded hover:bg-gray-50 transition-colors"
+              className="flex items-center gap-1 px-2 py-1 text-xs bg-white border rounded-sm hover:bg-gray-50 transition-colors"
             >
               {sortDirection === 'desc' ? <ArrowDown className="h-3 w-3" /> : <ArrowUp className="h-3 w-3" />}
               <span>{sortOptions.find(o => o.field === sortField)?.label}</span>

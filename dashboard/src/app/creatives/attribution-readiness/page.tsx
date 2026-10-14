@@ -251,7 +251,7 @@ export default function AttributionReadinessPage() {
                       <div className="text-xs text-gray-500">{row.creative_count} creatives</div>
                     </td>
                     <td className="px-3 py-2 align-top">
-                      <span className={`inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium ${statusClass}`}>
+                      <span className={`inline-flex items-center gap-1 rounded-sm px-2 py-1 text-xs font-medium ${statusClass}`}>
                         {statusIcon}
                         {row.status_label}
                       </span>
