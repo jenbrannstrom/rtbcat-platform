@@ -2,7 +2,6 @@ import type { PartialTranslations } from '../../types';
 
 const value: PartialTranslations['import'] = {
     'title': 'Імпорт',
-    'importReports': 'Імпортувати звіти',
     'importPerformanceData': 'Імпортувати дані продуктивності',
     'uploadCsvExports': 'Завантажте CSV-експорти з Google Authorized Buyers',
     'upload': 'Завантажити',

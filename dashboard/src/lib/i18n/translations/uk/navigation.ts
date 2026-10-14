@@ -1,18 +1,16 @@
 import type { PartialTranslations } from '../../types';
 
+// Keys not listed here fall back to English (see withEnglishFallback).
+// TODO(i18n): translate the Optimize / Creatives / System group labels and
+// the new row labels added in the 2026-10 sidebar rebuild.
 const value: PartialTranslations['navigation'] = {
-    wasteOptimizer: 'Оптимізатор QPS',
-    creatives: 'Креативи',
-    campaigns: 'Кластери креативів',
-    changeHistory: 'Історія змін',
-    import: 'Імпорт',
-    setup: 'Налаштування',
-    admin: 'Адміністрування',
-    docs: 'Документація',
-    logout: 'Вихід',
-    collapse: 'Згорнути',
-    expand: 'Розгорнути',
-    settings: 'Налаштування',
-  };
+  import: 'Імпорт',
+  admin: 'Адміністрування',
+  docs: 'Документація',
+  logout: 'Вихід',
+  collapse: 'Згорнути',
+  expand: 'Розгорнути',
+  settings: 'Налаштування',
+};
 
 export default value;

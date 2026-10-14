@@ -323,7 +323,7 @@ export default function ImportPage() {
       {/* Header */}
       <div className="flex items-center gap-3">
         <h1 className="text-2xl font-bold text-gray-900">
-          {t.import.importReports}
+          {t.import.title}
         </h1>
         <HelpLink chapter="09-data-import" />
       </div>

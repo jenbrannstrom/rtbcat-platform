@@ -1304,7 +1304,8 @@ function WasteAnalysisContent() {
       {/* Compact Top Bar - CPM, Period Selector, Refresh */}
       <div className="sticky top-0 z-30 px-6 py-2 bg-white border-b border-gray-200">
         <div className="flex items-center justify-between gap-2">
-          <div className="text-xs text-gray-600">
+          <div className="flex min-w-0 items-baseline gap-3 text-xs text-gray-600">
+            <h1 className="shrink-0 text-sm font-semibold text-gray-900">{t.navigation.overview}</h1>
             {seatReady && dataAsOf && (
               <span>
                 {t.dashboard.dataAsOf} <strong>{dataAsOf}</strong>

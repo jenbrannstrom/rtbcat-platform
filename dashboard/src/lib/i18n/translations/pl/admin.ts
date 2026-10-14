@@ -9,7 +9,6 @@ const value: PartialTranslations['admin'] = {
     'userManagement': 'Zarządzanie użytkownikami',
     'createNewUser': 'Utwórz nowego użytkownika',
     'viewAuditLog': 'Zobacz dziennik audytu',
-    'systemSettings': 'Ustawienia systemu',
     'users': 'Użytkownicy',
     'user': 'Użytkownik',
     'email': 'Email',

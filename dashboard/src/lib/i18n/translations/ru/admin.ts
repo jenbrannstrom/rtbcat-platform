@@ -10,7 +10,6 @@ const value: PartialTranslations['admin'] = {
   manageUsersLink: 'Управлять пользователями',
   createNewUser: 'Создать нового пользователя',
   viewAuditLog: 'Просмотр журнала аудита',
-  systemSettings: 'Системные настройки',
   systemConfiguration: 'Конфигурация и статус системы',
   reportHealthTitle: 'Состояние отчетов',
   reportHealthDesc: 'Ожидается {count} отчетов на место за последнюю дату отчета.',

@@ -10,7 +10,6 @@ const value: PartialTranslations['admin'] = {
   manageUsersLink: '管理用户',
   createNewUser: '创建新用户',
   viewAuditLog: '查看审计日志',
-  systemSettings: '系统设置',
   systemConfiguration: '系统配置与状态',
   reportHealthTitle: '报表健康度',
   reportHealthDesc: '最新报表日期每个席位期望有 {count} 份报表。',

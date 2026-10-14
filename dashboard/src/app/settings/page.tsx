@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { Users, Clock, Activity, Link2, ChevronRight, CheckCircle, XCircle } from "lucide-react";
+import { ListChecks, Clock, Activity, Link2, ChevronRight, CheckCircle, XCircle } from "lucide-react";
 import { getHealth, getSeats } from "@/lib/api";
 import { useTranslation } from "@/contexts/i18n-context";
 
@@ -32,6 +32,7 @@ export default function SettingsPage() {
         <span className="text-xs font-medium text-green-600 bg-green-50 px-2 py-1 rounded-sm flex items-center gap-1">
           <CheckCircle className="h-3 w-3" />
           {t.settings.connected}
+          {seats && seats.length > 0 ? ` · ${seats.length} ${t.settings.seats}` : ""}
         </span>
       ) : (
         <span className="text-xs font-medium text-yellow-600 bg-yellow-50 px-2 py-1 rounded-sm flex items-center gap-1">
@@ -41,15 +42,11 @@ export default function SettingsPage() {
       ),
     },
     {
-      title: t.settingsNav.buyerSeats,
-      description: t.settings.manageSeatDisplayNames,
-      href: "/settings/seats",
-      icon: Users,
-      status: seats && seats.length > 0 ? (
-        <span className="text-xs font-medium text-gray-600 bg-gray-100 px-2 py-1 rounded-sm">
-          {seats.length} {t.settings.seats}
-        </span>
-      ) : null,
+      title: t.navigation.setup,
+      description: t.setup.configureDataSources,
+      href: "/setup",
+      icon: ListChecks,
+      status: null,
     },
     {
       title: t.settingsNav.dataRetention,
