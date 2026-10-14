@@ -4,7 +4,7 @@ All notable changes to Cat-Scan are documented in this file.
 
 > Versioning note (March 5, 2026): canonical OSS release versions use `VERSION` + git tags (`vX.Y.Z`). Historical entries below with `10.x`-`17.x` were internal milestone labels and were not published semver release tags.
 
-## [Unreleased — 0.10.0 candidate]
+## [0.10.0] - 2026-10-14
 
 ### Added
 
@@ -47,7 +47,7 @@ All notable changes to Cat-Scan are documented in this file.
   than storing a relationship directory; Google profiles are not a complete
   mirror of the Authorized Buyers UI. No spend-based qualification is applied.
 - Existing tokens need `agent:publishers:read` to use publisher lookup.
-- This candidate also includes the previously deployed fixes below. Changes
+- This release also includes the previously deployed fixes below. Changes
   between the last GitHub Release (0.9.5) and tags 0.9.6–0.9.8 are listed in their
   dated sections, including multi-currency reporting and user administration.
 

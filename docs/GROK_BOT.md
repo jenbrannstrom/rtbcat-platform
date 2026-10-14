@@ -44,8 +44,7 @@ Python 3.11+ and access to your HTTPS MCP endpoint are required. Ask Grok to run
 ```bash
 git clone https://github.com/jenbrannstrom/rtbcat-platform.git /workspace/rtbcat-platform
 cd /workspace/rtbcat-platform
-# Select the reviewed release tag or exact commit supplied by the maintainer.
-git checkout YOUR_REVIEWED_TAG_OR_COMMIT
+git checkout v0.10.0
 python3 -m venv /workspace/rtbcat-mcp-venv
 /workspace/rtbcat-mcp-venv/bin/pip install -r requirements-mcp.txt
 ```

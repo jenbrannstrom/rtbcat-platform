@@ -1,7 +1,7 @@
 # Cat-Scan
 
 ![Google Authorized Buyers](https://img.shields.io/badge/Google%20Authorized%20Buyers-compatible-4285F4?logo=google&logoColor=white)
-![Version](https://img.shields.io/badge/version-v0.10.0--candidate-blue)
+![Version](https://img.shields.io/badge/version-v0.10.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-brightgreen)
 ![Python](https://img.shields.io/badge/python-3.11%2B-3776AB?logo=python&logoColor=white)
 ![Node.js](https://img.shields.io/badge/node.js-18%2B-339933?logo=nodedotjs&logoColor=white)
@@ -312,9 +312,12 @@ PostgreSQL 主机和 HTTPS 入口。Google 凭证保留在服务端。参见
 
 ## 当前状态
 
-`0.10.0` 候选版本整理了 MCP 访问、Grok 接入和实时媒体研究功能。
+`0.10.0` 版本整理了 MCP 访问、Grok 接入和实时媒体研究功能。
 生产部署可用与公开版本正式发布是两个独立状态。发布前必须通过
 [发布检查清单](docs/OSS_RELEASE_CHECKLIST.md)和当前 CI 检查；版本徽章本身不代表安全检查已通过。
+
+本版本对一个已打补丁的开发依赖设置了临时安全例外，有效期至 2026-11-13。
+详情见[依赖缓解措施](docs/DEPENDENCY_MITIGATIONS.md)。
 
 后续产品工作包括自助接入、保存媒体管理关系，以及经过生产数据验证的转化驱动优化。
 

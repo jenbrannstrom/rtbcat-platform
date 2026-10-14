@@ -1,7 +1,7 @@
 # Cat-Scan
 
 ![Google Authorized Buyers](https://img.shields.io/badge/Google%20Authorized%20Buyers-compatible-4285F4?logo=google&logoColor=white)
-![Version](https://img.shields.io/badge/version-v0.10.0--candidate-blue)
+![Version](https://img.shields.io/badge/version-v0.10.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-brightgreen)
 ![Python](https://img.shields.io/badge/python-3.11%2B-3776AB?logo=python&logoColor=white)
 ![Node.js](https://img.shields.io/badge/node.js-18%2B-339933?logo=nodedotjs&logoColor=white)
@@ -293,10 +293,13 @@ The repo preflight and secret scanning are designed around that assumption. See 
 
 ## Current status
 
-The `0.10.0` candidate packages MCP access, Grok setup and live publisher research.
+Version `0.10.0` packages MCP access, Grok setup and live publisher research.
 A working production deployment is separate from a tagged public release. Check
 the [release checklist](docs/OSS_RELEASE_CHECKLIST.md) and current CI results;
 do not infer that security checks passed from a version badge.
+
+The release has one temporary exception for a patched development dependency.
+It expires on 2026-11-13. See [Dependency mitigations](docs/DEPENDENCY_MITIGATIONS.md).
 
 Further product work includes self-service connector onboarding, saved publisher
 relationships and conversion-driven optimization with measured production results.
