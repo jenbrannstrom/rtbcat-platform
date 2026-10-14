@@ -6,7 +6,9 @@ This document explains what data must stay private when deploying Cat-Scan, espe
 
 **Code is public. Data and credentials are private.**
 
-The Cat-Scan repository contains only application code. All sensitive data lives outside the repository:
+The current source tree must contain no credentials or customer data. Scan Git
+history as well: deleting a file from the current tree does not remove old copies.
+Keep sensitive data outside the repository:
 - On your VM in `~/.catscan/`
 - In your cloud provider's secret manager
 - In gitignored local files (`.env`, `terraform.tfvars`)
@@ -100,27 +102,23 @@ cp terraform/gcp/terraform.tfvars.example terraform/gcp/terraform.tfvars
 nano .env
 ```
 
-### 3. GitHub Secrets (for CI/CD)
+### 3. CI and current production boundaries
 
-In your fork's GitHub settings, add:
+Production uses Hetzner with digest-pinned images. The manual GHCR build uses the
+workflow's package-scoped `GITHUB_TOKEN`; it does not need production database,
+Google or SSH credentials. The security workflow uses the private
+`REDACTION_DENYLIST` to check that operational identifiers are not committed.
+Keep deployment credentials on the operator/host side, outside source and build
+artifacts. See [versioning](VERSIONING.md) and [Hetzner tooling](../scripts/hetzner/README.md).
 
-| Secret | Description |
-|--------|-------------|
-| `GCP_SA_KEY` | Service account JSON for deployments |
+Google Secret Manager still supplies application Google credentials, even though
+application hosting moved. API credentials and the database password are mounted
+or retrieved by the API process. The MCP process has no Google or database secret;
+it forwards a scoped agent token to the API on each call.
 
-And variables:
-
-| Variable | Description |
-|----------|-------------|
-| `GCP_PROJECT` | Your GCP project ID |
-| `GCP_REGION` | GCP region |
-| `GCP_ZONE` | VM zone |
-| `GCP_VM_PRODUCTION` | Production VM name |
-| `CLOUDSQL_INSTANCE` | Cloud SQL instance name |
-| `CLOUDSQL_CONNECTION_NAME` | Cloud SQL connection name |
-| `IMAGE_REGISTRY` | Artifact Registry image prefix |
-| `GCP_REPOSITORY` | Artifact Registry repository |
-| `GCP_REGISTRY_HOST` | Artifact Registry host |
+Grok/other clients receive their own expiring, revocable `cat_agent_*` token.
+Never publish that token with the connector code. Personal Grok Bots share cloud
+credentials; see [the setup guide](GROK_BOT.md) before assigning buyer access.
 
 ### 4. Never Commit These
 
@@ -132,6 +130,13 @@ Even if you think it's "just for testing":
 - Deployment notes with real IPs or project IDs
 
 ---
+
+## Retained GCP deployment reference
+
+The following GCP bootstrap and infrastructure sections describe the historical
+GCE deployment. Those application writers are frozen. Do not restart them or
+apply their deployment scripts to publish a current release. Current deployment
+controls are in `deploy/hetzner/` and `scripts/hetzner/`.
 
 ## Secret Management Architecture
 
@@ -248,17 +253,14 @@ gcloud iam service-accounts keys create new-key.json \
   --iam-account=SERVICE_ACCOUNT_EMAIL
 ```
 
-### 2. Remove from Git History
+### 2. Coordinate history cleanup
 
-```bash
-# Remove file from history (requires force push)
-git filter-branch --force --index-filter \
-  'git rm --cached --ignore-unmatch PATH_TO_SECRET' \
-  --prune-empty --tag-name-filter cat -- --all
-
-# Force push (coordinate with team!)
-git push --force --all
-```
+Revoke or rotate the credential first and verify the dependent service still
+works. Removing text from Git does not revoke access. Identify all affected refs,
+mirrors and forks, prepare a reviewed history rewrite and recovery plan, then
+coordinate it with maintainers. History rewriting and force pushes require
+explicit approval because they invalidate existing clones and signatures.
+Do not suppress an unresolved credential finding to make a release check green.
 
 ### 3. Check for Exposure
 

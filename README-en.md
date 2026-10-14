@@ -1,7 +1,7 @@
 # Cat-Scan
 
 ![Google Authorized Buyers](https://img.shields.io/badge/Google%20Authorized%20Buyers-compatible-4285F4?logo=google&logoColor=white)
-![Version](https://img.shields.io/badge/version-v0.9.4-blue)
+![Version](https://img.shields.io/badge/version-v0.10.0--candidate-blue)
 ![License](https://img.shields.io/badge/license-MIT-brightgreen)
 ![Python](https://img.shields.io/badge/python-3.11%2B-3776AB?logo=python&logoColor=white)
 ![Node.js](https://img.shields.io/badge/node.js-18%2B-339933?logo=nodedotjs&logoColor=white)
@@ -67,7 +67,17 @@ That logic is described in [docs/OPTIMIZATION_LOGIC.md](docs/OPTIMIZATION_LOGIC.
 - campaign clustering from destination URLs and creative metadata
 - click-macro audit and AppsFlyer readiness diagnostics
 
-### Built but optional
+### Agent access and publisher research
++- Standard read-only MCP server with eight tools and revocable, buyer-scoped tokens
++- Grok Bot integration through a private connector; [setup and rotation](docs/GROK_BOT.md)
++- Live publisher ownership, declared managers, seller accounts and contact evidence
++- Publisher CSV enrichment with source URLs, timestamps and explicit partial results
++
++Publisher lookup is available through the API, MCP and CLI. It does not yet save
++a publisher directory or provide a publisher-management screen. Google Marketplace
++access requires an enabled API and permission for the selected buyer.
++
++### Built but optional
 - AI-assisted language detection and geo-linguistic mismatch analysis in the creative modal
 - provider choice for language analysis (Gemini, Claude, or Grok)
 - these features require explicit provider configuration and are disabled by default in production deploys
@@ -237,21 +247,13 @@ Run locally and use `http://localhost:8000/docs` for the current OpenAPI surface
 
 ## Deployment
 
-There are two real deployment modes in this repo.
+The maintained production path uses digest-pinned API, dashboard and MCP images
+on Hetzner, with a separate PostgreSQL host, HTTPS ingress and Google credentials
+kept server-side. See [scripts/hetzner/README.md](scripts/hetzner/README.md).
 
-### Local or simple self-host
-- Next.js on port `3000`
-- FastAPI on port `8000`
-- local Postgres or external Postgres
-- optional Caddy reverse proxy
-
-### GCP path
-- external reverse proxy and auth in front
-- `cloud-sql-proxy` sidecar
-- FastAPI container
-- Next.js container
-- Postgres serving database in Cloud SQL
-- optional GCS / BigQuery pipeline for raw and archival data
+Local development uses Next.js on port `3000`, FastAPI on `8000` and PostgreSQL.
+The older GCP deployment files are retained for historical/frozen resources;
+they are not the current production deployment path.
 
 Start with [INSTALL.md](INSTALL.md). For release/build rules, use [docs/VERSIONING.md](docs/VERSIONING.md).
 
@@ -267,6 +269,9 @@ Start with [INSTALL.md](INSTALL.md). For release/build rules, use [docs/VERSIONI
 | [METRICS_GUIDE.md](METRICS_GUIDE.md) | metric definitions |
 | [ROADMAP.md](ROADMAP.md) | what is built, what is partial, what comes next |
 | [scripts/partition_migration/README.md](scripts/partition_migration/README.md) | partitioning the raw fact table + retention at scale |
+| [docs/MCP_SERVER.md](docs/MCP_SERVER.md) | read tools, authentication and HTTP setup |
+| [docs/GROK_BOT.md](docs/GROK_BOT.md) | Grok connector installation, verification and rotation |
+| [docs/PUBLISHER_LOOKUP.md](docs/PUBLISHER_LOOKUP.md) | publisher sources, Google setup and CSV enrichment |
 | [CHANGELOG.md](CHANGELOG.md) | release history |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | contribution flow |
 
@@ -288,17 +293,13 @@ The repo preflight and secret scanning are designed around that assumption. See 
 
 ## Current status
 
-Release engineering is in good shape.
+The `0.10.0` candidate packages MCP access, Grok setup and live publisher research.
+A working production deployment is separate from a tagged public release. Check
+the [release checklist](docs/OSS_RELEASE_CHECKLIST.md) and current CI results;
+do not infer that security checks passed from a version badge.
 
-As of `v0.9.4`:
-- the OSS preflight passes
-- the full Python suite passes in this repo
-- dashboard build and lint pass
-
-What still needs more proof:
-- measured efficiency uplift across multiple real deployments
-- end-to-end conversion-driven optimization at production scale
-- provider-agnostic language analysis instead of a single optional AI path
+Further product work includes self-service connector onboarding, saved publisher
+relationships and conversion-driven optimization with measured production results.
 
 ## Contributing
 

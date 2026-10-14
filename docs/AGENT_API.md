@@ -14,10 +14,11 @@ Outside agents use revocable app tokens:
 - plaintext is returned only once when the token is created
 - each token is bound to a normal Cat-Scan user
 - buyer isolation comes from `user_buyer_seat_permissions`
-- a token is hard-scoped to one `buyer_id`, or minted with
-  `all_granted_buyers=true` (non-sudo users only) to cover every seat the
-  user is granted — the seat grants then bound every request
-- tokens for sudo users always require a single-buyer hard scope
+- a token is hard-scoped to one `buyer_id` or an explicit `buyer_ids` list;
+  non-sudo identities can instead use `all_granted_buyers=true` to follow current
+  seat grants. These three issuance modes are mutually exclusive.
+- tokens for sudo users require `buyer_id` or an explicit `buyer_ids` list;
+  they cannot use `all_granted_buyers`
 - supported scopes:
   - `agent:stats:read` — stats summary and daily spend
   - `agent:creatives:read` — creative search and detail
@@ -29,7 +30,14 @@ Outside agents use revocable app tokens:
 Do not give outside agents the legacy `CATSCAN_API_KEY`. That key authenticates
 as a sudo automation user and is for trusted internal operations only.
 
+For MCP clients, see [MCP server](MCP_SERVER.md) and [Grok Bot setup](GROK_BOT.md).
+
 ## Edge Gate
+
+The GCP commands below describe the legacy deployment. Do not run them against
+the retired GCP writer. The maintained deployment uses the Hetzner ingress scripts;
+the public MCP endpoint accepts the scoped bearer token directly.
+
 
 For public production deployments, enable NGINX Basic Auth in front of the
 agent API so commodity bots do not reach FastAPI.

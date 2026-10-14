@@ -66,6 +66,7 @@ jobs:
             tests/test_agent_creatives.py \
             tests/test_agent_creative_performance.py \
             tests/test_mcp_server_tools.py \
+            tests/test_mcp_stdio_bridge.py \
             tests/test_publisher_lookup.py \
             tests/test_mcp_server_auth_and_limits.py \
             tests/test_mcp_deployment_wiring.py \

@@ -1,7 +1,7 @@
 # Cat-Scan
 
 ![Google Authorized Buyers](https://img.shields.io/badge/Google%20Authorized%20Buyers-compatible-4285F4?logo=google&logoColor=white)
-![Version](https://img.shields.io/badge/version-v0.9.4-blue)
+![Version](https://img.shields.io/badge/version-v0.10.0--candidate-blue)
 ![License](https://img.shields.io/badge/license-MIT-brightgreen)
 ![Python](https://img.shields.io/badge/python-3.11%2B-3776AB?logo=python&logoColor=white)
 ![Node.js](https://img.shields.io/badge/node.js-18%2B-339933?logo=nodedotjs&logoColor=white)
@@ -67,6 +67,16 @@ Cat-Scan 填补了这一空白。
 - 具有按席位划分的访问权限的多用户认证
 - 基于目标 URL 和广告素材元数据的广告活动聚类
 - 点击宏审计和 AppsFlyer 就绪性诊断
+
+### 智能体访问与媒体研究
+
+- 标准只读 MCP 服务，提供八个工具以及可撤销、按买方席位限定的令牌
+- 通过私有连接器接入 Grok Bot：[安装与令牌轮换指南](docs/GROK_BOT.md)
+- 实时查询媒体所有者、声明的管理机构、授权卖方账户和联系信息
+- CSV 批量补充证据，保留来源、查询时间和结果不完整的明确标记
+
+媒体查询可通过 API、MCP 和命令行使用。目前不保存媒体关系目录，也没有
+专门的媒体管理页面。Google Marketplace 查询需要启用 API 并获得对应买方的访问权限。
 
 ### 已构建但为可选的 AI 功能
 
@@ -248,13 +258,12 @@ API 接口数量较多，无法在简短的 README 表格中完整列出。当�
 - 本地 Postgres 或外部 Postgres
 - 可选的 Caddy 反向代理
 
-### GCP 路径
-- 前置外部反向代理和身份验证
-- `cloud-sql-proxy` 边车容器
-- FastAPI 容器
-- Next.js 容器
-- Cloud SQL 中的 Postgres 服务数据库
-- 可选的用于原始数据和归档数据的 GCS / BigQuery 管道
+### 当前生产部署
+
+生产环境使用 Hetzner 上按镜像摘要固定的 API、仪表板和 MCP 容器，以及独立的
+PostgreSQL 主机和 HTTPS 入口。Google 凭证保留在服务端。参见
+[Hetzner 部署说明](scripts/hetzner/README.md)。旧 GCP 文件仅用于历史和已冻结的资源，
+不是当前生产部署路径。
 
 从 [INSTALL.md](INSTALL.md) 开始。有关发布/构建规则，请使用 [docs/VERSIONING.md](docs/VERSIONING.md)。
 
@@ -279,6 +288,9 @@ API 接口数量较多，无法在简短的 README 表格中完整列出。当�
 | [DATA_MODEL.md](DATA_MODEL.md) | Postgres 模式与导入模型 |
 | [ROADMAP.md](ROADMAP.md) | 已完成、部分完成和未来计划的功能 |
 | [scripts/partition_migration/README.md](scripts/partition_migration/README.md) | 大规模场景下的原始事实表分区与数据保留 |
+| [MCP 服务](docs/MCP_SERVER.md) | 只读工具、认证和 HTTP 接入 |
+| [Grok Bot 接入](docs/GROK_BOT.md) | 连接器安装、验证和令牌轮换 |
+| [媒体身份查询](docs/PUBLISHER_LOOKUP.md) | 数据来源、Google 设置和 CSV 补充 |
 | [CHANGELOG.md](CHANGELOG.md) | 发布历史 |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | 贡献流程 |
 
@@ -300,17 +312,11 @@ API 接口数量较多，无法在简短的 README 表格中完整列出。当�
 
 ## 当前状态
 
-发布工程状态良好。
+`0.10.0` 候选版本整理了 MCP 访问、Grok 接入和实时媒体研究功能。
+生产部署可用与公开版本正式发布是两个独立状态。发布前必须通过
+[发布检查清单](docs/OSS_RELEASE_CHECKLIST.md)和当前 CI 检查；版本徽章本身不代表安全检查已通过。
 
-截至 `v0.9.4` 版本：
-- OSS 预检检查通过
-- 此仓库中的完整 Python 测试套件通过
-- 仪表板构建和代码检查通过
-
-仍需更多验证的方面：
-- 在多个真实部署中，可衡量的效率提升
-- 在生产规模下，端到端的、由转化数据驱动的优化
-- 与提供商无关的语言分析，而非单一的、可选的 AI 路径
+后续产品工作包括自助接入、保存媒体管理关系，以及经过生产数据验证的转化驱动优化。
 
 ## 贡献
 

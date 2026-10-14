@@ -58,7 +58,7 @@ jobs:
         run: |
           pip install pip-audit
           audit_fail=0
-          for req in requirements.txt requirements-ai.txt requirements-dev.txt; do
+          for req in requirements.txt requirements-ai.txt requirements-dev.txt requirements-mcp.txt; do
             pip-audit -r "$req" || audit_fail=1
           done
           exit "$audit_fail"
