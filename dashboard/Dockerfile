@@ -5,7 +5,7 @@ FROM base AS deps
 WORKDIR /app
 
 COPY package.json package-lock.json* ./
-COPY patches ./patches
+COPY vendor ./vendor
 RUN npm ci
 
 # Rebuild the source code only when needed

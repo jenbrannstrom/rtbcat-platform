@@ -66,7 +66,7 @@ export function CampaignCard({ campaign, period }: CampaignCardProps) {
           <div className="flex gap-1">
             {campaign.ai_generated && campaign.ai_confidence && (
               <span
-                className="text-xs px-2 py-1 rounded bg-purple-100 text-purple-700"
+                className="text-xs px-2 py-1 rounded-sm bg-purple-100 text-purple-700"
                 title={t.campaigns.aiConfidenceTooltip.replace(
                   "{pct}",
                   String(Math.round(campaign.ai_confidence * 100))
@@ -76,7 +76,7 @@ export function CampaignCard({ campaign, period }: CampaignCardProps) {
               </span>
             )}
             {campaign.status !== "active" && (
-              <span className="text-xs px-2 py-1 rounded bg-gray-100 text-gray-600">
+              <span className="text-xs px-2 py-1 rounded-sm bg-gray-100 text-gray-600">
                 {campaign.status}
               </span>
             )}

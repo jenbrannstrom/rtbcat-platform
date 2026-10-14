@@ -79,7 +79,7 @@ export function ImportResultCard({
               <p className="text-gray-500 text-sm mb-2">{t.import.columnsImported}</p>
               <div className="flex flex-wrap gap-1">
                 {result.columns_imported.map(col => (
-                  <span key={col} className="px-2 py-0.5 bg-green-100 text-green-800 rounded text-xs">
+                  <span key={col} className="px-2 py-0.5 bg-green-100 text-green-800 rounded-sm text-xs">
                     {col}
                   </span>
                 ))}
@@ -101,7 +101,7 @@ export function ImportResultCard({
               <p className="text-red-800 text-sm font-medium mb-1">{t.import.missingRequiredColumns}</p>
               <div className="flex flex-wrap gap-1">
                 {result.required_missing.map(col => (
-                  <span key={col} className="px-2 py-0.5 bg-red-200 text-red-900 rounded text-xs font-medium">
+                  <span key={col} className="px-2 py-0.5 bg-red-200 text-red-900 rounded-sm text-xs font-medium">
                     {col}
                   </span>
                 ))}

@@ -77,7 +77,7 @@ function HeaderInfoTip({ text, ariaLabel }: { text: string; ariaLabel: string })
   return (
     <span className="relative inline-flex items-center ml-0.5 group">
       <Info className="h-3 w-3 text-gray-400 hover:text-gray-600 cursor-help" aria-label={ariaLabel} />
-      <span className="pointer-events-none absolute left-1/2 top-full z-[9999] mt-1 hidden w-72 -translate-x-1/2 rounded border border-gray-200 bg-white p-2.5 text-sm font-normal normal-case leading-normal text-gray-700 shadow-lg group-hover:block">
+      <span className="pointer-events-none absolute left-1/2 top-full z-9999 mt-1 hidden w-72 -translate-x-1/2 rounded-sm border border-gray-200 bg-white p-2.5 text-sm font-normal normal-case leading-normal text-gray-700 shadow-lg group-hover:block">
         {text}
       </span>
     </span>
@@ -347,9 +347,9 @@ export function AccountEndpointsHeader({
     return (
       <div className="bg-white rounded-lg border p-3">
         <div className="animate-pulse space-y-2">
-          <div className="h-4 bg-gray-300 rounded w-40" />
-          <div className="h-8 bg-gray-200 rounded" />
-          <div className="h-8 bg-gray-200 rounded" />
+          <div className="h-4 bg-gray-300 rounded-sm w-40" />
+          <div className="h-8 bg-gray-200 rounded-sm" />
+          <div className="h-8 bg-gray-200 rounded-sm" />
         </div>
       </div>
     );
@@ -395,7 +395,7 @@ export function AccountEndpointsHeader({
         <button
           onClick={handleRefresh}
           disabled={isRefreshing || isCommitting}
-          className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600 disabled:opacity-50"
+          className="p-1 rounded-sm hover:bg-gray-100 text-gray-400 hover:text-gray-600 disabled:opacity-50"
           title={t.pretargeting.endpointsRefresh}
         >
           <RefreshCw className={`h-3.5 w-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
@@ -410,7 +410,7 @@ export function AccountEndpointsHeader({
             : 'bg-amber-50 border border-amber-200 text-amber-800'
         }`}>
           <span>{commitResult.message}</span>
-          <button onClick={() => setCommitResult(null)} className="ml-2 p-0.5 hover:bg-black/5 rounded">
+          <button onClick={() => setCommitResult(null)} className="ml-2 p-0.5 hover:bg-black/5 rounded-sm">
             <X className="h-3 w-3" />
           </button>
         </div>
@@ -449,18 +449,18 @@ export function AccountEndpointsHeader({
               }`}
             >
               <div className="flex items-center gap-2 min-w-0 flex-1">
-                <Globe className="h-3 w-3 text-gray-400 flex-shrink-0" />
-                <span className="font-medium text-gray-700 w-14 flex-shrink-0">
+                <Globe className="h-3 w-3 text-gray-400 shrink-0" />
+                <span className="font-medium text-gray-700 w-14 shrink-0">
                   {formatLocation(endpoint.trading_location, t)}
                 </span>
                 <span className="text-[11px] text-gray-400 font-mono truncate" title={endpoint.url}>
                   {endpoint.url.replace(/^https?:\/\//, '')}
                 </span>
-                <span className="text-[11px] text-gray-400 flex-shrink-0">
+                <span className="text-[11px] text-gray-400 shrink-0">
                   {endpoint.bid_protocol?.replace('OPENRTB_', 'OpenRTB ').replace('_', '.') || ''}
                 </span>
               </div>
-              <div className="flex items-center gap-2 flex-shrink-0">
+              <div className="flex items-center gap-2 shrink-0">
                 {/* Allocated QPS — editable */}
                 <div className="w-24 text-right flex items-center justify-end gap-1">
                   {isEditing ? (
@@ -470,7 +470,7 @@ export function AccountEndpointsHeader({
                       min={0}
                       defaultValue={pendingValue ?? endpoint.maximum_qps}
                       autoFocus
-                      className="w-20 px-1 py-0.5 text-xs text-right border border-blue-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-400"
+                      className="w-20 px-1 py-0.5 text-xs text-right border border-blue-300 rounded-sm focus:outline-hidden focus:ring-1 focus:ring-blue-400"
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') handleEditSubmit(endpoint.endpoint_id, endpoint.maximum_qps);
                         if (e.key === 'Escape') setEditingEndpointId(null);
@@ -489,7 +489,7 @@ export function AccountEndpointsHeader({
                           </span>
                           <button
                             onClick={() => handleUndoEdit(endpoint.endpoint_id)}
-                            className="p-0.5 rounded hover:bg-yellow-200 text-yellow-600"
+                            className="p-0.5 rounded-sm hover:bg-yellow-200 text-yellow-600"
                             title={t.pretargeting.endpointsUndo}
                           >
                             <Undo2 className="h-2.5 w-2.5" />
@@ -508,7 +508,7 @@ export function AccountEndpointsHeader({
                       {!isPending && (
                         <button
                           onClick={() => handleStartEdit(endpoint.endpoint_id)}
-                          className="p-0.5 rounded hover:bg-gray-200 text-gray-400 hover:text-gray-600"
+                          className="p-0.5 rounded-sm hover:bg-gray-200 text-gray-400 hover:text-gray-600"
                         >
                           <Pencil className="h-2.5 w-2.5" />
                         </button>
@@ -530,20 +530,20 @@ export function AccountEndpointsHeader({
 
         {/* Pending changes banner */}
         {hasPendingEdits && !showCommitConfirm && (
-          <div className="flex items-center justify-between px-2 py-1.5 mt-1 bg-yellow-50 border border-yellow-200 rounded text-xs">
+          <div className="flex items-center justify-between px-2 py-1.5 mt-1 bg-yellow-50 border border-yellow-200 rounded-sm text-xs">
             <span className="font-medium text-yellow-800">
               {t.pretargeting.endpointsChangesPending.replace('{count}', String(pendingCount))}
             </span>
             <div className="flex items-center gap-2">
               <button
                 onClick={handleDiscardAll}
-                className="px-2 py-0.5 text-yellow-700 hover:bg-yellow-100 rounded"
+                className="px-2 py-0.5 text-yellow-700 hover:bg-yellow-100 rounded-sm"
               >
                 {t.pretargeting.endpointsDiscardAll}
               </button>
               <button
                 onClick={() => setShowCommitConfirm(true)}
-                className="px-2 py-0.5 bg-blue-600 text-white rounded hover:bg-blue-700"
+                className="px-2 py-0.5 bg-blue-600 text-white rounded-sm hover:bg-blue-700"
               >
                 {t.pretargeting.endpointsPushToGoogle}
               </button>
@@ -553,7 +553,7 @@ export function AccountEndpointsHeader({
 
         {/* Confirmation panel (inline) */}
         {showCommitConfirm && (
-          <div className="mt-1 p-3 bg-blue-50 border border-blue-200 rounded space-y-2">
+          <div className="mt-1 p-3 bg-blue-50 border border-blue-200 rounded-sm space-y-2">
             <h4 className="text-xs font-semibold text-blue-900">{t.pretargeting.endpointsConfirmTitle}</h4>
             <p className="text-[11px] text-blue-700">{t.pretargeting.endpointsConfirmBody}</p>
             <div className="space-y-1">
@@ -562,7 +562,7 @@ export function AccountEndpointsHeader({
                 const url = ep?.url?.replace(/^https?:\/\//, '') ?? endpointId;
                 const oldQps = ep?.maximum_qps;
                 return (
-                  <div key={endpointId} className="text-[11px] text-blue-800 font-mono px-2 py-0.5 bg-white/50 rounded">
+                  <div key={endpointId} className="text-[11px] text-blue-800 font-mono px-2 py-0.5 bg-white/50 rounded-sm">
                     {url}: {oldQps?.toLocaleString(language) ?? '?'} &rarr; {newQps.toLocaleString(language)}
                   </div>
                 );
@@ -577,14 +577,14 @@ export function AccountEndpointsHeader({
               <button
                 onClick={() => setShowCommitConfirm(false)}
                 disabled={isCommitting}
-                className="px-3 py-1 text-xs text-gray-600 hover:bg-gray-100 rounded disabled:opacity-50"
+                className="px-3 py-1 text-xs text-gray-600 hover:bg-gray-100 rounded-sm disabled:opacity-50"
               >
                 {t.pretargeting.endpointsCancel}
               </button>
               <button
                 onClick={handleCommit}
                 disabled={isCommitting}
-                className="px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 flex items-center gap-1.5"
+                className="px-3 py-1 text-xs bg-blue-600 text-white rounded-sm hover:bg-blue-700 disabled:opacity-50 flex items-center gap-1.5"
               >
                 {isCommitting ? (
                   <>
@@ -600,7 +600,7 @@ export function AccountEndpointsHeader({
         )}
 
         {/* Total row */}
-        <div className="flex items-center justify-between px-2 py-1.5 mt-1 bg-blue-50 border border-blue-200 rounded">
+        <div className="flex items-center justify-between px-2 py-1.5 mt-1 bg-blue-50 border border-blue-200 rounded-sm">
           <div className="flex items-center gap-1.5">
             <span className="text-xs font-semibold text-blue-800">{t.pretargeting.endpointsHeaderTotalQpsCap}</span>
             <div className="relative">
@@ -613,7 +613,7 @@ export function AccountEndpointsHeader({
                 <Info className="h-3 w-3 text-blue-400" />
               </button>
               {showQpsInfo && (
-                <div className="absolute left-0 top-5 w-72 p-2.5 bg-white border border-gray-200 rounded shadow-lg z-10 text-sm leading-normal text-gray-700">
+                <div className="absolute left-0 top-5 w-72 p-2.5 bg-white border border-gray-200 rounded-sm shadow-lg z-10 text-sm leading-normal text-gray-700">
                   {t.pretargeting.endpointsHeaderQpsInfoTooltip}
                 </div>
               )}

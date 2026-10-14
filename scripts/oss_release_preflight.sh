@@ -102,10 +102,10 @@ if [[ "$QUICK" == false ]]; then
   info "Running npm audit on dashboard/"
 
   if command -v npm &>/dev/null; then
-    if (cd "$REPO_ROOT/dashboard" && npm run test:audit-policy && npm run audit:release 2>&1); then
-      green "  npm release audit: no unapproved high/critical vulnerabilities"
+    if (cd "$REPO_ROOT/dashboard" && npm run audit:release 2>&1); then
+      green "  npm release audit: no reported vulnerabilities"
     else
-      fail "npm release audit failed (findings, patch integrity, tests, expiry, or audit availability)"
+      fail "npm release audit failed (findings, dependency contracts, or audit availability)"
     fi
   else
     red "  SKIP: npm not installed"

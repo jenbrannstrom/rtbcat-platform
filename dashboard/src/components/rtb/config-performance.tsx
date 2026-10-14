@@ -123,7 +123,7 @@ function ConfigRow({ config }: { config: ConfigData }) {
   const [expanded, setExpanded] = useState(false);
 
   return (
-    <div className="border rounded">
+    <div className="border rounded-sm">
       {/* Collapsed row - compact */}
       <button
         onClick={() => setExpanded(!expanded)}
@@ -196,7 +196,7 @@ function ConfigRow({ config }: { config: ConfigData }) {
 
           {/* Size performance - compact table */}
           {config.sizes.length > 0 && (
-            <div className="bg-white rounded border">
+            <div className="bg-white rounded-sm border">
               <div className="grid grid-cols-5 gap-2 px-2 py-1 border-b text-xs text-gray-500">
                 <span>{t.configPerformance.size}</span>
                 <span className="text-right">{t.configPerformance.reached}</span>

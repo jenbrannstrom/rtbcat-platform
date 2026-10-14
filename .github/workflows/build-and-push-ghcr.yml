@@ -37,7 +37,6 @@ jobs:
         working-directory: dashboard
         run: |
           npm ci
-          npm run test:audit-policy
           npm run audit:release
 
       - name: Set up Python

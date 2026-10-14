@@ -310,7 +310,7 @@ export default function SetupPage() {
               </div>
               <span
                 className={cn(
-                  "inline-flex items-center rounded px-2 py-1 text-xs font-medium",
+                  "inline-flex items-center rounded-sm px-2 py-1 text-xs font-medium",
                   item.done ? "bg-green-50 text-green-700" : "bg-slate-100 text-slate-700",
                 )}
               >

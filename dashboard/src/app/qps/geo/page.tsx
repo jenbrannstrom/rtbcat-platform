@@ -75,8 +75,8 @@ export default function GeoQpsPage() {
       {isLoading ? (
         <div className="bg-white rounded-xl border border-gray-200 p-6">
           <div className="animate-pulse space-y-4">
-            <div className="h-6 bg-gray-200 rounded w-1/3" />
-            <div className="h-32 bg-gray-100 rounded" />
+            <div className="h-6 bg-gray-200 rounded-sm w-1/3" />
+            <div className="h-32 bg-gray-100 rounded-sm" />
           </div>
         </div>
       ) : (

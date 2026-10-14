@@ -20,7 +20,7 @@ export function ColumnMappingCard({ columns }: ColumnMappingCardProps) {
           <p className="font-medium text-green-900">{t.import.columnsDetectedAndMapped}</p>
           <div className="mt-2 flex flex-wrap gap-2">
             {mappedColumns.map(([key, value]) => (
-              <span key={key} className="inline-flex items-center px-2 py-1 bg-green-100 text-green-800 text-xs rounded">
+              <span key={key} className="inline-flex items-center px-2 py-1 bg-green-100 text-green-800 text-xs rounded-sm">
                 <span className="font-mono">{value}</span>
                 <span className="mx-1 text-green-600">→</span>
                 <span>{key}</span>

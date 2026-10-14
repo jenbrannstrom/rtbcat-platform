@@ -150,7 +150,7 @@ export function ExportInstructions() {
       {reportCards.map((report) => (
         <div key={report.id} className={report.containerClass}>
           <div className="flex items-center gap-2 mb-3">
-            <span className={`${report.badgeClass} text-white text-xs font-bold px-2 py-1 rounded`}>
+            <span className={`${report.badgeClass} text-white text-xs font-bold px-2 py-1 rounded-sm`}>
               {report.id}
             </span>
             <h4 className="font-semibold text-gray-900">{report.reportName}</h4>
@@ -184,11 +184,11 @@ export function ExportInstructions() {
         <h4 className="font-semibold text-gray-900 mb-2">{t.import.exportGuideReportNaming}</h4>
         <p className="text-gray-700 mb-2">
           {t.import.exportGuideNameYourReports}{" "}
-          <code className="bg-white px-2 py-1 rounded border">catscan-{"{type}"}-{"{account_id}"}-yesterday-UTC</code>
+          <code className="bg-white px-2 py-1 rounded-sm border">catscan-{"{type}"}-{"{account_id}"}-yesterday-UTC</code>
         </p>
         <p className="text-gray-600 text-xs">
           {t.import.exportGuideExampleLabel}{" "}
-          <code className="bg-white px-1 rounded">catscan-bidsinauction-1111111111-yesterday-UTC</code>
+          <code className="bg-white px-1 rounded-sm">catscan-bidsinauction-1111111111-yesterday-UTC</code>
         </p>
       </div>
 

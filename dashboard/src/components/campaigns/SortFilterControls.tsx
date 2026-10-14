@@ -48,7 +48,7 @@ export function SortFilterControls({
           key={field}
           onClick={() => handleSortClick(field)}
           className={cn(
-            "px-3 py-1 text-sm rounded flex items-center gap-1 transition-colors",
+            "px-3 py-1 text-sm rounded-sm flex items-center gap-1 transition-colors",
             pageSortField === field
               ? "bg-blue-100 text-blue-700 font-medium"
               : "hover:bg-gray-200 text-gray-600"
@@ -70,7 +70,7 @@ export function SortFilterControls({
         type="button"
         onClick={() => onShowIssuesOnlyChange(!showIssuesOnly)}
         className={cn(
-          "px-3 py-1 text-sm rounded flex items-center gap-1 transition-colors",
+          "px-3 py-1 text-sm rounded-sm flex items-center gap-1 transition-colors",
           showIssuesOnly
             ? "bg-red-100 text-red-700 font-medium"
             : "hover:bg-gray-200 text-gray-600"
@@ -92,7 +92,7 @@ export function SortFilterControls({
           <select
             value={countryFilter || ''}
             onChange={e => onCountryFilterChange(e.target.value || null)}
-            className="text-sm border border-gray-300 rounded-md px-2 py-1 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="text-sm border border-gray-300 rounded-md px-2 py-1 bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-500"
           >
             <option value="">{t.campaigns.allCountries}</option>
             {allCountries.map(c => <option key={c} value={c}>{c}</option>)}

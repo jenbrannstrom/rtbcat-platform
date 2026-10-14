@@ -240,7 +240,7 @@ export function GmailReportsTab() {
             <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
           ) : (
             <span className={cn(
-              "px-2 py-1 text-xs font-medium rounded",
+              "px-2 py-1 text-xs font-medium rounded-sm",
               isConnected ? "bg-green-100 text-green-800" :
               isConfigured ? "bg-yellow-100 text-yellow-800" :
               "bg-gray-100 text-gray-600"
@@ -366,18 +366,18 @@ export function GmailReportsTab() {
                         <div
                           key={phase.id}
                           className={cn(
-                            "flex items-center gap-3 text-sm py-1.5 px-2 rounded",
+                            "flex items-center gap-3 text-sm py-1.5 px-2 rounded-sm",
                             isCurrent && "bg-blue-100",
                             isComplete && "text-green-700",
                             isPending && "text-gray-400"
                           )}
                         >
                           {isComplete ? (
-                            <CheckCircle className="h-4 w-4 text-green-500 flex-shrink-0" />
+                            <CheckCircle className="h-4 w-4 text-green-500 shrink-0" />
                           ) : isCurrent ? (
-                            <Loader2 className="h-4 w-4 text-blue-600 animate-spin flex-shrink-0" />
+                            <Loader2 className="h-4 w-4 text-blue-600 animate-spin shrink-0" />
                           ) : (
-                            <PhaseIcon className="h-4 w-4 text-gray-300 flex-shrink-0" />
+                            <PhaseIcon className="h-4 w-4 text-gray-300 shrink-0" />
                           )}
                           <span className={cn(
                             isCurrent && "font-medium text-blue-800"
@@ -407,10 +407,10 @@ export function GmailReportsTab() {
             <p className="text-sm text-gray-500 mb-4 max-w-md mx-auto">
               {isConfigured ? (
                 <>{t.setup.gmailRunImportScriptToAuthorize}<br />
-                <code className="bg-gray-100 px-2 py-1 rounded text-xs">python scripts/gmail_import.py</code></>
+                <code className="bg-gray-100 px-2 py-1 rounded-sm text-xs">python scripts/gmail_import.py</code></>
               ) : (
                 <>{t.setup.gmailFollowInstallGuide}<br />
-                {t.setup.gmailUploadOauthClientPrefix} <code className="bg-gray-100 px-1 rounded">gmail-oauth-client.json</code> {t.setup.gmailUploadOauthClientSuffix} <code className="bg-gray-100 px-1 rounded">~/.catscan/credentials/</code></>
+                {t.setup.gmailUploadOauthClientPrefix} <code className="bg-gray-100 px-1 rounded-sm">gmail-oauth-client.json</code> {t.setup.gmailUploadOauthClientSuffix} <code className="bg-gray-100 px-1 rounded-sm">~/.catscan/credentials/</code></>
               )}
             </p>
             <a

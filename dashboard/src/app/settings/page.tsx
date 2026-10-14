@@ -29,12 +29,12 @@ export default function SettingsPage() {
       href: "/settings/accounts",
       icon: Link2,
       status: health?.configured ? (
-        <span className="text-xs font-medium text-green-600 bg-green-50 px-2 py-1 rounded flex items-center gap-1">
+        <span className="text-xs font-medium text-green-600 bg-green-50 px-2 py-1 rounded-sm flex items-center gap-1">
           <CheckCircle className="h-3 w-3" />
           {t.settings.connected}
         </span>
       ) : (
-        <span className="text-xs font-medium text-yellow-600 bg-yellow-50 px-2 py-1 rounded flex items-center gap-1">
+        <span className="text-xs font-medium text-yellow-600 bg-yellow-50 px-2 py-1 rounded-sm flex items-center gap-1">
           <XCircle className="h-3 w-3" />
           {t.settings.notConnected}
         </span>
@@ -46,7 +46,7 @@ export default function SettingsPage() {
       href: "/settings/seats",
       icon: Users,
       status: seats && seats.length > 0 ? (
-        <span className="text-xs font-medium text-gray-600 bg-gray-100 px-2 py-1 rounded">
+        <span className="text-xs font-medium text-gray-600 bg-gray-100 px-2 py-1 rounded-sm">
           {seats.length} {t.settings.seats}
         </span>
       ) : null,
@@ -64,7 +64,7 @@ export default function SettingsPage() {
       href: "/settings/system",
       icon: Activity,
       status: health?.status ? (
-        <span className="text-xs font-medium text-green-600 bg-green-50 px-2 py-1 rounded">
+        <span className="text-xs font-medium text-green-600 bg-green-50 px-2 py-1 rounded-sm">
           {health.status}
         </span>
       ) : null,
@@ -89,7 +89,7 @@ export default function SettingsPage() {
           >
             <div className="flex items-center justify-between">
               <div className="flex items-center">
-                <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-primary-50 flex items-center justify-center">
+                <div className="shrink-0 w-10 h-10 rounded-lg bg-primary-50 flex items-center justify-center">
                   <card.icon className="h-5 w-5 text-primary-600" />
                 </div>
                 <div className="ml-4">

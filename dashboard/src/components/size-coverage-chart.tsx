@@ -262,7 +262,7 @@ export function SizeCoverageChart({ sizeGaps, isLoading }: SizeCoverageChartProp
               {isExpanded && (
                 <div className="px-4 py-4 bg-gray-50 border-t border-gray-100">
                   <div className="flex items-start gap-3 ml-5">
-                    <AlertCircle className="h-5 w-5 text-gray-400 flex-shrink-0 mt-0.5" />
+                    <AlertCircle className="h-5 w-5 text-gray-400 shrink-0 mt-0.5" />
                     <div>
                       <p className="text-sm text-gray-700">{gap.recommendation_detail}</p>
                       {gap.potential_savings_usd && (

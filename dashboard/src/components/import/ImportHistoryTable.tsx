@@ -93,7 +93,7 @@ export function ImportHistoryTable({
         <button
           onClick={onRefresh}
           disabled={loading}
-          className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded"
+          className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-sm"
           title={t.common.refresh}
         >
           <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />

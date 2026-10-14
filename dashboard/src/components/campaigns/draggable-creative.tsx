@@ -275,7 +275,7 @@ export function DraggableCreative({
             <span className="font-medium text-sm select-all truncate flex-1 min-w-0">#{creative.id}</span>
             <button
               onClick={handleCopyId}
-              className="p-1 hover:bg-gray-700 rounded transition-colors"
+              className="p-1 hover:bg-gray-700 rounded-sm transition-colors"
               title={t.creatives.copyId}
             >
               {copied ? (
@@ -423,7 +423,7 @@ export function DraggableCreative({
 
         {/* ID badge (large only) */}
         {isLarge && (
-          <div className="absolute top-1 left-1 bg-black/50 text-white text-[10px] px-1 rounded">
+          <div className="absolute top-1 left-1 bg-black/50 text-white text-[10px] px-1 rounded-sm">
             #{creative.id}
           </div>
         )}

@@ -192,7 +192,7 @@ export function ListItem({
         {...(isDragOverlay ? {} : listeners)}
         onClick={handleClick}
         className={cn(
-          "p-2 mb-1 rounded border bg-white cursor-grab hover:bg-gray-50 transition-colors",
+          "p-2 mb-1 rounded-sm border bg-white cursor-grab hover:bg-gray-50 transition-colors",
           isDragging && "opacity-40",
           isDragOverlay && "shadow-lg ring-2 ring-blue-500",
           isSelected && !isDragOverlay && "ring-2 ring-blue-500 bg-blue-50",
@@ -200,7 +200,7 @@ export function ListItem({
       >
         <div className="flex items-center gap-2">
           {/* Small thumbnail */}
-          <div className="w-10 h-10 rounded bg-gray-100 flex-shrink-0 overflow-hidden">
+          <div className="w-10 h-10 rounded-sm bg-gray-100 shrink-0 overflow-hidden">
             {thumbnail ? (
               <img
                 src={thumbnail}
@@ -231,7 +231,7 @@ export function ListItem({
           </div>
 
           {/* Metrics */}
-          <div className="flex-shrink-0 text-right">
+          <div className="shrink-0 text-right">
             {/* Always show spend */}
             <div className="text-sm font-medium text-green-600">
               {formatSpend(spend)}

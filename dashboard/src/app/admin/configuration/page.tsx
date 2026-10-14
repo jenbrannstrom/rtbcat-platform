@@ -77,13 +77,13 @@ function SettingsPage() {
       {/* Success/Error Messages */}
       {successMessage && (
         <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg flex items-start gap-3">
-          <Check className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
+          <Check className="w-5 h-5 text-green-600 shrink-0 mt-0.5" />
           <p className="text-sm text-green-700">{successMessage}</p>
         </div>
       )}
       {errorMessage && (
         <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3">
-          <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+          <AlertCircle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
           <p className="text-sm text-red-700">{errorMessage}</p>
         </div>
       )}
@@ -91,7 +91,7 @@ function SettingsPage() {
       {/* Settings Sections */}
       <div className="space-y-6">
         {/* Multi-User Mode */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <div className="bg-white rounded-xl shadow-xs border border-gray-200 p-6">
           <div className="flex items-start justify-between">
             <div>
               <h2 className="text-lg font-semibold text-gray-900">
@@ -105,20 +105,20 @@ function SettingsPage() {
               onClick={handleMultiUserToggle}
               disabled={updateMutation.isPending}
               className={cn(
-                "relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:opacity-50",
+                "relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-hidden focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:opacity-50",
                 multiUserEnabled ? "bg-primary-600" : "bg-gray-200"
               )}
             >
               <span
                 className={cn(
-                  "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out",
+                  "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out",
                   multiUserEnabled ? "translate-x-5" : "translate-x-0"
                 )}
               />
             </button>
           </div>
           <div className="mt-4 p-3 bg-blue-50 rounded-lg flex items-start gap-2">
-            <Info className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
+            <Info className="h-5 w-5 text-blue-600 shrink-0 mt-0.5" />
             <p className="text-sm text-blue-700">
               {t.admin.multiUserInfo}
             </p>
@@ -126,7 +126,7 @@ function SettingsPage() {
         </div>
 
         {/* Audit Log Retention */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <div className="bg-white rounded-xl shadow-xs border border-gray-200 p-6">
           <h2 className="text-lg font-semibold text-gray-900">
             {t.admin.auditLogRetention}
           </h2>
@@ -166,7 +166,7 @@ function SettingsPage() {
         </div>
 
         {/* Session Settings (Read-only info) */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <div className="bg-white rounded-xl shadow-xs border border-gray-200 p-6">
           <h2 className="text-lg font-semibold text-gray-900">
             {t.admin.sessionSettings}
           </h2>
@@ -193,7 +193,7 @@ function SettingsPage() {
         </div>
 
         {/* All Settings (Debug view) */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <div className="bg-white rounded-xl shadow-xs border border-gray-200 p-6">
           <h2 className="text-lg font-semibold text-gray-900">{t.admin.allSettings}</h2>
           <p className="mt-1 text-sm text-gray-500">
             {t.admin.rawSettingsView}

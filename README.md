@@ -1,7 +1,7 @@
 # Cat-Scan
 
 ![Google Authorized Buyers](https://img.shields.io/badge/Google%20Authorized%20Buyers-compatible-4285F4?logo=google&logoColor=white)
-![Version](https://img.shields.io/badge/version-v0.10.0-blue)
+![Version](https://img.shields.io/badge/version-v0.10.1-blue)
 ![License](https://img.shields.io/badge/license-MIT-brightgreen)
 ![Python](https://img.shields.io/badge/python-3.11%2B-3776AB?logo=python&logoColor=white)
 ![Node.js](https://img.shields.io/badge/node.js-18%2B-339933?logo=nodedotjs&logoColor=white)

@@ -221,7 +221,7 @@ export function SystemTab() {
             {!thumbnailStatus.ffmpeg_available && (
               <div className="p-3 bg-yellow-50 rounded-lg text-sm text-yellow-800">
                 <strong>{t.setup.ffmpegNotFound}</strong> {t.setup.installToGenerate}
-                <code className="block mt-1 bg-yellow-100 p-2 rounded font-mono text-xs">sudo apt install ffmpeg</code>
+                <code className="block mt-1 bg-yellow-100 p-2 rounded-sm font-mono text-xs">sudo apt install ffmpeg</code>
               </div>
             )}
           </div>

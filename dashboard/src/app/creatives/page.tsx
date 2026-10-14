@@ -273,12 +273,12 @@ function ThumbnailGenerationBanner({ buyerId }: { buyerId?: string | null }) {
 
       {/* ffmpeg warning - just informational, doesn't block the Generate button */}
       {!status.ffmpeg_available && (
-        <div className="mt-3 p-2 bg-yellow-50 border border-yellow-200 rounded text-sm flex items-start gap-2">
-          <AlertTriangle className="h-4 w-4 text-yellow-600 flex-shrink-0 mt-0.5" />
+        <div className="mt-3 p-2 bg-yellow-50 border border-yellow-200 rounded-sm text-sm flex items-start gap-2">
+          <AlertTriangle className="h-4 w-4 text-yellow-600 shrink-0 mt-0.5" />
           <div>
             <span className="text-yellow-800">{t.creatives.ffmpegNotDetected} </span>
             <span className="text-yellow-700">{t.creatives.ifGenerationFails} </span>
-            <code className="bg-yellow-100 px-1 rounded text-yellow-900">sudo apt install ffmpeg</code>
+            <code className="bg-yellow-100 px-1 rounded-sm text-yellow-900">sudo apt install ffmpeg</code>
           </div>
         </div>
       )}
@@ -627,23 +627,23 @@ function CreativesContent() {
       {/* Compact Header with Filters */}
       <div className="mb-4 flex flex-wrap items-center gap-4">
         {/* Title */}
-        <div className="flex items-center gap-3 flex-shrink-0">
+        <div className="flex items-center gap-3 shrink-0">
           <h1 className="text-xl font-bold text-gray-900">{t.creatives.title}</h1>
           <HelpLink chapter="05-managing-creatives" />
           <Link
             href={toBuyerScopedPath("/creatives/click-macros", selectedSeatId)}
-            className="rounded border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
+            className="rounded-sm border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
           >
             Click Macro Audit
           </Link>
           <Link
             href={toBuyerScopedPath("/creatives/language-flags", selectedSeatId)}
-            className="rounded border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
+            className="rounded-sm border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
           >
             {t.creatives.languageFlagsNav}
           </Link>
           {selectedSeatId && (
-            <span className="rounded border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700">
+            <span className="rounded-sm border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700">
               {t.admin.buyerIdLabel.replace("{buyerId}", selectedSeatId)}
             </span>
           )}
@@ -676,7 +676,7 @@ function CreativesContent() {
               key={filter.value}
               onClick={() => toggleFormat(filter.value)}
               className={cn(
-                "px-2.5 py-1 rounded text-xs font-medium transition-colors",
+                "px-2.5 py-1 rounded-sm text-xs font-medium transition-colors",
                 selectedFormats.has(filter.value)
                   ? "bg-primary-600 text-white"
                   : "bg-gray-100 text-gray-600 hover:bg-gray-200"
@@ -695,7 +695,7 @@ function CreativesContent() {
           <button
             onClick={() => setApprovalFilter(approvalFilter === "approved" ? "all" : "approved")}
             className={cn(
-              "px-2.5 py-1 rounded text-xs font-medium transition-colors",
+              "px-2.5 py-1 rounded-sm text-xs font-medium transition-colors",
               approvalFilter === "approved"
                 ? "bg-green-600 text-white"
                 : "bg-gray-100 text-gray-600 hover:bg-gray-200"
@@ -706,7 +706,7 @@ function CreativesContent() {
           <button
             onClick={() => setApprovalFilter(approvalFilter === "not_approved" ? "all" : "not_approved")}
             className={cn(
-              "px-2.5 py-1 rounded text-xs font-medium transition-colors",
+              "px-2.5 py-1 rounded-sm text-xs font-medium transition-colors",
               approvalFilter === "not_approved"
                 ? "bg-red-600 text-white"
                 : "bg-gray-100 text-red-600 hover:bg-red-100"
@@ -725,7 +725,7 @@ function CreativesContent() {
                 key={tier.value}
                 onClick={() => setTierFilter(tier.value)}
                 className={cn(
-                  "px-2 py-1 rounded text-xs font-medium transition-colors",
+                  "px-2 py-1 rounded-sm text-xs font-medium transition-colors",
                   tierFilter === tier.value
                     ? tier.color.replace("100", "200")
                     : tier.color + " hover:opacity-80"
@@ -761,7 +761,7 @@ function CreativesContent() {
 
         {/* Period Selector - compact buttons */}
         <div className="flex items-center gap-2">
-          <div className="flex rounded border border-gray-300 overflow-hidden">
+          <div className="flex rounded-sm border border-gray-300 overflow-hidden">
             {PERIOD_OPTIONS.map((option) => (
               <button
                 key={option.value}
@@ -786,7 +786,7 @@ function CreativesContent() {
         <button
           onClick={() => setSortBySpend(!sortBySpend)}
           className={cn(
-            "flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium transition-colors",
+            "flex items-center gap-1 px-2.5 py-1 rounded-sm text-xs font-medium transition-colors",
             sortBySpend
               ? "bg-primary-600 text-white"
               : "bg-gray-100 text-gray-600 hover:bg-gray-200"
@@ -828,7 +828,7 @@ function CreativesContent() {
                 type="button"
                 onClick={() => setPageIndex((prev) => Math.max(0, prev - 1))}
                 disabled={!canGoPrevPage}
-                className="px-2 py-1 rounded border border-gray-200 bg-white text-gray-700 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50"
+                className="px-2 py-1 rounded-sm border border-gray-200 bg-white text-gray-700 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50"
               >
                 Prev
               </button>
@@ -836,7 +836,7 @@ function CreativesContent() {
                 type="button"
                 onClick={() => setPageIndex((prev) => prev + 1)}
                 disabled={!canGoNextPage}
-                className="px-2 py-1 rounded border border-gray-200 bg-white text-gray-700 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50"
+                className="px-2 py-1 rounded-sm border border-gray-200 bg-white text-gray-700 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50"
               >
                 Next
               </button>

@@ -133,7 +133,7 @@ function RecommendationCard({
               <p className="text-sm text-gray-600 mt-1">{recommendation.description}</p>
 
               {recommendation.estimated_savings && (
-                <div className="mt-2 inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-700 rounded text-xs font-medium">
+                <div className="mt-2 inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-700 rounded-sm text-xs font-medium">
                   {t.pretargeting.recommendationsSaveQpsPerDay.replace(
                     '{count}',
                     formatNumber(recommendation.estimated_savings.qps_per_day)
@@ -152,10 +152,10 @@ function RecommendationCard({
           </div>
 
           {/* Actions */}
-          <div className="flex items-center gap-2 flex-shrink-0">
+          <div className="flex items-center gap-2 shrink-0">
             <button
               onClick={() => setShowDetails(!showDetails)}
-              className="px-3 py-1.5 text-sm text-gray-600 hover:text-gray-900 hover:bg-white/50 rounded transition-colors"
+              className="px-3 py-1.5 text-sm text-gray-600 hover:text-gray-900 hover:bg-white/50 rounded-sm transition-colors"
             >
               {showDetails ? t.pretargeting.recommendationsHideDetails : t.pretargeting.recommendationsShowDetails}
             </button>
@@ -164,7 +164,7 @@ function RecommendationCard({
               <div className="relative">
                 <button
                   onClick={() => setShowConfigDropdown(!showConfigDropdown)}
-                  className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium bg-white border border-gray-300 rounded hover:bg-gray-50"
+                  className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium bg-white border border-gray-300 rounded-sm hover:bg-gray-50"
                 >
                   {t.pretargeting.recommendationsApplyTo}
                   <ChevronDown className="h-3 w-3" />
@@ -203,7 +203,7 @@ function RecommendationCard({
               onClick={handleApply}
               disabled={!selectedConfig || isApplying}
               className={cn(
-                'flex items-center gap-1 px-3 py-1.5 text-sm font-medium rounded transition-colors',
+                'flex items-center gap-1 px-3 py-1.5 text-sm font-medium rounded-sm transition-colors',
                 selectedConfig
                   ? 'bg-green-600 text-white hover:bg-green-700'
                   : 'bg-gray-200 text-gray-400 cursor-not-allowed'
@@ -219,7 +219,7 @@ function RecommendationCard({
 
             <button
               onClick={onDismiss}
-              className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-white/50 rounded transition-colors"
+              className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-white/50 rounded-sm transition-colors"
               title={t.pretargeting.recommendationsDismiss}
             >
               <X className="h-4 w-4" />
@@ -241,7 +241,7 @@ function RecommendationCard({
                   </span>
                   <button
                     onClick={handleCopy}
-                    className="flex items-center gap-1 px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded hover:bg-gray-200"
+                    className="flex items-center gap-1 px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded-sm hover:bg-gray-200"
                   >
                     {copied ? <CheckCircle className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
                     {copied ? t.common.copied : t.common.copy}
@@ -251,7 +251,7 @@ function RecommendationCard({
                   {recommendation.data.sizes.map((size: string) => (
                     <span
                       key={size}
-                      className="px-2 py-0.5 bg-white border border-gray-200 rounded text-xs font-mono"
+                      className="px-2 py-0.5 bg-white border border-gray-200 rounded-sm text-xs font-mono"
                     >
                       {size}
                     </span>
@@ -268,7 +268,7 @@ function RecommendationCard({
             )}
 
             {recommendation.type === 'size_mismatch' && (
-              <div className="mt-3 p-2 bg-amber-50 border border-amber-200 rounded text-xs text-amber-800">
+              <div className="mt-3 p-2 bg-amber-50 border border-amber-200 rounded-sm text-xs text-amber-800">
                 <strong>{t.pretargeting.recommendationsNoteLabel}</strong>{' '}
                 {t.pretargeting.recommendationsSizeFilteringIncludeOnlyNote}{' '}
                 <a

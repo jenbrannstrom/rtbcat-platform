@@ -4,6 +4,23 @@ All notable changes to Cat-Scan are documented in this file.
 
 > Versioning note (March 5, 2026): canonical OSS release versions use `VERSION` + git tags (`vX.Y.Z`). Historical entries below with `10.x`-`17.x` were internal milestone labels and were not published semver release tags.
 
+## [0.10.1] - 2026-10-14
+
+### Security
+
+- Remove `braces` and its dependency paths, the local backport, and the temporary
+  release exception. Standard `npm audit` now blocks release on every reported
+  vulnerability. No advisory is suppressed.
+- Upgrade the dashboard to Tailwind CSS 4.3.3 and tailwind-merge 3.7.0. Preserve
+  the existing palette and migrate utility names and PostCSS configuration.
+- Replace the Next.js ESLint plugin's directory lookup with a scoped, tested
+  tinyglobby adapter. Keep the existing lint rules and remove patch-package.
+
+### Compatibility
+
+- Dashboard browsers must support Safari 16.4+, Chrome 111+ or Firefox 128+.
+- No API, MCP, token scope, database schema or publisher lookup changes.
+
 ## [0.10.0] - 2026-10-14
 
 ### Added

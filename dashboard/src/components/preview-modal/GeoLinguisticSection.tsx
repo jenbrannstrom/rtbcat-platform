@@ -97,13 +97,13 @@ export function GeoLinguisticSection({ creativeId }: GeoLinguisticSectionProps) 
       </p>
 
       {error && (
-        <div className="text-xs text-red-600 bg-red-50 px-2 py-1 rounded mb-2">{error}</div>
+        <div className="text-xs text-red-600 bg-red-50 px-2 py-1 rounded-sm mb-2">{error}</div>
       )}
 
       {report && report.status === "completed" ? (
         <div className="space-y-2">
           {/* Decision badge */}
-          <div className={cn("flex items-center gap-2 p-2 rounded border", config?.bg)}>
+          <div className={cn("flex items-center gap-2 p-2 rounded-sm border", config?.bg)}>
             <DecisionIcon className={cn("h-4 w-4", config?.text)} />
             <span className={cn("text-sm font-medium", config?.text)}>{config?.label}</span>
             <span className="ml-auto text-xs text-gray-500">
@@ -146,7 +146,7 @@ export function GeoLinguisticSection({ creativeId }: GeoLinguisticSectionProps) 
             <div className="space-y-1 pt-1">
               {report.findings.map((finding, i) => (
                 <div key={i} className="flex items-start gap-2 text-xs">
-                  <span className={cn("px-1.5 py-0.5 rounded shrink-0", SEVERITY_COLORS[finding.severity] || SEVERITY_COLORS.low)}>
+                  <span className={cn("px-1.5 py-0.5 rounded-sm shrink-0", SEVERITY_COLORS[finding.severity] || SEVERITY_COLORS.low)}>
                     {severityLabels[finding.severity] || finding.severity}
                   </span>
                   <div>
@@ -195,7 +195,7 @@ export function GeoLinguisticSection({ creativeId }: GeoLinguisticSectionProps) 
         </div>
       ) : report && report.status === "failed" ? (
         <div className="space-y-2">
-          <div className="flex items-center gap-2 p-2 rounded border bg-red-50 border-red-200">
+          <div className="flex items-center gap-2 p-2 rounded-sm border bg-red-50 border-red-200">
             <AlertTriangle className="h-4 w-4 text-red-600" />
             <span className="text-xs text-red-700">{report.error_message || t.previewModal.geoLinguisticAnalysisFailed}</span>
           </div>
@@ -210,7 +210,7 @@ export function GeoLinguisticSection({ creativeId }: GeoLinguisticSectionProps) 
         </div>
       ) : loadError ? (
         <div className="space-y-2">
-          <div className="flex items-center gap-2 p-2 rounded border bg-red-50 border-red-200">
+          <div className="flex items-center gap-2 p-2 rounded-sm border bg-red-50 border-red-200">
             <AlertTriangle className="h-4 w-4 text-red-600" />
             <span className="text-xs text-red-700">{loadError}</span>
           </div>

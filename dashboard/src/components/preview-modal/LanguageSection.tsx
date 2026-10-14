@@ -136,14 +136,14 @@ export function LanguageSection({
               value={editLanguage}
               onChange={(e) => setEditLanguage(e.target.value)}
               placeholder={t.previewModal.languageNamePlaceholder}
-              className="w-full mt-1 px-2 py-1 text-sm border rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full mt-1 px-2 py-1 text-sm border rounded-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
             />
           </div>
           <div className="flex gap-2 pt-1">
             <button
               onClick={handleSaveEdit}
               disabled={isAnalyzing || !editLanguage.trim()}
-              className="px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+              className="px-3 py-1 text-xs bg-blue-600 text-white rounded-sm hover:bg-blue-700 disabled:opacity-50"
             >
               {isAnalyzing ? t.previewModal.saving : t.common.save}
             </button>
@@ -217,21 +217,21 @@ export function LanguageSection({
       </h4>
 
       {error && (
-        <div className="text-xs text-red-600 bg-red-50 px-2 py-1 rounded mb-2">
+        <div className="text-xs text-red-600 bg-red-50 px-2 py-1 rounded-sm mb-2">
           {error}
         </div>
       )}
 
       {showLanguageSignal && (
         <div className={cn(
-          "mb-2 rounded border p-2",
+          "mb-2 rounded-sm border p-2",
           geoMismatch?.language_flag_status === "red"
             ? "border-red-200 bg-red-50"
             : "border-amber-200 bg-amber-50"
         )}>
           <div className="flex items-start gap-1.5">
             <AlertTriangle className={cn(
-              "mt-0.5 h-3.5 w-3.5 flex-shrink-0",
+              "mt-0.5 h-3.5 w-3.5 shrink-0",
               geoMismatch?.language_flag_status === "red" ? "text-red-600" : "text-amber-600"
             )} />
             <div className={cn(
@@ -241,7 +241,7 @@ export function LanguageSection({
               <div className="flex items-center gap-2">
                 <span className="font-medium">{t.previewModal.langMismatchTitle}</span>
                 <span className={cn(
-                  "rounded px-1.5 py-0.5 text-[11px] font-medium",
+                  "rounded-sm px-1.5 py-0.5 text-[11px] font-medium",
                   STATUS_STYLES[geoMismatch?.language_flag_status || "orange"] || STATUS_STYLES.orange
                 )}>
                   {statusLabels[geoMismatch?.language_flag_status || "orange"] || statusLabels.orange}
@@ -260,14 +260,14 @@ export function LanguageSection({
 
       {showCurrencySignal && (
         <div className={cn(
-          "mb-3 rounded border p-2",
+          "mb-3 rounded-sm border p-2",
           geoMismatch?.currency_flag_status === "red"
             ? "border-red-200 bg-red-50"
             : "border-amber-200 bg-amber-50"
         )}>
           <div className="flex items-start gap-1.5">
             <AlertTriangle className={cn(
-              "mt-0.5 h-3.5 w-3.5 flex-shrink-0",
+              "mt-0.5 h-3.5 w-3.5 shrink-0",
               geoMismatch?.currency_flag_status === "red" ? "text-red-600" : "text-amber-600"
             )} />
             <div className={cn(
@@ -277,7 +277,7 @@ export function LanguageSection({
               <div className="flex items-center gap-2">
                 <span className="font-medium">{t.previewModal.marketCurrencyTitle}</span>
                 <span className={cn(
-                  "rounded px-1.5 py-0.5 text-[11px] font-medium",
+                  "rounded-sm px-1.5 py-0.5 text-[11px] font-medium",
                   STATUS_STYLES[geoMismatch?.currency_flag_status || "orange"] || STATUS_STYLES.orange
                 )}>
                   {statusLabels[geoMismatch?.currency_flag_status || "orange"] || statusLabels.orange}
@@ -347,7 +347,7 @@ export function LanguageSection({
             <div className="flex flex-wrap items-center gap-1.5">
               <span className="text-gray-500">{t.previewModal.langMismatchLabel}</span>
               <span className={cn(
-                "rounded px-1.5 py-0.5 text-xs font-medium",
+                "rounded-sm px-1.5 py-0.5 text-xs font-medium",
                 STATUS_STYLES[geoMismatch.language_flag_status] || STATUS_STYLES.orange
               )}>
                 {statusLabels[geoMismatch.language_flag_status] || statusLabels.orange}
@@ -357,7 +357,7 @@ export function LanguageSection({
               <span className="text-gray-500">{t.previewModal.geoLinguisticLabel}</span>
               {geoLinguisticBadgeStatus && (
                 <span className={cn(
-                  "rounded px-1.5 py-0.5 text-xs font-medium",
+                  "rounded-sm px-1.5 py-0.5 text-xs font-medium",
                   STATUS_STYLES[geoLinguisticBadgeStatus] || STATUS_STYLES.orange
                 )}>
                   {statusLabels[geoLinguisticBadgeStatus] || statusLabels.orange}
@@ -427,7 +427,7 @@ export function LanguageSection({
         </button>
         {creative.language_confidence !== null && (
           <span className={cn(
-            "text-xs px-1.5 py-0.5 rounded",
+            "text-xs px-1.5 py-0.5 rounded-sm",
             creative.language_confidence >= 0.8
               ? "bg-green-100 text-green-700"
               : creative.language_confidence >= 0.5

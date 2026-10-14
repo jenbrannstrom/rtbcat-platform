@@ -55,7 +55,7 @@ function CellTooltip({
     >
       {children}
       {show && (
-        <div className="absolute z-10 bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 text-xs rounded bg-gray-900 text-white whitespace-nowrap pointer-events-none">
+        <div className="absolute z-10 bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 text-xs rounded-sm bg-gray-900 text-white whitespace-nowrap pointer-events-none">
           {formatDateLabel(date, language)} - {label}: {statusText}
         </div>
       )}
@@ -103,7 +103,7 @@ export function DataFreshnessGrid({
           <button
             onClick={onRefresh}
             disabled={loading}
-            className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded"
+            className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-sm"
             title={t.common.refresh}
           >
             <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
@@ -185,11 +185,11 @@ export function DataFreshnessGrid({
           {/* Legend */}
           <div className="mt-3 flex items-center gap-4 text-xs text-gray-500">
             <div className="flex items-center gap-1.5">
-              <div className="w-3 h-3 rounded bg-green-500" />
+              <div className="w-3 h-3 rounded-sm bg-green-500" />
               <span>{t.import.dataPresent}</span>
             </div>
             <div className="flex items-center gap-1.5">
-              <div className="w-3 h-3 rounded bg-gray-200" />
+              <div className="w-3 h-3 rounded-sm bg-gray-200" />
               <span>{t.import.noData}</span>
             </div>
             {grid.summary && (

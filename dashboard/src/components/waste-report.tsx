@@ -109,7 +109,7 @@ export function WasteReportCard({ report, isLoading }: WasteReportProps) {
         </div>
 
         {/* Potential Savings */}
-        <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+        <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-xs">
           <div className="flex items-start justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600">{t.wasteAnalysis.wasteReportPotentialSavings}</p>
@@ -131,7 +131,7 @@ export function WasteReportCard({ report, isLoading }: WasteReportProps) {
         </div>
 
         {/* Size Gaps */}
-        <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+        <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-xs">
           <div className="flex items-start justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600">{t.wasteAnalysis.wasteReportSizeGaps}</p>
@@ -147,7 +147,7 @@ export function WasteReportCard({ report, isLoading }: WasteReportProps) {
         </div>
 
         {/* Analysis Period */}
-        <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+        <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-xs">
           <div className="flex items-start justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600">{t.wasteAnalysis.wasteReportAnalysisPeriod}</p>
@@ -166,7 +166,7 @@ export function WasteReportCard({ report, isLoading }: WasteReportProps) {
 
       {/* Recommendations Summary */}
       {(summary.block > 0 || summary.add_creative > 0 || summary.use_flexible > 0 || summary.monitor > 0) && (
-        <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+        <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-xs">
           <h3 className="text-sm font-semibold text-gray-900 mb-4">{t.wasteAnalysis.wasteReportRecommendationsSummary}</h3>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {summary.block > 0 && (

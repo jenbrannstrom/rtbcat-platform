@@ -229,21 +229,21 @@ export function LanguageAIProviderSection() {
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setShowKey(!showKey)}
-                className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded"
+                className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-sm"
                 title={showKey ? "Hide key" : "Show key"}
               >
                 {showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </button>
               <button
                 onClick={() => setIsEditing(true)}
-                className="px-3 py-1.5 text-sm text-blue-600 hover:bg-blue-50 rounded font-medium"
+                className="px-3 py-1.5 text-sm text-blue-600 hover:bg-blue-50 rounded-sm font-medium"
               >
                 {t.connect.change}
               </button>
               <button
                 onClick={() => deleteKeyMutation.mutate(selectedProvider)}
                 disabled={deleteKeyMutation.isPending}
-                className="p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded"
+                className="p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-sm"
                 title="Remove API key"
               >
                 {deleteKeyMutation.isPending ? (
@@ -297,7 +297,7 @@ export function LanguageAIProviderSection() {
                     setIsEditing(false);
                     setNewKey("");
                   }}
-                  className="px-3 py-2 text-gray-600 hover:bg-gray-100 rounded"
+                  className="px-3 py-2 text-gray-600 hover:bg-gray-100 rounded-sm"
                 >
                   {t.common.cancel}
                 </button>

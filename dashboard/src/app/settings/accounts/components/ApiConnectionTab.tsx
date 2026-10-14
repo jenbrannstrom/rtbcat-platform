@@ -393,7 +393,7 @@ export function ApiConnectionTab() {
                 className="flex items-center justify-between py-4 px-4 bg-green-50 rounded-lg border border-green-200 overflow-hidden"
               >
                 <div className="flex items-center gap-3 flex-1 min-w-0">
-                  <CheckCircle className="h-6 w-6 text-green-500 flex-shrink-0" />
+                  <CheckCircle className="h-6 w-6 text-green-500 shrink-0" />
                   <div className="min-w-0 flex-1">
                     <p className="font-medium text-green-900 truncate">
                       {account.display_name || account.client_email}
@@ -408,7 +408,7 @@ export function ApiConnectionTab() {
                   onClick={() => handleDeleteAccount(account.id)}
                   disabled={deletingAccountId === account.id}
                   className={cn(
-                    "text-sm text-red-600 hover:text-red-700 font-medium flex-shrink-0 ml-4",
+                    "text-sm text-red-600 hover:text-red-700 font-medium shrink-0 ml-4",
                     deletingAccountId === account.id && "opacity-50"
                   )}
                 >
@@ -596,7 +596,7 @@ export function ApiConnectionTab() {
                             type="text"
                             value={editValue}
                             onChange={(e) => setEditValue(e.target.value)}
-                            className="border rounded px-2 py-1 text-sm w-48"
+                            className="border rounded-sm px-2 py-1 text-sm w-48"
                             autoFocus
                             onKeyDown={(e) => {
                               if (e.key === "Enter") handleSaveEdit(seat.buyer_id);
@@ -606,13 +606,13 @@ export function ApiConnectionTab() {
                           <button
                             onClick={() => handleSaveEdit(seat.buyer_id)}
                             disabled={savingSeat}
-                            className="p-1 text-green-600 hover:bg-green-50 rounded"
+                            className="p-1 text-green-600 hover:bg-green-50 rounded-sm"
                           >
                             <Check className="h-4 w-4" />
                           </button>
                           <button
                             onClick={handleCancelEdit}
-                            className="p-1 text-gray-400 hover:bg-gray-100 rounded"
+                            className="p-1 text-gray-400 hover:bg-gray-100 rounded-sm"
                           >
                             <X className="h-4 w-4" />
                           </button>
@@ -624,7 +624,7 @@ export function ApiConnectionTab() {
                           </p>
                           <button
                             onClick={() => handleStartEdit(seat)}
-                            className="p-1 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                            className="p-1 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-sm opacity-0 group-hover:opacity-100 transition-opacity"
                             title={t.setup.editSeatName}
                           >
                             <Pencil className="h-3.5 w-3.5" />
@@ -670,7 +670,7 @@ export function ApiConnectionTab() {
                     </p>
                     {serviceAccounts[0]?.client_email && (
                       <p className="text-sm text-yellow-700 mt-2">
-                        {t.setup.serviceAccountToAddLabel}: <code className="bg-yellow-100 px-1 rounded text-xs">{serviceAccounts[0].client_email}</code>
+                        {t.setup.serviceAccountToAddLabel}: <code className="bg-yellow-100 px-1 rounded-sm text-xs">{serviceAccounts[0].client_email}</code>
                       </p>
                     )}
                   </div>

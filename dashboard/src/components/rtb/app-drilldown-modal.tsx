@@ -71,7 +71,7 @@ export function AppDrilldownModal({ appName, billingId, onClose }: AppDrilldownM
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       {/* Backdrop */}
       <div
-        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+        className="absolute inset-0 bg-black/50 backdrop-blur-xs"
         onClick={onClose}
       />
 
@@ -175,7 +175,7 @@ export function AppDrilldownModal({ appName, billingId, onClose }: AppDrilldownM
               {data.waste_insight && (
                 <div className="bg-red-50 border border-red-200 rounded-lg p-4">
                   <div className="flex items-start gap-3">
-                    <AlertTriangle className="h-5 w-5 text-red-500 flex-shrink-0 mt-0.5" />
+                    <AlertTriangle className="h-5 w-5 text-red-500 shrink-0 mt-0.5" />
                     <div className="flex-1">
                       <h4 className="font-medium text-red-800">{t.creatives.wasteSourceIdentified}</h4>
                       <p className="text-sm text-red-700 mt-1">{data.waste_insight.message}</p>
@@ -230,7 +230,7 @@ export function AppDrilldownModal({ appName, billingId, onClose }: AppDrilldownM
                         </div>
                       )}
 
-                      <div className="mt-3 p-2 bg-white/50 rounded border border-red-200">
+                      <div className="mt-3 p-2 bg-white/50 rounded-sm border border-red-200">
                         <p className="text-xs text-red-800 font-medium">
                           💡 {data.waste_insight.recommendation}
                         </p>
@@ -334,7 +334,7 @@ export function AppDrilldownModal({ appName, billingId, onClose }: AppDrilldownM
                                   {item.size}
                                 </span>
                                 {item.is_wasteful && (
-                                  <span className="ml-1 text-xs bg-red-100 text-red-700 px-1 py-0.5 rounded">
+                                  <span className="ml-1 text-xs bg-red-100 text-red-700 px-1 py-0.5 rounded-sm">
                                     !
                                   </span>
                                 )}

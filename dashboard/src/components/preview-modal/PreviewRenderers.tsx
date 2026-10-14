@@ -249,7 +249,7 @@ export function HtmlPreviewFrame({ creative, destinationUrl }: { creative: Creat
         />
         {destinationUrl && (
           <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center">
-            <span className="opacity-0 group-hover:opacity-100 bg-white/90 text-gray-700 text-xs px-2 py-1 rounded shadow transition-opacity">
+            <span className="opacity-0 group-hover:opacity-100 bg-white/90 text-gray-700 text-xs px-2 py-1 rounded-sm shadow-sm transition-opacity">
               {t.previewModal.clickToOpenDestination}
             </span>
           </div>
@@ -296,7 +296,7 @@ export function NativePreviewCard({ creative }: { creative: Creative }) {
             <img
               src={native.logo.url}
               alt={t.previewModal.logoAlt}
-              className="w-8 h-8 rounded object-cover flex-shrink-0"
+              className="w-8 h-8 rounded-sm object-cover shrink-0"
               onError={(e) => {
                 (e.target as HTMLImageElement).style.display = "none";
               }}
@@ -310,7 +310,7 @@ export function NativePreviewCard({ creative }: { creative: Creative }) {
           </div>
         </div>
         {native.call_to_action && (
-          <button className="mt-3 w-full py-1.5 px-3 bg-blue-600 text-white rounded text-xs font-medium">
+          <button className="mt-3 w-full py-1.5 px-3 bg-blue-600 text-white rounded-sm text-xs font-medium">
             {native.call_to_action}
           </button>
         )}

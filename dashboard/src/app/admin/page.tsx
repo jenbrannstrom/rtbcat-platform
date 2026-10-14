@@ -86,7 +86,7 @@ function AdminDashboard() {
           <Link
             key={stat.name}
             href={stat.href}
-            className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow"
+            className="bg-white rounded-xl shadow-xs border border-gray-200 p-6 hover:shadow-md transition-shadow"
           >
             <div className="flex items-center">
               <div className={`${stat.color} rounded-lg p-3`}>
@@ -104,7 +104,7 @@ function AdminDashboard() {
       </div>
 
       {/* Report Health Alerts */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-8">
+      <div className="bg-white rounded-xl shadow-xs border border-gray-200 p-6 mb-8">
         <h2 className="text-lg font-semibold text-gray-900 mb-2">
           {t.admin.reportHealthTitle}
         </h2>
@@ -153,7 +153,7 @@ function AdminDashboard() {
       {/* Quick Actions */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
         {/* User Management */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <div className="bg-white rounded-xl shadow-xs border border-gray-200 p-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">
             {t.admin.userManagement}
           </h2>
@@ -202,7 +202,7 @@ function AdminDashboard() {
         </div>
 
         {/* System Settings */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <div className="bg-white rounded-xl shadow-xs border border-gray-200 p-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">
             {t.admin.systemSettings}
           </h2>
@@ -258,7 +258,7 @@ function AdminDashboard() {
       </div>
 
       {/* Current User Info */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+      <div className="bg-white rounded-xl shadow-xs border border-gray-200 p-6">
         <h2 className="text-lg font-semibold text-gray-900 mb-4">
           {t.admin.yourAccount}
         </h2>

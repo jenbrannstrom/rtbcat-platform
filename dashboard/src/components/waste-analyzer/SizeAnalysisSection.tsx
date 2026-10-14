@@ -38,7 +38,7 @@ function SizeBar({
   return (
     <div className="flex items-center gap-4 py-2">
       <div className="w-24 font-mono text-sm text-gray-700 truncate" title={size}>{size}</div>
-      <div className="flex-1 relative h-6 bg-gray-100 rounded overflow-hidden">
+      <div className="flex-1 relative h-6 bg-gray-100 rounded-sm overflow-hidden">
         <div
           className="absolute h-full bg-gray-300 rounded-l transition-all"
           style={{ width: `${requestsWidth}%` }}
@@ -116,9 +116,9 @@ export function SizeAnalysisSection({ days, buyerId }: SizeAnalysisSectionProps)
     return (
       <div className="bg-white rounded-xl border border-gray-200 p-6">
         <div className="animate-pulse space-y-4">
-          <div className="h-6 bg-gray-200 rounded w-1/3" />
+          <div className="h-6 bg-gray-200 rounded-sm w-1/3" />
           <div className="space-y-2">
-            {[1,2,3,4,5].map(i => <div key={i} className="h-8 bg-gray-100 rounded" />)}
+            {[1,2,3,4,5].map(i => <div key={i} className="h-8 bg-gray-100 rounded-sm" />)}
           </div>
         </div>
       </div>
@@ -179,11 +179,11 @@ export function SizeAnalysisSection({ days, buyerId }: SizeAnalysisSectionProps)
             {/* Legend */}
             <div className="flex items-center gap-6 mb-4 text-sm">
               <div className="flex items-center gap-2">
-                <div className="w-4 h-4 bg-gray-300 rounded" />
+                <div className="w-4 h-4 bg-gray-300 rounded-sm" />
                 <span className="text-gray-600">{t.wasteAnalysis.requests}</span>
               </div>
               <div className="flex items-center gap-2">
-                <div className="w-4 h-4 bg-green-500 rounded" />
+                <div className="w-4 h-4 bg-green-500 rounded-sm" />
                 <span className="text-gray-600">{t.wasteAnalysis.impressions}</span>
               </div>
             </div>
@@ -217,7 +217,7 @@ export function SizeAnalysisSection({ days, buyerId }: SizeAnalysisSectionProps)
               {noCreativeRows.length > 0 && (
                 <button
                   onClick={copyBlockSizes}
-                  className="flex items-center gap-1 px-2.5 py-1 bg-red-100 hover:bg-red-200 text-red-800 rounded text-xs transition-colors"
+                  className="flex items-center gap-1 px-2.5 py-1 bg-red-100 hover:bg-red-200 text-red-800 rounded-sm text-xs transition-colors"
                 >
                   {copiedSizes ? <CheckCircle className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
                   {copiedSizes ? t.common.copied : t.wasteAnalysis.copySizes}
@@ -258,13 +258,13 @@ export function SizeAnalysisSection({ days, buyerId }: SizeAnalysisSectionProps)
       ) : (
         <div className="p-6 border-2 border-dashed border-gray-200 rounded-lg">
           <div className="flex items-start gap-4">
-            <Upload className="h-8 w-8 text-gray-400 flex-shrink-0" />
+            <Upload className="h-8 w-8 text-gray-400 shrink-0" />
             <div>
               <h4 className="font-medium text-gray-700 mb-2">{t.wasteAnalysis.noSizeDataAvailable}</h4>
               <p className="text-sm text-gray-600 mb-4">
                 {t.wasteAnalysis.importCsvCreativeSizePromptPrefix} <strong>{t.wasteAnalysis.creativeSize}</strong> {t.wasteAnalysis.importCsvCreativeSizePromptSuffix}
               </p>
-              <div className="p-3 bg-gray-50 rounded border border-gray-200 text-xs">
+              <div className="p-3 bg-gray-50 rounded-sm border border-gray-200 text-xs">
                 <p className="font-semibold text-gray-700 mb-2">{t.wasteAnalysis.requiredCsvFormat}</p>
                 <p className="text-gray-600 mb-2">
                   {t.wasteAnalysis.inGoogleAuthorizedBuyersNewReport}

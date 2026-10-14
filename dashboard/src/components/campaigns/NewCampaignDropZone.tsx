@@ -51,7 +51,7 @@ export function NewCampaignDropZoneList({ onClick }: NewCampaignDropZoneProps) {
       ref={setNodeRef}
       onClick={onClick}
       className={cn(
-        "w-80 flex-shrink-0 rounded-lg border-2 border-dashed flex flex-col items-center justify-center gap-2 transition-colors cursor-pointer",
+        "w-80 shrink-0 rounded-lg border-2 border-dashed flex flex-col items-center justify-center gap-2 transition-colors cursor-pointer",
         isOver
           ? "border-blue-500 bg-blue-50 text-blue-600"
           : "border-gray-300 bg-gray-50 text-gray-400 hover:border-blue-400 hover:text-blue-500"

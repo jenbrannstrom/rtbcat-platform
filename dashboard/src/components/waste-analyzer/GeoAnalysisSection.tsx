@@ -46,13 +46,13 @@ export function GeoAnalysisSection({ geos, seatName }: GeoAnalysisSectionProps) 
         </div>
         <div className="p-6 border-2 border-dashed border-gray-200 rounded-lg">
           <div className="flex items-start gap-4">
-            <Upload className="h-8 w-8 text-gray-400 flex-shrink-0" />
+            <Upload className="h-8 w-8 text-gray-400 shrink-0" />
             <div>
               <h4 className="font-medium text-gray-700 mb-2">{t.wasteAnalysis.geographicDataNotAvailable}</h4>
               <p className="text-sm text-gray-600 mb-4">
                 {t.wasteAnalysis.importCreativeBiddingGeoReportPrompt}
               </p>
-              <div className="p-3 bg-gray-50 rounded border border-gray-200 text-xs">
+              <div className="p-3 bg-gray-50 rounded-sm border border-gray-200 text-xs">
                 <p className="font-semibold text-gray-700 mb-2">{t.wasteAnalysis.creativeBidsReportName}</p>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
@@ -160,13 +160,13 @@ export function GeoAnalysisSection({ geos, seatName }: GeoAnalysisSectionProps) 
           </p>
         </div>
         <div className="flex items-center gap-3 text-sm text-gray-600">
-          <div className="px-3 py-1 bg-gray-50 rounded border">
+          <div className="px-3 py-1 bg-gray-50 rounded-sm border">
             {t.wasteAnalysis.reached} <span className="ml-1 font-semibold text-gray-900">{formatNumber(totalReached)}</span>
           </div>
-          <div className="px-3 py-1 bg-gray-50 rounded border">
+          <div className="px-3 py-1 bg-gray-50 rounded-sm border">
             {t.wasteAnalysis.wins} <span className="ml-1 font-semibold text-gray-900">{formatNumber(totalWins)}</span>
           </div>
-          <div className="px-3 py-1 bg-gray-50 rounded border">
+          <div className="px-3 py-1 bg-gray-50 rounded-sm border">
             {t.wasteAnalysis.winRate} <span className="ml-1 font-semibold text-gray-900">{overallWinRate.toFixed(1)}%</span>
           </div>
         </div>

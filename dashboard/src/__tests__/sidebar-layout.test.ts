@@ -13,7 +13,7 @@ const versionPopoverSource = readFileSync(
 describe("sidebar overflow regression", () => {
   it("keeps the sidebar fixed-width and navigation vertical-only", () => {
     expect(sidebarSource).toMatch(
-      /"flex min-h-0 flex-shrink-0 flex-col overflow-hidden [^"]*"/
+      /"flex min-h-0 shrink-0 flex-col overflow-hidden [^"]*"/
     );
     expect(sidebarSource).toContain('collapsed ? "w-16" : "w-64"');
     expect(sidebarSource).toMatch(
@@ -23,7 +23,7 @@ describe("sidebar overflow regression", () => {
 
   it("truncates the build label without shrinking the adjacent controls", () => {
     expect(sidebarSource).toContain(
-      'className="flex-shrink-0 overflow-hidden px-2 py-3 border-t border-gray-200"'
+      'className="shrink-0 overflow-hidden px-2 py-3 border-t border-gray-200"'
     );
     expect(sidebarSource).toMatch(
       /<VersionPopover\s+label=\{versionLabel\}/
@@ -32,10 +32,10 @@ describe("sidebar overflow regression", () => {
       '"min-w-0 flex-1 truncate text-left underline decoration-dotted underline-offset-2 hover:text-gray-600 transition-colors cursor-pointer"'
     );
     expect(sidebarSource).toContain(
-      'className="flex-shrink-0 whitespace-nowrap hover:text-primary-600 transition-colors"'
+      'className="shrink-0 whitespace-nowrap hover:text-primary-600 transition-colors"'
     );
     expect(sidebarSource).toMatch(
-      /<button\s+onClick=\{toggleCollapsed\}\s+className="[^"]*flex-shrink-0"/
+      /<button\s+onClick=\{toggleCollapsed\}\s+className="[^"]*shrink-0"/
     );
   });
 });

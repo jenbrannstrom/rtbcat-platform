@@ -151,7 +151,7 @@ export function AIControlSettings({
                     {option.label}
                   </span>
                   {option.badge && (
-                    <span className="px-1.5 py-0.5 bg-gray-200 text-gray-600 text-xs rounded">
+                    <span className="px-1.5 py-0.5 bg-gray-200 text-gray-600 text-xs rounded-sm">
                       {option.badge}
                     </span>
                   )}
@@ -164,8 +164,8 @@ export function AIControlSettings({
       </div>
 
       {mode === 'assisted' && (
-        <div className="mt-3 p-2 bg-blue-50 rounded border border-blue-200 text-xs text-blue-700 flex items-start gap-2">
-          <Info className="h-3 w-3 mt-0.5 flex-shrink-0" />
+        <div className="mt-3 p-2 bg-blue-50 rounded-sm border border-blue-200 text-xs text-blue-700 flex items-start gap-2">
+          <Info className="h-3 w-3 mt-0.5 shrink-0" />
           <span>
             {t.aiControl.assistedHint}
           </span>

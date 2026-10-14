@@ -53,10 +53,10 @@ export function GeoWastePanel({ days = 7 }: GeoWastePanelProps) {
     return (
       <div className="bg-white rounded-lg border border-gray-200 p-6">
         <div className="animate-pulse space-y-4">
-          <div className="h-6 bg-gray-200 rounded w-1/3" />
+          <div className="h-6 bg-gray-200 rounded-sm w-1/3" />
           <div className="space-y-3">
             {[1, 2, 3, 4, 5].map(i => (
-              <div key={i} className="h-12 bg-gray-100 rounded" />
+              <div key={i} className="h-12 bg-gray-100 rounded-sm" />
             ))}
           </div>
         </div>
@@ -189,7 +189,7 @@ export function GeoWastePanel({ days = 7 }: GeoWastePanelProps) {
                   </td>
                   <td className="py-2 text-right">
                     <span className={cn(
-                      "inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium",
+                      "inline-flex items-center gap-1 px-2 py-0.5 rounded-sm text-xs font-medium",
                       config.bg, config.color
                     )}>
                       <Icon className="h-3 w-3" />

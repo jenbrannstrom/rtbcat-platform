@@ -103,7 +103,6 @@ jobs:
         run: |
           cd dashboard
           npm ci
-          npm run test:audit-policy
           npm run audit:release
 
       - name: Fail on pip-audit findings

@@ -271,7 +271,7 @@ function AgentTokensPage() {
   const tokens = tokenResponse?.tokens ?? [];
 
   return (
-    <div className="p-6 max-w-[96rem] mx-auto">
+    <div className="p-6 max-w-384 mx-auto">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
@@ -292,7 +292,7 @@ function AgentTokensPage() {
         </button>
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+      <div className="bg-white rounded-xl shadow-xs border border-gray-200 overflow-hidden">
         {tokensLoading ? (
           <div className="p-12 text-center">
             <div className="w-8 h-8 border-4 border-primary-600 border-t-transparent rounded-full animate-spin mx-auto" />
@@ -361,7 +361,7 @@ function AgentTokensPage() {
                       )}
                     >
                       <td className="px-4 py-4 text-sm font-medium text-gray-900 max-w-48">
-                        <span className="break-words">{token.name}</span>
+                        <span className="wrap-break-word">{token.name}</span>
                       </td>
                       <td className="px-4 py-4 text-sm text-gray-600 font-mono whitespace-nowrap">
                         {token.token_prefix}
@@ -373,7 +373,7 @@ function AgentTokensPage() {
                         {token.buyer_ids && token.buyer_ids.length > 0 ? (
                           <div className="flex flex-wrap gap-1 whitespace-normal min-w-48">
                             {token.buyer_ids.map((tokenBuyerId) => (
-                              <span key={tokenBuyerId} className="px-2 py-1 rounded bg-gray-100 font-mono text-xs">
+                              <span key={tokenBuyerId} className="px-2 py-1 rounded-sm bg-gray-100 font-mono text-xs">
                                 {tokenBuyerId}
                               </span>
                             ))}
@@ -385,7 +385,7 @@ function AgentTokensPage() {
                       <td className="px-4 py-4 text-xs text-gray-600 min-w-56">
                         <div className="flex flex-wrap gap-1">
                           {token.scopes.map((scope) => (
-                            <span key={scope} className="px-2 py-1 rounded bg-gray-100 font-mono">
+                            <span key={scope} className="px-2 py-1 rounded-sm bg-gray-100 font-mono">
                               {scope}
                             </span>
                           ))}
@@ -466,7 +466,7 @@ function AgentTokensPage() {
               <div className="overflow-y-auto px-6 py-5 space-y-5">
                 {mintError && (
                   <div className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2">
-                    <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
+                    <AlertCircle className="h-5 w-5 text-red-600 shrink-0 mt-0.5" />
                     <p className="text-sm text-red-700">{mintError}</p>
                   </div>
                 )}
@@ -560,7 +560,7 @@ function AgentTokensPage() {
                         }
                         setFormErrors((current) => ({ ...current, buyerScope: undefined }));
                       }}
-                      className="mt-0.5 h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                      className="mt-0.5 h-4 w-4 rounded-sm border-gray-300 text-primary-600 focus:ring-primary-500"
                     />
                     <span>
                       <span className="block text-sm font-medium">All granted buyers</span>
@@ -637,7 +637,7 @@ function AgentTokensPage() {
                               onChange={(event) =>
                                 handleSelectedBuyerChange(optionBuyerId, event.target.checked)
                               }
-                              className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                              className="h-4 w-4 rounded-sm border-gray-300 text-primary-600 focus:ring-primary-500"
                             />
                             <span>{getBuyerLabel(optionBuyerId)}</span>
                           </label>
@@ -679,7 +679,7 @@ function AgentTokensPage() {
                           type="checkbox"
                           checked={scopes.includes(scope)}
                           onChange={(event) => handleScopeChange(scope, event.target.checked)}
-                          className="mt-0.5 h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                          className="mt-0.5 h-4 w-4 rounded-sm border-gray-300 text-primary-600 focus:ring-primary-500"
                         />
                         <span className="min-w-0">
                           <span className="block text-xs font-mono text-gray-900 break-all">{scope}</span>
@@ -740,7 +740,7 @@ function AgentTokensPage() {
       )}
 
       {revealedToken && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4">
+        <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/60 p-4">
           <div
             role="dialog"
             aria-modal="true"
@@ -748,7 +748,7 @@ function AgentTokensPage() {
             className="bg-white rounded-xl shadow-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto p-6"
           >
             <div className="flex items-start gap-3 p-4 bg-amber-50 border border-amber-200 rounded-lg">
-              <AlertTriangle className="h-6 w-6 text-amber-600 flex-shrink-0" />
+              <AlertTriangle className="h-6 w-6 text-amber-600 shrink-0" />
               <div>
                 <h2 id="token-reveal-title" className="text-xl font-semibold text-amber-900">
                   Store this token now
