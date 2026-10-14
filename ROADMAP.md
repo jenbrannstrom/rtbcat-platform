@@ -1,158 +1,193 @@
 # Cat-Scan Roadmap
 
-Last updated: July 22, 2026
+Last updated: October 14, 2026
 
-This roadmap is forward-looking. It is not an internal incident diary.
+This roadmap covers unfinished product and platform work. Completed migrations,
+incident timelines, and release receipts belong in the changelog or internal
+runbooks, not here.
 
-## What is already built
+## Delivered foundations
 
-These are not roadmap items anymore.
-
-Built and in repo:
-- Gmail and manual CSV ingestion for the five core Authorized Buyers report types
-- creative sync, seat sync, endpoint sync, and pretargeting management
-- QPS analysis by publisher, geo, and size
-- waste analysis and campaign clustering
-- multi-user auth, roles, audit log, and seat-scoped access
-- import tracking, retention controls, and runtime health tooling
-- click-macro audit and AppsFlyer readiness diagnostics
-- conversion ingestion foundations and attribution join storage
+- Authorized Buyers ingestion through Gmail and manual CSV upload for the five
+  core report types
+- creative, seat, endpoint, and pretargeting synchronization and management
+- QPS, waste, campaign-clustering, and creative-performance analysis
+- multi-user authentication, roles, audit logging, and buyer-seat isolation
+- conversion ingestion, attribution-join storage, AppsFlyer readiness
+  diagnostics, and click-macro auditing
 - optional AI-assisted language detection and geo-linguistic mismatch analysis
+- Hetzner application and PostgreSQL production migration, backup and recovery
+  tooling, scheduled precompute work, and operational health checks
+- buyer-scoped Agent API, agent-token administration with explicit buyer
+  lists, separate read scopes, expiry, and immediate revocation
+- the deployed eight-tool read-only MCP service (buyer discovery, creative
+  search and detail, asset references, daily spend, creative performance, and
+  data-quality evidence) with bounded tools and contract tests, plus a
+  stdio/HTTPS connector bridge for MCP clients
+- live publisher identity lookup through the app API, Agent API, MCP, and a
+  CSV CLI, combining app-store identity, `ads.txt`/`app-ads.txt` declarations,
+  `sellers.json`, and buyer-visible Google Marketplace profiles (see
+  [Publisher lookup](docs/PUBLISHER_LOOKUP.md))
 
-## Current priorities
+The MCP service is live at `https://mcp.rtb.cat/mcp` for scoped pilot tokens.
+It is deployed as a digest-pinned, non-root container behind TLS ingress, with
+the origin bound to loopback and a runtime kill switch. Broader rollout still
+depends on the abuse-prevention and capacity controls below.
 
-### 1. Rehearse and complete the production infrastructure migration
+## Active priorities
 
-Current state:
-- a detailed private migration inventory and a sanitized readiness brief exist
-- the database partition/validation kit exists
-- the application is containerized, but deploy, recovery and scheduling remain provider-specific
-- the system is ready for target provisioning and rehearsal, not production cutover
+### 1. Harden and expand the read-only MCP service
+
+Outcome: approved customers can query their own precomputed RTBcat evidence
+without exposing the application, database, other buyers, or unbounded
+infrastructure capacity.
+
+Current production baseline:
+
+- the digest-pinned MCP image, Compose, release manifest, deployment,
+  rollback, and verification wiring described in
+  [the MCP delivery plan](docs/MCP_READONLY_SERVER_PLAN.md)
+  are complete and exercised by the normal GitHub CI release path
+- `mcp.rtb.cat` has DNS, TLS, tracked Nginx ingress, and a loopback-only origin
+- the kill switch is enabled and a scoped pilot tool call has been verified
+  end to end; access has not been opened as a broad customer service
+
+DoS and abuse-prevention launch gates:
+
+- put the MCP hostname behind a layer-7 proxy or WAF and prevent clients from
+  bypassing it to reach the Hetzner origin directly
+- enforce edge limits for requests, connections, request-body size, header/body
+  timeouts, and slow clients before traffic reaches the MCP process
+- rate-limit initialization, tool discovery, health traffic, missing or invalid
+  credentials, and tool calls; the current per-token tool limit alone is not an
+  edge defense
+- add global, per-IP, and per-token concurrency ceilings so a token-bucket burst
+  cannot start dozens of expensive reads at once
+- validate credentials before retaining long-lived limiter state; bound and
+  expire limiter entries so rotating fake tokens cannot grow process memory
+  without limit
+- use a shared limiter when more than one process or replica is deployed so
+  restarts and horizontal scaling do not multiply the effective allowance
+- add PostgreSQL connection pooling and retain hard statement timeouts on every
+  Agent API query
+- record per-customer request counts, response bytes, latency, rejections, and
+  database time; alert on authentication failures, rate limits, saturation,
+  bandwidth, and database-connection pressure
+- provide a fast operational block path for one credential, one source, or the
+  entire MCP hostname, and rehearse the kill switch before public rollout
+
+Rollout exit criteria:
+
+- load and abuse tests prove that rejected traffic does not consume material
+  API or database capacity
+- one customer cannot exhaust global capacity or materially degrade the main
+  Cat-Scan application
+- quotas, revocation, dashboards, alerts, and incident ownership are documented
+- the pilot remains within agreed latency, error-rate, and infrastructure-cost
+  thresholds before access expands
+
+### 2. Make optimization conversion-driven
+
+Outcome: recommendations use conversion and value evidence instead of relying
+mainly on bids, spend, win rate, and other proxy signals.
 
 Next steps:
-- codify the target host, network, deploy, secrets materialization and timers
-- install WAL-based backups and prove point-in-time recovery on a clean host
-- complete a timed full restore into the partitioned schema and record validation evidence
-- migrate application and PostgreSQL first while retaining required Google-native services
-- freeze a clean release SHA, execute the writer-freeze/cutover runbook, soak, then decommission conservatively
 
-Decision rule:
-- no cutover date until the restore rehearsal, backup restore drill and rollback cutoff are all proven
-
-### 2. Conversion-driven optimization
-
-This is the most important missing layer.
-
-Why:
-- today the optimizer mainly follows bids, spend, win rate, and related proxy signals
-- that is useful, but it is still a proxy system
-- once conversion data and value data are connected, the recommendations can move from "traffic looks wasteful" to "traffic is low-value" or "traffic is worth keeping"
-
-Current state:
-- conversion ingestion exists
-- AppsFlyer is the most mature path in the repo
-- readiness diagnostics exist in the UI
-- exact attribution depends on `clickid` coverage in creative links
-- broad production proof across buyers is still missing
-
-Next steps:
-- validate AppsFlyer on real buyer data end to end
-- finish exact and fallback join reporting in production workflows
+- validate AppsFlyer end to end with real buyer data
+- finish exact and fallback attribution reporting in production workflows
 - feed conversion and value evidence into optimizer scoring
-- keep hard automation gated behind confidence and coverage thresholds
+- measure attribution coverage and confidence for every buyer
+- keep hard automation behind explicit coverage, confidence, and rollback gates
 
-### 3. Troubleshooting API as a verification and diagnostics layer
+AppsFlyer remains the first-class attribution path. Other connector types may
+exist in code or taxonomy, but they should not be presented as equally mature
+until they have equivalent production evidence.
 
-This is useful, but it is not a replacement for the Daily CSV path.
+### 3. Productize troubleshooting diagnostics
 
-Why:
-- the RTB Troubleshooting API can expose exchange-side signals we do not want to wait a full day to inspect
-- it can help explain observable no-bid, timeout, filtering, and auction-loss patterns at the exchange boundary
-- it can provide parity checks for overlapping metrics such as bids, wins, and impression-side counts
-- it does not provide the click, geo, or conversion data needed to replace the existing reporting backbone
-
-Current state:
-- the product still depends on the five daily Authorized Buyers CSV reports for historical analytics
-- limited troubleshooting client code exists in the repo, but it is not productized end to end
-- the API is useful for operator debugging and verification, not for full customer reporting
+Outcome: operators can verify daily CSV data and investigate transient
+exchange-side filtering, timeout, no-bid, and auction-loss signals without
+presenting the Troubleshooting API as a reporting replacement.
 
 Next steps:
-- productize a narrow troubleshooting collection flow for transient filter-set queries
-- store only the metrics and dimensions that help validate CSV imports and explain exchange-observed waste
-- surface troubleshooting results as operator diagnostics and verification checks
-- avoid positioning this as a substitute for Daily CSVs or AppsFlyer-backed value analysis
 
-### 4. Language analysis as a real optional subsystem
+- build a narrow collection flow for transient filter-set queries
+- retain only dimensions and metrics that explain exchange-observed behavior or
+  validate imported reports
+- surface results as operator diagnostics and parity checks
+- continue using daily Authorized Buyers reports for historical reporting and
+  conversion sources for value analysis
 
-Current state:
-- the UI and API paths exist
-- the feature is optional
-- it is disabled by default in the GCP deploy path
-- provider selection and key management exist for Gemini, Claude, and Grok
+### 4. Improve onboarding and day-two operations
 
-Next steps:
-- keep provider selection coherent across UI, API, and docs
-- evaluate provider quality and failure behavior in real operator workflows
-- keep the feature optional and explicitly configured
-- preserve manual override and operator review in the creative flow
-
-### 5. Better operator proof, not bigger claims
-
-Current state:
-- the product is useful
-- we do not yet have enough public evidence to claim a typical percentage uplift
+Outcome: a self-hosted operator can install, verify, monitor, upgrade, and
+recover Cat-Scan without needing undocumented platform knowledge.
 
 Next steps:
-- collect deployment-level before/after evidence where customers allow it
-- measure exact improvements in areas we can prove
-- keep public claims narrow until the evidence exists
 
-### 6. Cleaner onboarding for self-hosted users
+- make installation and first-run verification linear
+- improve actionable failure messages and secret-health checks
+- simplify conversion setup and keep agent-token onboarding linear
+- document backup restoration, upgrades, rollback, capacity signals, and
+  scheduler ownership in one operator path
 
-Current state:
-- the install path works
-- the docs were partly stale and are being corrected
-- some advanced features still assume an operator who understands RTB and GCP well
+### 5. Mature language analysis as an optional subsystem
+
+Outcome: language and geo-linguistic analysis is useful when explicitly enabled
+and never becomes a hidden requirement for the core product.
 
 Next steps:
-- make the install path more linear
-- keep dangerous credentials out of the early setup path
-- improve first-run checks and failure messages
-- make conversion setup less opaque
 
-## Conversion and connector status
+- keep provider selection coherent across the UI, API, deployment, and docs
+- evaluate provider quality, cost, latency, and failure behavior in real
+  workflows
+- preserve manual overrides and operator review
+- keep external AI providers disabled until their credentials and policy are
+  explicitly configured
 
-Safe current statement:
-- AppsFlyer is the first-class attribution path in this repo
-- other connector types are partly supported in code and taxonomy, but they are not equally proven in production
+### 6. Build evidence before expanding product claims
 
-That means:
-- do not present every connector as equally mature
-- do not treat readiness diagnostics as proof of live attribution quality
-- do not enable optimizer automation from fuzzy joins without strong evidence
+Outcome: product claims reflect measured customer outcomes rather than inferred
+uplift.
 
-## Not on the roadmap anymore
+Next steps:
 
-These items are removed from the active roadmap because they are already built or because they belonged in changelog or incident notes instead:
-- old deployment incident notes
-- old runtime blocker logs
-- old translation audit snapshots that were true at the time but are no longer true
-- completed route and seat-switch stabilization work
-- completed OSS release hardening work
+- collect buyer-approved before-and-after evidence
+- measure improvements only where attribution and baselines are defensible
+- identify which buyer profiles benefit most from operator-side controls
+- keep public claims narrow until results are repeatable
 
-## Open questions
+## Cross-cutting guardrails
 
-These still need real-world proof, not opinion:
-- how much extra value remains after Google has already reduced obvious waste
-- which buyers gain most from operator-side control versus bidder-side logic alone
-- how much incremental value appears when conversion and lifetime value data are connected
-- which language-analysis providers are reliable enough for production use
+- Every external read and write remains authenticated, buyer-scoped, audited,
+  revocable, and least-privileged.
+- Agent and MCP analytics read bounded, precomputed contracts rather than raw
+  event tables.
+- Read-only interfaces do not silently gain refreshes, mutations, or paid model
+  calls.
+- Optimizer automation requires evidence, confidence thresholds, a reversible
+  action path, and an accountable operator.
+- Optional integrations remain optional in installation, runtime, and public
+  product descriptions.
 
-## Decision rule
+## Open decisions
 
-A feature moves from roadmap to "built" only when these are all true:
-- the code path exists
-- the operator can use it without guesswork
-- tests cover the main behavior
-- the docs describe it accurately
-- public claims about it are no stronger than the evidence
+- choose the MCP edge/WAF and origin-locking design
+- decide whether customer quotas are contractual, usage-based, or both
+- decide whether MCP authentication remains scoped bearer tokens or adds an
+  OAuth authorization-code and PKCE flow after the pilot
+- determine which fallback attribution methods are reliable enough to influence
+  recommendations
+- determine which language-analysis providers are reliable enough for supported
+  production use
+
+## Definition of done
+
+A roadmap item moves to delivered only when:
+
+- the production code path exists
+- an operator can use and recover it without guesswork
+- tests cover its security boundary and primary failure modes
+- monitoring and rollback are in place where the feature can affect production
+- documentation matches deployed behavior
+- public claims are no stronger than the available evidence
