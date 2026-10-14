@@ -1,12 +1,10 @@
 import type { PartialTranslations } from '../../types';
 
+// Keys not listed here fall back to English (see withEnglishFallback).
+// TODO(i18n): translate the Optimize / Creatives / System group labels and
+// the new row labels added in the 2026-10 sidebar rebuild.
 const value: PartialTranslations['navigation'] = {
-  wasteOptimizer: 'QPS 优化器',
-  creatives: '创意',
-  campaigns: '创意分组',
-  changeHistory: '变更历史',
   import: '导入',
-  setup: '初始化设置',
   admin: '管理',
   docs: '文档',
   logout: '退出登录',
@@ -16,4 +14,3 @@ const value: PartialTranslations['navigation'] = {
 };
 
 export default value;
-

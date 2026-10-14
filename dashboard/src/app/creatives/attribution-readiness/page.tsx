@@ -15,6 +15,7 @@ import { ErrorPage } from "@/components/error";
 import { LoadingPage } from "@/components/loading";
 import { splitBuyerPath, toBuyerScopedPath } from "@/lib/buyer-routes";
 import { useAccount } from "@/contexts/account-context";
+import { useTranslation } from "@/contexts/i18n-context";
 import { useAuth } from "@/contexts/auth-context";
 
 type AttributionSeatStatus = "no_af" | "af_no_clickid" | "af_exact_ready";
@@ -59,6 +60,7 @@ function deriveSeatStatus(
 }
 
 export default function AttributionReadinessPage() {
+  const { t } = useTranslation();
   const pathname = usePathname();
   const { selectedBuyerId } = useAccount();
   const { isSudo } = useAuth();
@@ -184,7 +186,7 @@ export default function AttributionReadinessPage() {
     <div className="space-y-4 p-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold text-gray-900">Attribution Readiness</h1>
+          <h1 className="text-xl font-bold text-gray-900">{t.navigation.attributionReadiness}</h1>
           <p className="text-sm text-gray-600">
             Seat-level AppsFlyer readiness for exact attribution joins (`No AF`, `AF no clickid`, `AF exact-ready`).
           </p>

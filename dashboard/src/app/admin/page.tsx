@@ -204,7 +204,7 @@ function AdminDashboard() {
         {/* System Settings */}
         <div className="bg-white rounded-xl shadow-xs border border-gray-200 p-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">
-            {t.admin.systemSettings}
+            {t.adminNav.configuration}
           </h2>
           <div className="space-y-4">
             {/* Multi-User Mode */}

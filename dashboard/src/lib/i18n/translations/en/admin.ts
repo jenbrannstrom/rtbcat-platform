@@ -15,7 +15,6 @@ const value: Translations['admin'] = {
     agentTokenSelectedBuyersDivider: 'or select several buyers',
     createNewUser: 'Create New User',
     viewAuditLog: 'View Audit Log',
-    systemSettings: 'System Settings',
     systemConfiguration: 'System configuration and status',
     reportHealthTitle: 'Report Health',
     reportHealthDesc: 'Expected {count} reports per seat for the latest report date.',

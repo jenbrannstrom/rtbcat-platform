@@ -10,7 +10,6 @@ const value: PartialTranslations['admin'] = {
   manageUsersLink: 'Gebruikers beheren',
   createNewUser: 'Nieuwe gebruiker aanmaken',
   viewAuditLog: 'Auditlog bekijken',
-  systemSettings: 'Systeeminstellingen',
   systemConfiguration: 'Systeemconfiguratie en status',
   reportHealthTitle: 'Rapportgezondheid',
   reportHealthDesc:

@@ -2,7 +2,6 @@ import type { Translations } from '../../types';
 
 const value: Translations['import'] = {
     title: 'Import',
-    importReports: 'Import Reports',
     importPerformanceData: 'Import Performance Data',
     uploadCsvExports: 'Upload CSV exports from Google Authorized Buyers',
     upload: 'Upload',

@@ -2,7 +2,6 @@ import type { PartialTranslations } from '../../types';
 
 const value: PartialTranslations['import'] = {
   title: '导入',
-  importReports: '导入报表',
   importPerformanceData: '导入性能数据',
   uploadCsvExports: '上传来自 Google Authorized Buyers 的 CSV 导出文件',
   upload: '上传',

@@ -1,7 +1,7 @@
 import type { Translations } from '../../types';
 
 const value: Translations['qpsNav'] = {
-    publisher: 'Pub QPS',
+    publisher: 'Publisher QPS',
     geo: 'Geo QPS',
     size: 'Size QPS',
   };

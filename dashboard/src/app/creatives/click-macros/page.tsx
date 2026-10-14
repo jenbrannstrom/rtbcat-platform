@@ -9,12 +9,14 @@ import { getCreativeClickMacroCoverage } from "@/lib/api";
 import { LoadingPage } from "@/components/loading";
 import { ErrorPage } from "@/components/error";
 import { useAccount } from "@/contexts/account-context";
+import { useTranslation } from "@/contexts/i18n-context";
 import { splitBuyerPath, toBuyerScopedPath } from "@/lib/buyer-routes";
 import { cn } from "@/lib/utils";
 
 const PAGE_SIZE = 100;
 
 export default function ClickMacroCoveragePage() {
+  const { t } = useTranslation();
   const pathname = usePathname();
   const { selectedBuyerId } = useAccount();
   const { buyerIdInPath } = splitBuyerPath(pathname || "/");
@@ -73,7 +75,7 @@ export default function ClickMacroCoveragePage() {
     <div className="p-6 space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold text-gray-900">Click Macro Coverage</h1>
+          <h1 className="text-xl font-bold text-gray-900">{t.navigation.clickMacros}</h1>
           <p className="text-sm text-gray-600">
             Compliance uses click-path detection. Payload-only tokens are shown separately so they do not count as valid coverage.
           </p>

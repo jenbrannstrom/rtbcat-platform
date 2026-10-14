@@ -1,8 +1,8 @@
 import type { Translations } from '../../types';
 
 const value: Translations['history'] = {
-    title: 'Change History',
-    changeHistory: 'Change History',
+    title: 'Pretargeting History',
+    changeHistory: 'Pretargeting History',
     trackAndRollback: 'Track and rollback pretargeting configuration changes',
     noChanges: 'No changes recorded',
     noChangesFound: 'No changes found',

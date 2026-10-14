@@ -68,7 +68,7 @@ function SettingsPage() {
     <div className="p-6 max-w-4xl mx-auto">
       {/* Header */}
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-900">{t.admin.systemSettings}</h1>
+        <h1 className="text-2xl font-bold text-gray-900">{t.adminNav.configuration}</h1>
         <p className="mt-1 text-gray-600">
           {t.admin.configureSettings}
         </p>

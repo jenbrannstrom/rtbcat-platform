@@ -57,18 +57,33 @@ export interface Translations {
   };
 
   navigation: {
-    wasteOptimizer: string;
-    creatives: string;
-    campaigns: string;
-    changeHistory: string;
+    groupOptimize: string;
+    groupCreatives: string;
+    groupSystem: string;
+    overview: string;
+    pretargetingHistory: string;
+    library: string;
+    clusters: string;
+    audits: string;
+    clickMacros: string;
+    languageFlags: string;
+    attributionReadiness: string;
     import: string;
-    setup: string;
+    settings: string;
     admin: string;
+    seatAdminTag: string;
+    sudoTag: string;
+    setup: string;
     docs: string;
     logout: string;
     collapse: string;
     expand: string;
-    settings: string;
+    expandGroup: string;
+    collapseGroup: string;
+    mainNavigation: string;
+    accountMenu: string;
+    switchSeat: string;
+    signedInAs: string;
   };
   qpsNav: {
     publisher: string;
@@ -78,7 +93,6 @@ export interface Translations {
 
   settingsNav: {
     connectedAccounts: string;
-    buyerSeats: string;
     dataRetention: string;
     systemStatus: string;
   };
@@ -684,7 +698,6 @@ export interface Translations {
 
   import: {
     title: string;
-    importReports: string;
     importPerformanceData: string;
     uploadCsvExports: string;
     upload: string;
@@ -1171,7 +1184,6 @@ export interface Translations {
     agentTokenSelectedBuyersDivider: string;
     createNewUser: string;
     viewAuditLog: string;
-    systemSettings: string;
     systemConfiguration: string;
     reportHealthTitle: string;
     reportHealthDesc: string;
