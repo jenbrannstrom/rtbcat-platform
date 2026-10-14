@@ -1,6 +1,6 @@
 # Cat-Scan Roadmap
 
-Last updated: August 31, 2026
+Last updated: October 14, 2026
 
 This roadmap covers unfinished product and platform work. Completed migrations,
 incident timelines, and release receipts belong in the changelog or internal
@@ -18,8 +18,16 @@ runbooks, not here.
 - optional AI-assisted language detection and geo-linguistic mismatch analysis
 - Hetzner application and PostgreSQL production migration, backup and recovery
   tooling, scheduled precompute work, and operational health checks
-- buyer-scoped Agent API, agent-token administration, and the deployed
-  read-only MCP service with bounded tools and contract tests
+- buyer-scoped Agent API, agent-token administration with explicit buyer
+  lists, separate read scopes, expiry, and immediate revocation
+- the deployed eight-tool read-only MCP service (buyer discovery, creative
+  search and detail, asset references, daily spend, creative performance, and
+  data-quality evidence) with bounded tools and contract tests, plus a
+  stdio/HTTPS connector bridge for MCP clients
+- live publisher identity lookup through the app API, Agent API, MCP, and a
+  CSV CLI, combining app-store identity, `ads.txt`/`app-ads.txt` declarations,
+  `sellers.json`, and buyer-visible Google Marketplace profiles (see
+  [Publisher lookup](docs/PUBLISHER_LOOKUP.md))
 
 The MCP service is live at `https://mcp.rtb.cat/mcp` for scoped pilot tokens.
 It is deployed as a digest-pinned, non-root container behind TLS ingress, with
@@ -119,7 +127,7 @@ Next steps:
 
 - make installation and first-run verification linear
 - improve actionable failure messages and secret-health checks
-- simplify conversion and agent-token setup
+- simplify conversion setup and keep agent-token onboarding linear
 - document backup restoration, upgrades, rollback, capacity signals, and
   scheduler ownership in one operator path
 
