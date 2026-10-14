@@ -8,3 +8,9 @@
 7988bdbc58a49955bfc6e22de961eeda494c4466:tests/test_language_ai_config.py:generic-api-key:108
 cfdfd4e9e6bdf430aa7bb280ac086e12ba2ac328:MCP_INTEGRATION.md:curl-auth-header:41
 fee4adad3ce09ceb68af23c12c3deb0ff3dd978f:scripts/hetzner/install_temp_google_oauth_proxy.sh:generic-api-key:5
+
+# Historical false positives, inspected 2026-10-14: public binary checksum,
+# public Google client-ID stem (not a client secret), and YOUR_API_KEY example.
+ffaafad9812201588611a0c9d5814ef2f3911c43:scripts/hetzner/install_temp_google_oauth_proxy.sh:generic-api-key:5
+57b8d7101d52778bda0a9388c091a04de8a087ed:docs/ai_logs/ai_log_2026-02-07.md:generic-api-key:321
+03d5c0e75e7d298338a5e291292ca3c3ea820b48:MCP_INTEGRATION.md:curl-auth-header:41

@@ -25,6 +25,9 @@ Run locally before pushing:
 | `pyproject.toml` version matches `VERSION` | metadata check | Yes |
 
 CI equivalent: `.github/workflows/oss-release-preflight.yml` (runs on PRs and manual dispatch).
+The local braces backport and its remaining audit gate are documented in
+[Dependency mitigations](DEPENDENCY_MITIGATIONS.md).
+
 The PR secret-scanner action checks the PR's commit range. Before tagging, also
 run the local full-history scan and manually dispatch preflight on the exact
 release ref. A green PR secret check does not clear historical findings.

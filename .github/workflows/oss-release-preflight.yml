@@ -107,6 +107,7 @@ jobs:
         run: |
           cd dashboard
           npm ci
+          npm run test:dependency-security
           npm audit --audit-level=high
 
   root-files:
