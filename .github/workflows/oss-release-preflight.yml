@@ -107,8 +107,8 @@ jobs:
         run: |
           cd dashboard
           npm ci
-          npm run test:dependency-security
-          npm audit --audit-level=high
+          npm run test:audit-policy
+          npm run audit:release
 
   root-files:
     name: Required Root Files

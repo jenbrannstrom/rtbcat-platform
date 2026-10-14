@@ -17,7 +17,7 @@ Run locally before pushing:
 | No secrets in repo history | `gitleaks detect` | Yes |
 | No forbidden tracked files | git ls-files pattern scan | Yes |
 | Python dependency bundles free of known CVEs | `pip-audit` on `requirements.txt`, `requirements-ai.txt`, `requirements-dev.txt`, `requirements-mcp.txt` | Yes |
-| Node deps free of high/critical CVEs | `npm audit --audit-level=high` | Yes |
+| Node deps have no unapproved high/critical findings | `cd dashboard && npm run audit:release` | Yes |
 | `SECURITY.md` present at root | file check | Yes |
 | `LICENSE` present at root | file check | Yes |
 | `.gitignore` covers `.env`, `*.db`, `*.tfstate`, `terraform.tfvars` | pattern check | Yes |
@@ -25,7 +25,10 @@ Run locally before pushing:
 | `pyproject.toml` version matches `VERSION` | metadata check | Yes |
 
 CI equivalent: `.github/workflows/oss-release-preflight.yml` (runs on PRs and manual dispatch).
-The local braces backport and its remaining audit gate are documented in
+Run `npm ci` in `dashboard/` before the local preflight. The release gate includes
+both production and full audits. The only approved exception covers the exact
+patched development dependency `braces` 3.0.3 and expires on 2026-11-13 at 00:00 UTC.
+All other high/critical findings remain blockers. The patch, evidence and limits are in
 [Dependency mitigations](DEPENDENCY_MITIGATIONS.md).
 
 The PR secret-scanner action checks the PR's commit range. Before tagging, also

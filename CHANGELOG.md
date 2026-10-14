@@ -31,8 +31,13 @@ All notable changes to Cat-Scan are documented in this file.
 ### Security
 
 - Refresh Next.js, Sharp and compatible dashboard dependencies to address runtime
-  advisories. The production dependency audit passes; the full development audit
-  still blocks this candidate until its outstanding advisories are resolved.
+  advisories. The production dependency audit has no findings.
+- Apply a tested local braces backport. A temporary exception for its single
+  development advisory expires on 2026-11-13 at 00:00 UTC. Release checks verify
+  patch integrity and reject all other high/critical findings. See
+  [Dependency mitigations](docs/DEPENDENCY_MITIGATIONS.md).
+- Retire exposed credentials, remove their values from published branch and tag
+  history, and archive obsolete branches. See [History cleanup](docs/HISTORY_CLEANUP.md).
 - Initialize QPS load timing once without reading refs during render. Preserve
   full browser navigation at authentication boundaries under the updated linter.
 

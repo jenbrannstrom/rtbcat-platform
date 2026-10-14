@@ -8,7 +8,9 @@
     "start": "next start",
     "lint": "eslint .",
     "postinstall": "patch-package --error-on-fail",
-    "test:dependency-security": "node --test tests/dependency-security.mjs"
+    "test:dependency-security": "node --test tests/dependency-security.mjs",
+    "test:audit-policy": "node --test tests/audit-release.mjs",
+    "audit:release": "node scripts/audit-release.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
