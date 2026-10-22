@@ -275,7 +275,7 @@ def test_mcp_package_uses_only_isolated_runtime_dependencies() -> None:
 def test_mcp_runtime_requirements_are_minimal_and_pinned() -> None:
     requirements = (REPO_ROOT / "requirements-mcp.txt").read_text().splitlines()
     assert requirements == [
-        "mcp==2.0.0",
+        "mcp==2.2.0",
         "httpx==0.28.1",
         "uvicorn==0.41.0",
     ]
