@@ -259,8 +259,8 @@ class QPSOptimizer:
               AND creative_size IS NOT NULL
               {bidder_filter}
             GROUP BY creative_size, creative_format
-            HAVING reached_queries > impressions * 2  -- High demand, low wins
-            ORDER BY (reached_queries - impressions) DESC
+            HAVING SUM(reached_queries) > SUM(impressions) * 2
+            ORDER BY (SUM(reached_queries) - SUM(impressions)) DESC
             LIMIT 20
         """, params)
 

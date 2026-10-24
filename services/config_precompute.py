@@ -211,11 +211,11 @@ def _refresh_canonical_reconciliation(
         delete_params.append(buyer_account_id)
 
     conn.execute(
-        f"DELETE FROM fact_delivery_daily WHERE metric_date::text = ANY(%s){buyer_filter}",
+        f"DELETE FROM fact_delivery_daily WHERE metric_date = ANY(%s::date[]){buyer_filter}",
         tuple(delete_params),
     )
     conn.execute(
-        f"DELETE FROM fact_dimension_gaps_daily WHERE metric_date::text = ANY(%s){buyer_filter}",
+        f"DELETE FROM fact_dimension_gaps_daily WHERE metric_date = ANY(%s::date[]){buyer_filter}",
         tuple(delete_params),
     )
 
@@ -246,7 +246,7 @@ def _refresh_canonical_reconciliation(
             'billing',
             1.0000
         FROM rtb_daily
-        WHERE metric_date::text = ANY(%s)
+        WHERE metric_date = ANY(%s::date[])
           AND billing_id IS NOT NULL AND billing_id != ''
           AND buyer_account_id IS NOT NULL AND buyer_account_id != ''
           AND country IS NOT NULL AND country != ''{buyer_filter}
@@ -279,7 +279,7 @@ def _refresh_canonical_reconciliation(
             'billing',
             1.0000
         FROM rtb_daily
-        WHERE metric_date::text = ANY(%s)
+        WHERE metric_date = ANY(%s::date[])
           AND billing_id IS NOT NULL AND billing_id != ''
           AND buyer_account_id IS NOT NULL AND buyer_account_id != ''
           AND publisher_id IS NOT NULL AND publisher_id != ''{buyer_filter}
@@ -394,7 +394,7 @@ def _refresh_canonical_reconciliation(
             END AS availability_state,
             CURRENT_TIMESTAMP
         FROM rtb_daily
-        WHERE metric_date::text = ANY(%s)
+        WHERE metric_date = ANY(%s::date[])
           AND buyer_account_id IS NOT NULL AND buyer_account_id != ''{buyer_filter}
         GROUP BY metric_date, buyer_account_id
         """,
@@ -682,7 +682,7 @@ async def refresh_config_breakdowns(
                 COALESCE(SUM(impressions), 0),
                 COALESCE(SUM(spend_micros), 0)
             FROM rtb_daily
-            WHERE metric_date::text = ANY(%s)
+            WHERE metric_date = ANY(%s::date[])
               AND billing_id IS NOT NULL AND billing_id != ''
               AND publisher_id IS NOT NULL AND publisher_id != ''
               AND buyer_account_id IS NOT NULL AND buyer_account_id != ''{fallback_buyer}
@@ -730,7 +730,7 @@ async def refresh_config_breakdowns(
                 COALESCE(SUM(impressions), 0),
                 COALESCE(SUM(spend_micros), 0)
             FROM rtb_daily
-            WHERE metric_date::text = ANY(%s)
+            WHERE metric_date = ANY(%s::date[])
               AND billing_id IS NOT NULL AND billing_id != ''
               AND buyer_account_id IS NOT NULL AND buyer_account_id != ''
               AND creative_id IS NOT NULL AND creative_id != ''{fallback_buyer}

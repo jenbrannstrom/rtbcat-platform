@@ -396,10 +396,6 @@ def ensure_table_exists(cursor, table_name: str):
             "ON rtb_daily(metric_date, app_id)"
         )
         cursor.execute(
-            "CREATE INDEX IF NOT EXISTS idx_rtb_daily_metric_creative "
-            "ON rtb_daily(metric_date, creative_id)"
-        )
-        cursor.execute(
             "CREATE INDEX IF NOT EXISTS idx_rtb_daily_metric_country "
             "ON rtb_daily(metric_date, country)"
         )

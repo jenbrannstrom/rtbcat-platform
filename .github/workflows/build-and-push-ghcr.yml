@@ -22,6 +22,19 @@ jobs:
   test:
     if: ${{ github.event.inputs.confirm == 'PUBLISH_HETZNER' }}
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15.17-alpine
+        env:
+          POSTGRES_DB: rtbcat_query_tests
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d rtbcat_query_tests"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      RTBCAT_SQL_TEST_DSN: postgresql://postgres@localhost:5432/rtbcat_query_tests
     steps:
       - name: Checkout exact workflow commit
         uses: actions/checkout@v6
@@ -51,6 +64,7 @@ jobs:
       - name: Run deployment-critical tests
         run: |
           pytest \
+            tests/test_rtb_daily_query_regressions.py \
             tests/test_contracts_check.py \
             tests/test_catscan_finance_db_reconcile.py \
             tests/test_catscan_mcp_db_smoke.py \
