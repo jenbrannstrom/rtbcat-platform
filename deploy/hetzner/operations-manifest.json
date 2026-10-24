@@ -1,0 +1,54 @@
+{
+  "format": "rtbcat-host-operations-v1",
+  "roles": {
+    "db": [
+      {
+        "source": "scripts/hetzner/retain_postgres_partitions.py",
+        "destination": "/usr/local/sbin/rtbcat-retain-postgres-partitions",
+        "sha256": "4b6d3b2f80e104064f5462b2d569c3a24774d16a3ed05cc61f8415904612f573"
+      },
+      {
+        "source": "scripts/hetzner/retain_bidstream.py",
+        "destination": "/usr/local/sbin/rtbcat-retain-bidstream",
+        "sha256": "b682712b89354ad6b2d9ae77499c736441e7bc713a332f8fe6419a343ac954da"
+      },
+      {
+        "source": "deploy/hetzner/rtbcat-postgres-retention.service",
+        "destination": "/etc/systemd/system/rtbcat-postgres-retention.service",
+        "sha256": "0eb1b5e2dc1faf5060768dacc66e2e2da3fe9bfda75b1e91f12fdd14b81eee9d"
+      },
+      {
+        "source": "deploy/hetzner/rtbcat-postgres-retention.timer",
+        "destination": "/etc/systemd/system/rtbcat-postgres-retention.timer",
+        "sha256": "bfd6fd4d08267c36838dd7f451f3cb666f4005d386879ca50c6380cfb531aaf3"
+      },
+      {
+        "source": "deploy/hetzner/rtbcat-bidstream-retention.service",
+        "destination": "/etc/systemd/system/rtbcat-bidstream-retention.service",
+        "sha256": "613c8bc7477b29cd112cc00533e582152c5d109e12f63b4b903bdf878151abae"
+      },
+      {
+        "source": "deploy/hetzner/rtbcat-bidstream-retention.timer",
+        "destination": "/etc/systemd/system/rtbcat-bidstream-retention.timer",
+        "sha256": "8ca67a039f7893fecbff161e0f450e86dabbd1c9b063f6312b431c34e1d5a0c4"
+      }
+    ],
+    "app": [
+      {
+        "source": "scripts/hetzner/check_certificates.py",
+        "destination": "/usr/local/sbin/rtbcat-check-certificates",
+        "sha256": "cac6c0fde104636dc46dbba44ffc3e913c86f25a0393bdb5c90c247162b315bf"
+      },
+      {
+        "source": "deploy/hetzner/rtbcat-certificate-check.service",
+        "destination": "/etc/systemd/system/rtbcat-certificate-check.service",
+        "sha256": "d342acff6ad7e049e74b90cd1dae4dd011009af5d40b4ced065d5baab20d5be4"
+      },
+      {
+        "source": "deploy/hetzner/rtbcat-certificate-check.timer",
+        "destination": "/etc/systemd/system/rtbcat-certificate-check.timer",
+        "sha256": "a2c6f6a07d53c6d0a7fc3c12ce7ea27a0429a3483abf10ce2a0305af59b6e489"
+      }
+    ]
+  }
+}
