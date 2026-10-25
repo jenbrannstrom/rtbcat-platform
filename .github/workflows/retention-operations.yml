@@ -1,0 +1,48 @@
+name: Retention Operations
+
+on:
+  pull_request:
+    paths:
+      - "scripts/hetzner/retain_*.py"
+      - "tests/test_*retention*.py"
+      - "deploy/hetzner/*retention*"
+      - ".github/workflows/retention-operations.yml"
+  push:
+    branches: [main]
+    paths:
+      - "scripts/hetzner/retain_*.py"
+      - "tests/test_*retention*.py"
+      - "deploy/hetzner/*retention*"
+      - ".github/workflows/retention-operations.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  retention:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Start isolated PostgreSQL
+        run: |
+          docker run --detach --rm --name rtbcat-retention-test-ci \
+            --tmpfs /var/lib/postgresql/data \
+            -e POSTGRES_HOST_AUTH_METHOD=trust postgres:15.19-alpine
+          for attempt in {1..30}; do
+            if docker exec rtbcat-retention-test-ci pg_isready -U postgres; then break; fi
+            sleep 1
+          done
+          docker exec rtbcat-retention-test-ci createdb -U postgres rtbcat_retention_tests
+      - name: Partition safety tests
+        run: python -m unittest discover -s tests -p test_postgres_partition_retention.py -v
+      - name: Bidstream PostgreSQL integration tests
+        env:
+          RTBCAT_RETENTION_TEST_CONTAINER: rtbcat-retention-test-ci
+        run: python -m unittest discover -s tests -p test_bidstream_retention.py -v
+      - name: Stop disposable database
+        if: always()
+        run: docker stop rtbcat-retention-test-ci

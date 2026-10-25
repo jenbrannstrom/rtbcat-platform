@@ -1,0 +1,14 @@
+[Unit]
+Description=Check RTBcat TLS validity and fourteen-day expiry margin
+After=nginx.service
+
+[Service]
+Type=oneshot
+DynamicUser=true
+ExecStart=/usr/bin/python3 /usr/local/sbin/rtbcat-check-certificates
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+TimeoutStartSec=45s
+

@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily RTBcat certificate validity check
+
+[Timer]
+OnCalendar=*-*-* 07:00:00 UTC
+RandomizedDelaySec=10m
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+
